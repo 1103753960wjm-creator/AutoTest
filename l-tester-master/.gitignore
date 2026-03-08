@@ -1,0 +1,14 @@
+.DS_Store
+/media
+/migrations
+/log
+
+# Editor directories and files
+.idea
+.venv
+.__pycache__
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln

@@ -1,0 +1,22 @@
+{
+  "status": 200,
+  "msg": "SUCCESS",
+  "data": {
+    "loginUser": {
+      "userId": 1,
+      "username": "ADMIN",
+      "sex": "1",
+      "avatar": "http://10.12.2.153:9099/media/icon/dog.png"
+    },
+    "roles": ["ADMIN", "SUPER-ADMIN"],
+    "buttons": [
+      "system:role:search",
+      "system:role:list",
+      "system:role:add",
+      "system:role:delete",
+      "system:role:update",
+      "system:role:import",
+      "system:role:export"
+    ]
+  }
+}
