@@ -14,7 +14,8 @@ export const initDynamicRouter = async () => {
 
   try {
     // 1、获取菜单列表 && 按钮权限列表 && 递归菜单数据
-    const data = JSON.parse(LocalStorage.get("user"));
+    const userText = LocalStorage.get("user");
+    const data = userText ? JSON.parse(userText) : {};
     await authStore.listRouters();
     await authStore.getLoginUserInfo(data);
 

@@ -16,7 +16,6 @@ import {
   input_element
 } from "@/api/api_web/web";
 import { get_element_select } from "@/api/api_web/element";
-import { Back, Delete, Right } from "@element-plus/icons-vue";
 import { LocalStorage } from "@/utils/storage.ts";
 
 // 数据表格加载页面动画
@@ -39,7 +38,6 @@ const table_list = ref<any>([]);
 const tab_active = ref("");
 const tab_list = ref<any>([]);
 const add_menu_form = ref<any>({});
-const icon_style = ref<any>("padding-right: 5px; padding-left: 5px; padding-top: 4px;");
 const locator_list = ref<any>([
   { name: "定位器", value: 1 },
   { name: "选择器", value: 2 }
@@ -240,54 +238,6 @@ const del_menu = async (data: any) => {
   });
 };
 
-const step_style = (type: any) => {
-  if (type === 0) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  } else if (type === 1) {
-    return "border: 1px solid #400ae6; border-radius: 5px; width: 93%; color: #400ae6";
-  } else if (type === 2) {
-    return "border: 1px solid #400ae6; border-radius: 5px; width: 93%; color: #400ae6";
-  } else if (type === 3) {
-    return "border: 1px solid #400ae6; border-radius: 5px; width: 93%; color: #400ae6";
-  } else if (type === 4) {
-    return "border: 1px solid #400ae6; border-radius: 5px; width: 93%; color: #400ae6";
-  } else if (type === 5) {
-    return "border: 1px solid #ee4866; border-radius: 5px; width: 93%; color: #ee4866";
-  } else if (type === 6) {
-    return "border: 1px solid #ee4866; border-radius: 5px; width: 93%; color: #ee4866";
-  } else if (type === 7) {
-    return "border: 1px solid #ee4866; border-radius: 5px; width: 93%; color: #ee4866";
-  } else if (type === 8) {
-    return "border: 1px solid #e99516; border-radius: 5px; width: 93%; color: #e99516";
-  } else if (type === 9) {
-    return "border: 1px solid #e99516; border-radius: 5px; width: 93%; color: #e99516";
-  } else if (type === 10) {
-    return "border: 1px solid #ea035f; border-radius: 5px; width: 93%; color: #ea035f";
-  } else if (type === 11) {
-    return "border: 1px solid #ea035f; border-radius: 5px; width: 93%; color: #ea035f";
-  } else if (type === 12) {
-    return "border: 1px solid #20a162; border-radius: 5px; width: 93%; color: #20a162";
-  } else if (type === 13) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  } else if (type === 14) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  } else if (type === 15) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  } else if (type === 16) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  } else if (type === 17) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  } else if (type === 18) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  } else if (type === 19) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  } else if (type === 20) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  } else if (type === 21) {
-    return "border: 1px solid #3e7be5; border-radius: 5px; width: 93%; color: #3e7be5";
-  }
-};
-
 const random_string = (data_length: any) => {
   return Array.from(crypto.getRandomValues(new Uint8Array(data_length)))
     .map(n => n.toString(36))
@@ -413,7 +363,9 @@ const copy_row = async (script_list: any, data: any) => {
     type: data.type,
     status: true,
     children: [],
-    action: data.action
+    action: {
+      ...data.action
+    }
   };
   script_list.push(new_data);
 };
@@ -977,11 +929,11 @@ onMounted(() => {
                                     </el-col>
                                     <el-col :span="6">
                                       <div class="card-actions">
-                                        <el-switch v-model="data.status" inline-prompt @click="switchClick(data)"
+                                        <el-switch v-model="data.status" inline-prompt
                                           style="--el-switch-on-color: #53a8ff; --el-switch-off-color: #f56c6c" />
-                                        <el-button icon="document" @click="copyTree(data)" circle
+                                        <el-button icon="document" @click="copy_row(item.content.script, data)" circle
                                           class="action-button" />
-                                        <el-button icon="delete" type="danger" @click="delTree(data)" circle
+                                        <el-button icon="delete" type="danger" @click="Delete_row(item.content.script, data)" circle
                                           class="action-button" />
                                       </div>
                                     </el-col>

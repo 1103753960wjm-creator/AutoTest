@@ -1,10 +1,13 @@
 from fastapi import FastAPI
+from views.ai import ai_view
 from views.api import api_view, public_view
 from views.app import app_view, img_view, device_view
 from views.app_mitmproxy import mitmproxy_view
 from views.common import upload_view
 from views.exe_update import exe_update_view
+from views.requirement import requirement_view
 from views.task import task_view
+from views.testcase import testcase_view
 from views.user import user_view
 from views.web import element_view, web_view
 from views.count import count_view
@@ -19,6 +22,9 @@ def include_router(app: FastAPI):
     """
     # 统计
     app.include_router(count_view.router)
+    app.include_router(ai_view.router)
+    app.include_router(requirement_view.router)
+    app.include_router(testcase_view.router)
 
     # 用户中心
     app.include_router(user_view.router)

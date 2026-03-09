@@ -24,7 +24,7 @@ import { ElTree } from "element-plus";
 import VueJsonPretty from "vue-json-pretty";
 import "vue-json-pretty/lib/styles.css";
 import jsonE from "@/components/CodeEditor/jsonE.vue";
-import { MsgBox, MsgSuccess, MsgError } from "@/utils/koi";
+import { MsgBox, MsgSuccess } from "@/utils/koi";
 import api_var from "@/views/api_view/api_var.vue";
 import Api_detail from "./api_detail.vue";
 import encryption from "../utility/encryption.vue";
@@ -399,6 +399,14 @@ const add_assert = async (type: any) => {
     name: ""
   };
   api_form.value.content.req.assert.push(assert);
+};
+
+const add_redis_assert = async (data: any) => {
+  data.push({
+    name: "",
+    type: 1,
+    value: ""
+  });
 };
 
 

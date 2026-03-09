@@ -15,7 +15,10 @@ from views.web.web_model import (
 from pathlib import Path
 from playwright.async_api import async_playwright
 from config.settings import playwright_result_path, project_path
-from autowing.playwright.async_fixture import create_async_fixture
+try:
+    from autowing.playwright.async_fixture import create_async_fixture
+except ModuleNotFoundError:
+    from solve_problems.async_fixture import create_async_fixture
 from dotenv import load_dotenv
 
 

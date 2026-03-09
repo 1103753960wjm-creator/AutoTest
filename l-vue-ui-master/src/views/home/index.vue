@@ -64,18 +64,35 @@ import KoiTimeline1 from "./components/KoiTimeline1.vue";
 import KoiTimeline2 from "./components/KoiTimeline2.vue";
 import { onMounted } from "vue";
 import { LocalStorage } from "@/utils/storage.ts";
+
 onMounted(() => {
   // 时间问候语
   NoticeSuccess(getDayText(), "欢迎回来~");
   avatar.value = "@/assets/images/logo/logo.webp";
 });
 
-const user = JSON.parse(LocalStorage.get("user"));
+const getLocalUser = () => {
+  const userText = LocalStorage.get("user");
+  if (!userText) {
+    return {
+      username: "未知用户"
+    };
+  }
+  try {
+    return JSON.parse(userText);
+  } catch {
+    return {
+      username: "未知用户"
+    };
+  }
+};
+
+const user = getLocalUser();
 
 // 头像
 const avatar = ref<any>("");
 
-const username = user.username;
+const username = user.username || "未知用户";
 </script>
 
 <style lang="scss" scoped></style>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { get_api_script_result_list } from "@/api/api_api/api";
+import { REPORT_BASE_URL } from "@/config/index.ts";
 
 const table_data = ref<any>([]);
 const searchParams = ref({
@@ -29,7 +30,7 @@ const reset_search = () => {
 };
 const view_report = async (result_id: any) => {
   // 待修改：前端地址ip:port
-  window.open("http://10.12.2.78:5730/_api_report?result_id=" + result_id);
+  window.open(`${REPORT_BASE_URL}/_api_report?result_id=${result_id}`);
 };
 
 onMounted(() => {

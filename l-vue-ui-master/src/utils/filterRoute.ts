@@ -2,24 +2,29 @@ import Layout from "@/layouts/index.vue";
 import router from "@/routers/index.ts";
 import { HOME_URL } from "@/config/index.ts";
 
+const viewModules = import.meta.glob("../views/**/*.vue");
+
+function resolveViewComponent(componentTemplate?: string) {
+  if (!componentTemplate) {
+    return Layout;
+  }
+  const componentPath = `../views/${componentTemplate}.vue`;
+  return viewModules[componentPath];
+}
+
 /**
  * 注意：使用console.log("路由数据", JSON.stringify(generateRoutes(res.data, 0))打印会发现子路由的component打印不出来，JSON不能打印出来函数。${data[i].component}
  */
 // 递归函数用于生成路由配置，登录的时候也需要调用一次。
 export function generateRoutes(data: any[], parentId: any) {
-  // 首先把你需要动态路由的组件地址全部获取[vue2中可以直接用拼接的方式，但是vue3中必须用这种方式]
-  let modules = import.meta.glob("@/views/**/*.vue");
   const routeList: any = [];
   for (var i = 0; i < data.length; i++) {
     if (data[i] && !router.hasRoute(data[i].path)) {
       if (data[i].parentId === parentId) {
-        // console.log("component", data[i].component);
-        const componentTemplate = data[i].component;
         const route: any = {
           path: `${data[i].path}`,
           name: `${data[i].name}`,
-          // 这里modules[`/src/views/${componentTemplate}.vue`] 一定要用绝对定位
-          component: data[i]?.component ? modules[`/src/views/${componentTemplate}.vue`] : Layout,
+          component: resolveViewComponent(data[i]?.component),
           meta: {
             title: data[i]?.menuName,
             enName: data[i]?.enName,
@@ -53,17 +58,12 @@ export function generateRoutes(data: any[], parentId: any) {
  * 初始化动态路由[用于生成扁平化一级路由，将后端一级路由数据转化为前端router格式的一级路由]
  */
 export function generateFlattenRoutes(data: any[]) {
-  // 首先把你需要动态路由的组件地址全部获取[vue2中可以直接用拼接的方式，但是vue3中必须用这种方式]
-  let modules = import.meta.glob("@/views/**/*.vue");
   const routes: any = [];
   for (var i = 0; i < data.length; i++) {
-    // console.log("component", data[i].component)
-    const componentTemplate = data[i].component;
     const route: any = {
       path: `${data[i].path}`,
       name: `${data[i].name}`,
-      // 这里modules[`/src/views/${componentTemplate}.vue`] 一定要用绝对定位
-      component: data[i]?.component ? modules[`/src/views/${componentTemplate}.vue`] : Layout,
+      component: resolveViewComponent(data[i]?.component),
       meta: {
         parentId: data[i].parentId,
         title: data[i].menuName,

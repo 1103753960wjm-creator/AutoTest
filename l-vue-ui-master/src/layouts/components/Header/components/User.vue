@@ -38,10 +38,28 @@ const handleLayout = () => {
   // 退出登录。必须使用replace把页面缓存刷掉。
   window.location.replace(LOGIN_URL);
 };
-const user = JSON.parse(LocalStorage.get("user"));
+const getLocalUser = () => {
+  const userText = LocalStorage.get("user");
+  if (!userText) {
+    return {
+      username: "未知用户",
+      avatar: ""
+    };
+  }
+  try {
+    return JSON.parse(userText);
+  } catch {
+    return {
+      username: "未知用户",
+      avatar: ""
+    };
+  }
+};
+
+const user = getLocalUser();
 
 // 用户头像
-const avatar = ref(user.avatar);
+const avatar = ref(user.avatar || "");
 const errorAvatar = "https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png";
 // 下拉折叠
 const handleCommand = (command: string | number) => {

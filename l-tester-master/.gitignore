@@ -6,8 +6,13 @@
 # Editor directories and files
 .idea
 .venv
-.__pycache__
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 .vscode
+.env
+.env.local
 *.suo
 *.ntvs*
 *.njsproj

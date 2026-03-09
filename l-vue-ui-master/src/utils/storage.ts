@@ -8,11 +8,15 @@ import cookies from "js-cookie";
 export const getToken = () => {
   const koiUser = window.localStorage.getItem(PINIA_PREFIX + "user");
   if (koiUser != null && koiUser != "" && koiUser != undefined) {
-    const parseKoiUser = JSON.parse(koiUser);
-    // console.log("parseKoiUser",parseKoiUser)
-    if (parseKoiUser.token !== "" && parseKoiUser.user_id !== "") {
-      return parseKoiUser;
-    } else {
+    try {
+      const parseKoiUser = JSON.parse(koiUser);
+      // console.log("parseKoiUser",parseKoiUser)
+      if (parseKoiUser.token !== "" && parseKoiUser.user_id !== "") {
+        return parseKoiUser;
+      } else {
+        return "";
+      }
+    } catch {
       return "";
     }
   } else {

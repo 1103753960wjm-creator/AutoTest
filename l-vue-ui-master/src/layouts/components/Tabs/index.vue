@@ -32,7 +32,7 @@ import TabMenu from "@/layouts/components/Tabs/components/TabMenu.vue";
 import Sortable from "sortablejs";
 import { MsgWarning } from "@/utils/koi.ts";
 import { TabsPaneContext } from "element-plus";
-import { ref, watch, computed, onMounted } from "vue";
+import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { HOME_URL } from "@/config/index.ts";
 
@@ -51,13 +51,21 @@ const router = useRouter();
 const tabsStore = useTabsStore();
 // 获取权限仓库
 const authStore = useAuthStore();
+// tabs 拖拽实例
+const tabsSortable = ref<any>(null);
 
 // 页面创建后，立即初始化选项卡 AND 拖拽函数
-onMounted(() => {
+onMounted(async () => {
   addTab(); // 添加选项卡[进入根页面，立即添加首页]
   setActiveTab(); // 设置激活选项卡[进入根页面，立即激活首页]
   initTabs(); // 进入根页面，初始化需要固定的页面
+  await nextTick();
   tabsDrop(); // 初始化拖拽功能
+});
+
+onBeforeUnmount(() => {
+  tabsSortable.value?.destroy?.();
+  tabsSortable.value = null;
 });
 
 // 监听当前路由，路由path发生变化添加选项卡数据
@@ -144,7 +152,12 @@ const clickToggleTab = (tab: TabsPaneContext) => {
 
 // 6、tabs 拖拽排序
 const tabsDrop = () => {
-  Sortable.create(document.querySelector(".el-tabs__nav") as HTMLElement, {
+  const tabsNav = document.querySelector(".el-tabs__nav");
+  if (!(tabsNav instanceof HTMLElement)) {
+    return;
+  }
+  tabsSortable.value?.destroy?.();
+  tabsSortable.value = Sortable.create(tabsNav, {
     draggable: ".el-tabs__item",
     animation: 300,
     onEnd({ newIndex, oldIndex }) {

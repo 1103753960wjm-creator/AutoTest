@@ -6,6 +6,7 @@ import { MsgError, MsgSuccess } from "@/utils/koi";
 import * as echarts from "echarts";
 import { app_view_device } from "@/api/api_app/device";
 import { ElLoading } from 'element-plus';
+import { REPORT_BASE_URL } from "@/config/index.ts";
 
 const table_list = ref<any>([]);
 const loading = ref<any>(false);
@@ -469,7 +470,7 @@ const run_close = async () => {
 };
 const view_report = async (result_id: any) => {
   // 待修改：前端地址ip:port
-  window.open("http://10.12.2.78:5730/app_report?result_id=" + result_id);
+  window.open(`${REPORT_BASE_URL}/app_report?result_id=${result_id}`);
 };
 // 生命周期钩子
 onMounted(() => {

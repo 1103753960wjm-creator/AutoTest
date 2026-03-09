@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { get_web_result_list } from "@/api/api_web/web.ts";
+import { REPORT_BASE_URL } from "@/config/index.ts";
 
 const table_list = ref<any>([]);
 const loading = ref<any>(false);
@@ -42,7 +43,7 @@ const reset_search = async () => {
 
 const view_report = async (result_id: any) => {
   // 待修改：前端地址ip:port
-  window.open("http://10.12.2.78:5730/web_report?result_id=" + result_id);
+  window.open(`${REPORT_BASE_URL}/web_report?result_id=${result_id}`);
 };
 // 生命周期钩子
 onMounted(() => {

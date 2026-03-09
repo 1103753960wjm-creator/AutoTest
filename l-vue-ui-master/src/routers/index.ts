@@ -97,7 +97,8 @@ export const resetRouter = () => {
 router.onError(error => {
   // 结束全屏动画
   nprogress.done();
-  console.warn("路由错误", error.message);
+  const message = error instanceof Error ? error.message : String(error ?? "未知错误");
+  console.warn("路由错误", message, error);
 });
 
 /**

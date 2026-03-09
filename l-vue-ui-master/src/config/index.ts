@@ -17,5 +17,8 @@ export const SVG_PREFIX: string = "koi-";
 // 默认主题颜色
 export const DEFAULT_THEME: string = "#2992FF";
 
+const serverOrigin = `${import.meta.env.VITE_SERVER || ""}`.replace(/\/$/, "");
+export const REPORT_BASE_URL: string = `${import.meta.env.VITE_REPORT_BASE_URL || serverOrigin.replace(/:\d+$/, ":5730")}`.replace(/\/$/, "");
+
 // 路由白名单地址[本地存在的路由 staticRouter.ts 中]
 export const ROUTER_WHITE_LIST: any = ["/app_report", "/_api_report", "/web_report"];

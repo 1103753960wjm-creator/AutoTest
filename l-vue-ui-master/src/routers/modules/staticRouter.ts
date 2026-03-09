@@ -392,6 +392,64 @@ export const staticRouter: RouteRecordRaw[] = [
     ]
   },
   {
+    path: "/test_design",
+    component: Layout,
+    meta: {
+      title: "测试设计",
+      enName: "Test Design",
+      icon: "EditPen",
+      isHide: "1",
+      isLink: "",
+      isKeepAlive: "0",
+      isFull: "0",
+      isAffix: "0"
+    },
+    children: [
+      {
+        path: "/requirement_assets",
+        component: () => import("@/views/requirement_view/index.vue"),
+        meta: {
+          title: "需求资产",
+          enName: "Requirement Assets",
+          icon: "Tickets",
+          isHide: "1",
+          isLink: "",
+          isKeepAlive: "1",
+          isFull: "1",
+          isAffix: "1"
+        }
+      },
+      {
+        path: "/testcase_assets",
+        component: () => import("@/views/testcase_view/index.vue"),
+        meta: {
+          title: "测试用例",
+          enName: "Testcase Assets",
+          icon: "Grid",
+          isHide: "1",
+          isLink: "",
+          isKeepAlive: "1",
+          isFull: "1",
+          isAffix: "1"
+        }
+      },
+      {
+        path: "/testcase_generate",
+        component: () => import("@/views/testcase_view/generate.vue"),
+        meta: {
+          title: "用例生成",
+          enName: "Case Generate",
+          icon: "Document",
+          isHide: "1",
+          isLink: "",
+          isKeepAlive: "1",
+          isFull: "1",
+          isAffix: "1"
+        }
+      }
+    ]
+  },
+  {
     path: "/user_view", // 路由访问路径[唯一]
     component: Layout, // 登录进入这个页面，这个页面是整个布局
     meta: {
@@ -459,6 +517,20 @@ export const staticRouter: RouteRecordRaw[] = [
           isKeepAlive: "1", // 是否缓存路由数据[0是，1否]
           isFull: "1", // 是否缓存全屏[0是，1否]
           isAffix: "1" // 是否缓存固定路由[0是，1否]
+        }
+      },
+      {
+        path: "/ai_config",
+        component: () => import("@/views/system/ai_config/index.vue"),
+        meta: {
+          title: "AI配置",
+          enName: "AI Config",
+          icon: "Connection",
+          isHide: "1",
+          isLink: "",
+          isKeepAlive: "1",
+          isFull: "1",
+          isAffix: "1"
         }
       }
     ]
