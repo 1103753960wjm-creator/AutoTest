@@ -122,7 +122,7 @@ loginRules = computed(() => {
 /** 登录 */
 const handleLogin = () => {
   if (!loginFormRef.value) return;
-  (loginFormRef.value as any).validate(async (valid: any, fields: any) => {
+  (loginFormRef.value as any).validate(async (valid: any) => {
     const md5 = new Md5();
     const username = loginForm.username;
     const password = md5.appendStr(loginForm.password.toString()).end();
@@ -157,7 +157,6 @@ const handleLogin = () => {
         }, 1000);
       }
     } else {
-      console.log("登录校验失败", fields);
       MsgError("校验失败，信息填写有误🌻");
     }
   });

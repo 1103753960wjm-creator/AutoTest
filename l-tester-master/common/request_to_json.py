@@ -9,7 +9,29 @@ from config.settings import mitmproxy_yaml_path
 # 处理请求体
 async def body_to_json(request):
     data = await request.body()
-    return json.loads(data)
+    body = {}
+    if data:
+        try:
+            parsed = json.loads(data)
+            if isinstance(parsed, dict):
+                body = parsed
+        except json.JSONDecodeError:
+            body = {}
+
+    headers = await header_to_json(request)
+    authorization = headers.get("authorization", "")
+    token = ""
+    if authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+    if not token:
+        token = headers.get("x-token", "")
+    user_id = headers.get("x-user-id", "")
+
+    if token and not body.get("token"):
+        body["token"] = token
+    if user_id and not body.get("user_id"):
+        body["user_id"] = user_id
+    return body
 
 
 # 处理请求头

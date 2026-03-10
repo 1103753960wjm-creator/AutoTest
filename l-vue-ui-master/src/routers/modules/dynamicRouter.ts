@@ -14,21 +14,16 @@ export const initDynamicRouter = async () => {
 
   try {
     // 1、获取菜单列表 && 按钮权限列表 && 递归菜单数据
-    const userText = LocalStorage.get("user");
-    const data = userText ? JSON.parse(userText) : {};
+    const data = LocalStorage.getJSON("user") || {};
     await authStore.listRouters();
     await authStore.getLoginUserInfo(data);
 
     // 2、判断当前用户是否拥有菜单权限
-    console.log("authStore.menuList", authStore.menuList);
-    // Proxy对象转换为正常的JSON数据
-    // const menuRouters = JSON.parse(JSON.stringify(authStore.menuList));
     if (authStore.menuList == null || authStore.menuList.length == 0) {
       userStore.setToken("", "", "", "");
       router.replace(LOGIN_URL);
       return;
     }
-    console.log(authStore.menuList);
 
     // 3、添加动态路由[扁平化一级路由数据]
     authStore.menuList.forEach((item: any) => {
@@ -44,7 +39,6 @@ export const initDynamicRouter = async () => {
       }
     });
   } catch (error) {
-    console.log(error);
     // 当菜单请求出错时，重定向到登陆页
     userStore.setToken("", "", "", "");
     router.replace(LOGIN_URL);

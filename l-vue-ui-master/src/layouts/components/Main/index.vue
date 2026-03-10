@@ -72,8 +72,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   flex: 1;
+  min-height: 0;
   padding: 5px 6px;
   overflow-x: hidden;
+  overflow-y: auto;
   @apply bg-[#F6F9FE] dark:bg-black;
 }
 </style>

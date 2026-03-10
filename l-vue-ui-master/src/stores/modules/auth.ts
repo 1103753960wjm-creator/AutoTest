@@ -63,7 +63,7 @@ const authStore = defineStore("auth", {
   // 计算属性，和vuex是使用一样，getters里面不是方法，是计算返回的结果值
   getters: {
     // 按钮权限列表
-    getButtonList: state => state.buttonList,
+    getButtonList: state => state.buttons,
     // 菜单权限列表 ==> 原始后端接口菜单数据，扁平化之后的一维数组菜单，主要用来添加动态路由，隐藏和不隐藏的菜单路由都需要
     getMenuList: state => state.menuList,
     // 菜单权限列表 ==> 左侧菜单栏渲染，这里的菜单将后端数据进行递归，需要将动态路由 isHide == 0 的隐藏菜单剔除, 将静态路由 isHide == 0 的隐藏菜单剔除

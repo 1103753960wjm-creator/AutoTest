@@ -38,23 +38,28 @@ class Token_Auth(BaseHTTPMiddleware):
                 return response
 
             body = await body_to_json(request)
-            token = body["token"]
-            user = await User_info.get(id=body["user_id"])
+            token = str(body.get("token") or "").strip()
+            user_id = int(body.get("user_id") or 0)
+            if not token or user_id <= 0:
+                response = await token_expire()
+                return JSONResponse(response)
+
+            user = await User_info.get(id=user_id)
             if user.status == "0":
                 response = await user_false()
                 return JSONResponse(response)
-            role = await Role_user.filter(user_id=body["user_id"]).first().values()
-            if role["role_id"] == 1 and body["token"] == user.token:
-                response = await call_next(request)
-                return response
+            role = await Role_user.filter(user_id=user_id).first()
             if role is None:
                 response = await role_Exception()
                 return JSONResponse(response)
+            if role.role_id == 1 and token == user.token:
+                response = await call_next(request)
+                return response
             permission = await Permission.filter(url=url_path).first().values()
             if permission:
                 role_permission = (
                     await Role_permission.filter(
-                        role_id=role["role_id"], permission_id=permission["id"]
+                        role_id=role.role_id, permission_id=permission["id"]
                     )
                     .first()
                     .values()

@@ -6,6 +6,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from fastapi import Response
 from loguru import logger
+from common.request_to_json import body_to_json
 from config.auth_white import white_list
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -37,6 +38,7 @@ class Logger_Middleware(BaseHTTPMiddleware):
             else:
                 ip = request.client.host
             body = await request.body()
+            body_data = await body_to_json(request)
             path = request.scope["path"]
             if path in white_list:
                 return await call_next(request)
@@ -84,19 +86,23 @@ class Logger_Middleware(BaseHTTPMiddleware):
                 )
                 return new_response
             elif path == "/api/user/login":
-                user = json.loads(body)["username"]
+                user = body_data.get("username", "")
                 await User_info_login_log.create(
                     login_user=user,
                     login_ip=ip,
                     login_result=response_data["message"],
                 )
             else:
-                user = json.loads(body)["user_id"]
+                user = int(body_data.get("user_id") or 0)
+                if not body:
+                    log_content = json.dumps(body_data, ensure_ascii=False)
+                else:
+                    log_content = body.decode("utf-8", errors="ignore")
 
                 await User_info_log.create(
                     user_id=user,
                     log_api=path,
-                    log_content=body,
+                    log_content=log_content,
                     log_status=(
                         response_data["code"]
                         if "code" in response_data

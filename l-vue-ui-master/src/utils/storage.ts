@@ -2,26 +2,26 @@ import { PINIA_PREFIX } from "@/config";
 // @ts-ignore
 import cookies from "js-cookie";
 
+const safeParseJson = (value: string | null) => {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+};
+
+const getStorageKey = (key: string) => `${PINIA_PREFIX}${key}`;
+
 /**
  * 封装获取用户信息的方法
  */
 export const getToken = () => {
-  const koiUser = window.localStorage.getItem(PINIA_PREFIX + "user");
-  if (koiUser != null && koiUser != "" && koiUser != undefined) {
-    try {
-      const parseKoiUser = JSON.parse(koiUser);
-      // console.log("parseKoiUser",parseKoiUser)
-      if (parseKoiUser.token !== "" && parseKoiUser.user_id !== "") {
-        return parseKoiUser;
-      } else {
-        return "";
-      }
-    } catch {
-      return "";
-    }
-  } else {
-    return "";
+  const parseKoiUser: any = safeParseJson(window.localStorage.getItem(getStorageKey("user")));
+  if (parseKoiUser?.token && parseKoiUser?.user_id !== "") {
+    return parseKoiUser;
   }
+  return "";
 };
 
 /**
@@ -34,30 +34,29 @@ export const getToken = () => {
  */
 export const SessionStorage = {
   put(key: string, value: any) {
-    window.sessionStorage.setItem(PINIA_PREFIX + key, value);
+    window.sessionStorage.setItem(getStorageKey(key), value);
   },
   set(key: string, value: any) {
-    window.sessionStorage.setItem(PINIA_PREFIX + key, value);
+    window.sessionStorage.setItem(getStorageKey(key), value);
   },
   get(key: string) {
-    const value: any = window.sessionStorage.getItem(PINIA_PREFIX + key);
+    const value: any = window.sessionStorage.getItem(getStorageKey(key));
     return value;
   },
   remove(key: string) {
-    window.sessionStorage.removeItem(PINIA_PREFIX + key);
+    window.sessionStorage.removeItem(getStorageKey(key));
   },
   clear() {
     window.sessionStorage.clear();
   },
   putJSON(key: string, jsonValue: any) {
-    window.sessionStorage.put(PINIA_PREFIX + key, JSON.stringify(jsonValue));
+    window.sessionStorage.setItem(getStorageKey(key), JSON.stringify(jsonValue));
   },
   setJSON(key: string, jsonValue: any) {
-    window.sessionStorage.put(PINIA_PREFIX + key, JSON.stringify(jsonValue));
+    window.sessionStorage.setItem(getStorageKey(key), JSON.stringify(jsonValue));
   },
   getJSON(key: string) {
-    const jsonValue: any = window.sessionStorage.get(PINIA_PREFIX + key);
-    return JSON.parse(jsonValue);
+    return safeParseJson(window.sessionStorage.getItem(getStorageKey(key)));
   }
 };
 
@@ -70,30 +69,29 @@ export const SessionStorage = {
  */
 export const LocalStorage = {
   put(key: string, value: any) {
-    window.localStorage.setItem(PINIA_PREFIX + key, value);
+    window.localStorage.setItem(getStorageKey(key), value);
   },
   set(key: string, value: any) {
-    window.localStorage.setItem(PINIA_PREFIX + key, value);
+    window.localStorage.setItem(getStorageKey(key), value);
   },
   get(key: string) {
-    const value: any = window.localStorage.getItem(PINIA_PREFIX + key);
+    const value: any = window.localStorage.getItem(getStorageKey(key));
     return value;
   },
   remove(key: string) {
-    window.localStorage.removeItem(PINIA_PREFIX + key);
+    window.localStorage.removeItem(getStorageKey(key));
   },
   clear() {
     window.localStorage.clear();
   },
   putJSON(key: string, jsonValue: any) {
-    window.localStorage.put(PINIA_PREFIX + key, JSON.stringify(jsonValue));
+    window.localStorage.setItem(getStorageKey(key), JSON.stringify(jsonValue));
   },
   setJSON(key: string, jsonValue: any) {
-    window.localStorage.put(PINIA_PREFIX + key, JSON.stringify(jsonValue));
+    window.localStorage.setItem(getStorageKey(key), JSON.stringify(jsonValue));
   },
   getJSON(key: string) {
-    const jsonValue: any = window.localStorage.get(PINIA_PREFIX + key);
-    return JSON.parse(jsonValue);
+    return safeParseJson(window.localStorage.getItem(getStorageKey(key)));
   }
 };
 
@@ -105,16 +103,16 @@ export const LocalStorage = {
  */
 export const Cookie = {
   put(key: string, value: any) {
-    cookies.set(PINIA_PREFIX + key, value);
+    cookies.set(getStorageKey(key), value);
   },
   set(key: string, value: any) {
-    cookies.set(PINIA_PREFIX + key, value);
+    cookies.set(getStorageKey(key), value);
   },
   get(key: string) {
-    const value: any = cookies.get(PINIA_PREFIX + key);
+    const value: any = cookies.get(getStorageKey(key));
     return value;
   },
   remove(key: string) {
-    cookies.remove(PINIA_PREFIX + key);
+    cookies.remove(getStorageKey(key));
   }
 };

@@ -19,6 +19,19 @@ export interface Result<T = any> {
   msg: string;
   data: T;
 }
+
+const buildAuthHeaders = (): Record<string, string> => {
+  const userinfo: any = getToken() || {};
+  if (!userinfo?.token) {
+    return {};
+  }
+  return {
+    Authorization: `Bearer ${userinfo.token}`,
+    "X-Token": String(userinfo.token),
+    "X-User-Id": String(userinfo.user_id || "")
+  };
+};
+
 // 只有请求封装用的Yu，方便简写
 class Yu {
   private instance: AxiosInstance;
@@ -34,13 +47,11 @@ class Yu {
     // 请求发送之前的拦截器：携带token
     this.instance.interceptors.request.use(
       config => {
-        // 获取token
-        const userinfo = getToken();
-        // 如果实现挤下线功能，需要用户绑定一个uuid，uuid发生变化，后端将数据进行处理[直接使用Sa-Token框架也阔以]
-        if (userinfo) {
-          config.data.token = userinfo.token;
-          config.data.user_id = userinfo.user_id;
-        }
+        const headers = axios.AxiosHeaders.from(config.headers || {});
+        Object.entries(buildAuthHeaders()).forEach(([key, value]) => {
+          headers.set(key, value);
+        });
+        config.headers = headers;
         return config;
       },
       (error: any) => {
@@ -172,7 +183,7 @@ class Yu {
       params,
       headers: {
         Accept: "application/vnd.ms-excel",
-        Authorization: "Bearer " + getToken()
+        ...buildAuthHeaders()
       },
       responseType: "blob"
     });
