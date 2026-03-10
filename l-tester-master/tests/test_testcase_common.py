@@ -11,6 +11,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 
 from views.requirement.requirement_common import save_reviewed_cases  # noqa: E402
+from views.automation_draft.automation_draft_model import Automation_draft  # noqa: E402
 from views.testcase.testcase_common import (  # noqa: E402
     list_page_testcases,
     update_testcase_review_status,
@@ -32,6 +33,7 @@ async def _init_test_db():
                 "views.user.user_model",
                 "views.requirement.requirement_model",
                 "views.testcase.testcase_model",
+                "views.automation_draft.automation_draft_model",
             ]
         },
     )
@@ -120,6 +122,80 @@ async def test_list_page_testcases_supports_filters_and_returns_module_and_categ
         assert result["content"][0]["module"] == "认证模块"
         assert result["content"][0]["category"] == "happy_path"
         assert result["content"][0]["review_status"] == "approved"
+    finally:
+        await _close_test_db()
+
+
+@pytest.mark.anyio
+async def test_list_page_testcases_returns_automation_summary():
+    await _init_test_db()
+    try:
+        user = await _create_user()
+        await _seed_testcases(user.id)
+        testcase = await CaseModel.get(title="登录主流程")
+
+        await Automation_draft.create(
+            testcase_id=testcase.id,
+            requirement_id=testcase.requirement_id,
+            target_type="api",
+            requested_mode="none",
+            effective_mode="none",
+            provider_name="template_rules",
+            draft_payload={"name": "旧 API 草稿", "script": [{"name": "step-1"}]},
+            warnings=[],
+            save_status="draft",
+            user_id=user.id,
+        )
+        latest_api = await Automation_draft.create(
+            testcase_id=testcase.id,
+            requirement_id=testcase.requirement_id,
+            target_type="api",
+            requested_mode="none",
+            effective_mode="none",
+            provider_name="template_rules",
+            draft_payload={"name": "新 API 草稿", "script": [{"name": "step-2"}]},
+            warnings=[],
+            save_status="saved",
+            target_asset_id=11,
+            user_id=user.id,
+        )
+        latest_web = await Automation_draft.create(
+            testcase_id=testcase.id,
+            requirement_id=testcase.requirement_id,
+            target_type="web",
+            requested_mode="none",
+            effective_mode="none",
+            provider_name="template_rules",
+            draft_payload={"menu_name": "Web 草稿", "script": [{"name": "step-1"}]},
+            warnings=[],
+            save_status="saved",
+            target_asset_id=21,
+            target_menu_id=31,
+            user_id=user.id,
+        )
+
+        result = await list_page_testcases(
+            {
+                "user_id": user.id,
+                "currentPage": 1,
+                "pageSize": 10,
+                "search": {"keyword": "主流程"},
+            }
+        )
+
+        summary = result["content"][0]["automation_summary"]
+        api_item = next(item for item in summary["latest_items"] if item["target_type"] == "api")
+        web_item = next(item for item in summary["latest_items"] if item["target_type"] == "web")
+
+        assert summary["latest_draft_count"] == 2
+        assert api_item["draft_id"] == latest_api.id
+        assert api_item["target_asset_id"] == 11
+        assert api_item["target_route"] == "/_api_script"
+        assert api_item["target_route_query"]["asset_id"] == 11
+        assert web_item["draft_id"] == latest_web.id
+        assert web_item["target_menu_id"] == 31
+        assert web_item["target_route"] == "/web"
+        assert web_item["target_route_query"]["menu_id"] == 31
     finally:
         await _close_test_db()
 

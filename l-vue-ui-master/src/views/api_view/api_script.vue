@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import { ref, onMounted } from "vue";
+import { useRoute } from "vue-router";
 import {
   api_tree_list,
   get_api_case,
@@ -20,6 +21,7 @@ import { MsgBox, MsgError, MsgSuccess } from "@/utils/koi";
 import { LocalStorage } from "@/utils/storage.ts";
 import Api_detail from "./api_detail.vue";
 
+const route = useRoute();
 const searchParams = ref({
   search: {
     name__icontains: "",
@@ -30,6 +32,8 @@ const searchParams = ref({
 });
 const table_data = ref([]);
 const total = ref(0);
+const locatedAssetId = ref<number>(0);
+const hasHandledRouteLocate = ref(false);
 const reset_search = () => {
   searchParams.value = {
     search: {
@@ -62,6 +66,7 @@ const get_script_list = async () => {
   const res: any = await api_script_list(searchParams.value);
   table_data.value = res.data.content;
   total.value = res.data.total;
+  await autoLocateTargetAsset();
 };
 
 const tree_list = ref<any>([]);
@@ -206,6 +211,31 @@ const Edit = async (row: any) => {
   title.value = "编辑脚本：" + row.name;
   add_form.value = row;
   edit_koiDialogRef.value.koiOpen();
+};
+
+const autoLocateTargetAsset = async () => {
+  const assetId = Number(route.query.asset_id || 0);
+  if (!assetId || hasHandledRouteLocate.value) {
+    return;
+  }
+
+  hasHandledRouteLocate.value = true;
+  const targetRow: any = table_data.value.find((item: any) => Number(item.id) === assetId);
+  if (!targetRow) {
+    MsgError("目标资产不存在，请确认资产未被删除");
+    return;
+  }
+
+  locatedAssetId.value = assetId;
+  await Edit(targetRow);
+  MsgSuccess("已定位到自动生成的 API 资产");
+};
+
+const tableRowClassName = ({ row }: { row: any }) => {
+  if (Number(row.id) === locatedAssetId.value) {
+    return "auto-located-row";
+  }
+  return "";
 };
 
 const edit_confirm = async () => {
@@ -378,7 +408,14 @@ onMounted(() => {
           </el-form-item>
         </el-form>
         <div class="h-10px"></div>
-        <el-table :data="table_data" stripe border @selection-change="handleSelectionChange" style="width: 100%">
+        <el-table
+          :data="table_data"
+          stripe
+          border
+          :row-class-name="tableRowClassName"
+          @selection-change="handleSelectionChange"
+          style="width: 100%"
+        >
           <el-table-column type="selection" align="center" />
           <el-table-column prop="id" label="ID" width="80"></el-table-column>
           <el-table-column prop="name" label="名称"></el-table-column>
@@ -810,5 +847,9 @@ onMounted(() => {
 
 .el-tree {
   --el-tree-node-content-height: 30px;
+}
+
+:deep(.auto-located-row) {
+  --el-table-tr-bg-color: rgba(64, 158, 255, 0.12);
 }
 </style>

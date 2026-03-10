@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Tuple
 
 from tortoise.expressions import Q
 
+from views.automation_draft.automation_draft_model import Automation_draft
 from views.testcase.testcase_model import Testcase
 
 
@@ -61,6 +62,75 @@ def _normalize_review_status(value: Any) -> str:
     return review_status
 
 
+def _empty_automation_summary() -> Dict[str, Any]:
+    return {
+        "latest_draft_count": 0,
+        "latest_items": [],
+    }
+
+
+def _build_target_route(target_type: str) -> str:
+    if target_type == "api":
+        return "/_api_script"
+    if target_type == "web":
+        return "/web"
+    if target_type == "app":
+        return "/app_auto"
+    return ""
+
+
+def _build_target_route_query(draft: Automation_draft) -> Dict[str, Any]:
+    query: Dict[str, Any] = {
+        "draft_id": draft.id,
+        "source": "testcase_automation",
+    }
+    if draft.target_type == "api" and draft.target_asset_id:
+        query["asset_id"] = draft.target_asset_id
+    elif draft.target_type in {"web", "app"} and draft.target_menu_id:
+        query["menu_id"] = draft.target_menu_id
+    return query
+
+
+def _serialize_automation_summary_item(draft: Automation_draft) -> Dict[str, Any]:
+    return {
+        "target_type": draft.target_type,
+        "draft_id": draft.id,
+        "save_status": draft.save_status,
+        "target_asset_id": draft.target_asset_id,
+        "target_menu_id": draft.target_menu_id,
+        "target_route": _build_target_route(draft.target_type),
+        "target_route_query": _build_target_route_query(draft),
+        "update_time": draft.update_time,
+    }
+
+
+async def _build_automation_summary_map(
+    testcase_ids: List[int], user_id: int
+) -> Dict[int, Dict[str, Any]]:
+    if not testcase_ids:
+        return {}
+
+    drafts = await Automation_draft.filter(
+        user_id=user_id, testcase_id__in=testcase_ids
+    ).order_by("-id")
+
+    summary_map: Dict[int, Dict[str, Dict[str, Any]]] = {}
+    for draft in drafts:
+        testcase_summary = summary_map.setdefault(draft.testcase_id, {})
+        if draft.target_type in testcase_summary:
+            continue
+        testcase_summary[draft.target_type] = _serialize_automation_summary_item(draft)
+
+    result: Dict[int, Dict[str, Any]] = {}
+    for testcase_id, summary in summary_map.items():
+        latest_items = list(summary.values())
+        result[testcase_id] = {
+            "latest_draft_count": len(latest_items),
+            "latest_items": latest_items,
+        }
+    return result
+
+
 async def list_page_testcases(payload: Dict[str, Any]) -> Dict[str, Any]:
     user_id = int(payload.get("user_id") or 0)
     if user_id <= 0:
@@ -93,6 +163,10 @@ async def list_page_testcases(payload: Dict[str, Any]) -> Dict[str, Any]:
         .offset((current_page - 1) * page_size)
         .limit(page_size)
     )
+    automation_summary_map = await _build_automation_summary_map(
+        [item.id for item in testcases],
+        user_id,
+    )
 
     content = []
     for item in testcases:
@@ -114,6 +188,10 @@ async def list_page_testcases(payload: Dict[str, Any]) -> Dict[str, Any]:
                 "automatable": item.automatable,
                 "review_status": item.review_status,
                 "version": item.version,
+                "automation_summary": automation_summary_map.get(
+                    item.id,
+                    _empty_automation_summary(),
+                ),
                 "create_time": item.create_time,
                 "update_time": item.update_time,
             }

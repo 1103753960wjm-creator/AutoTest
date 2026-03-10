@@ -11,6 +11,7 @@ from config import settings
 
 
 VALID_AI_MODES = {"none", "local_llm", "remote_llm"}
+VALID_AUTOMATION_TARGET_TYPES = {"api", "web", "app"}
 AI_ENV_KEY_MAP = {
     "configured_mode": "LT_AI_MODE",
     "local_base_url": "LT_AI_LOCAL_BASE_URL",
@@ -81,6 +82,45 @@ def normalize_generation_request(payload: Dict[str, Any]) -> Dict[str, Any]:
         "source_type": str(payload.get("source_type") or "feature_design").strip(),
         "target_type": str(payload.get("target_type") or "general").strip(),
         "mode": str(payload.get("mode") or "").strip().lower(),
+    }
+
+
+def _normalize_text_list(value: Any, field_name: str) -> List[str]:
+    if isinstance(value, list):
+        result = [str(item).strip() for item in value if str(item).strip()]
+        if result:
+            return result
+    elif isinstance(value, str):
+        result = [item.strip() for item in value.splitlines() if item.strip()]
+        if result:
+            return result
+    raise ValueError(f"{field_name} 不能为空")
+
+
+def normalize_automation_request(payload: Dict[str, Any]) -> Dict[str, Any]:
+    title = str(payload.get("title") or "").strip()
+    module = str(payload.get("module") or title).strip()
+    target_type = str(payload.get("target_type") or "").strip().lower()
+    if not title:
+        raise ValueError("测试用例标题不能为空")
+    if not module:
+        raise ValueError("测试用例所属模块不能为空")
+    if target_type not in VALID_AUTOMATION_TARGET_TYPES:
+        raise ValueError("自动化草稿目标类型仅支持 api、web、app")
+    return {
+        "title": title,
+        "module": module,
+        "category": str(payload.get("category") or "general").strip(),
+        "priority": str(payload.get("priority") or "P2").strip().upper(),
+        "target_type": target_type,
+        "mode": str(payload.get("mode") or "").strip().lower(),
+        "preconditions": _normalize_text_list(
+            payload.get("preconditions") or [], "前置条件"
+        ),
+        "steps": _normalize_text_list(payload.get("steps") or [], "测试步骤"),
+        "expected_results": _normalize_text_list(
+            payload.get("expected_results") or [], "预期结果"
+        ),
     }
 
 
@@ -219,6 +259,9 @@ class BaseAIProvider:
     def generate_test_cases(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         raise NotImplementedError
 
+    def generate_automation_draft(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        raise NotImplementedError
+
 
 class NoneProvider(BaseAIProvider):
     provider_name = "template_rules"
@@ -231,6 +274,20 @@ class NoneProvider(BaseAIProvider):
             "generation_source": "rules",
             "summary": summary,
             "cases": self._build_cases(title, summary, payload["target_type"]),
+        }
+
+    def generate_automation_draft(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        target_type = payload["target_type"]
+        if target_type == "api":
+            draft_payload, warnings = self._build_api_draft(payload)
+        elif target_type == "web":
+            draft_payload, warnings = self._build_web_draft(payload)
+        else:
+            draft_payload, warnings = self._build_app_draft(payload)
+        return {
+            "generation_source": "rules",
+            "draft_payload": draft_payload,
+            "warnings": warnings,
         }
 
     def _build_summary(self, title: str, content: str) -> List[str]:
@@ -323,6 +380,188 @@ class NoneProvider(BaseAIProvider):
             },
         ]
 
+    def _build_api_draft(
+        self, payload: Dict[str, Any]
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        script = []
+        for index, step_text in enumerate(payload["steps"], start=1):
+            expected = (
+                payload["expected_results"][index - 1]
+                if index - 1 < len(payload["expected_results"])
+                else payload["expected_results"][-1]
+            )
+            script.append(
+                {
+                    "step": index,
+                    "name": f"步骤{index}：{self._short_text(step_text)}",
+                    "api_id": None,
+                    "description": step_text,
+                    "assert_hint": expected,
+                }
+            )
+        draft_payload = {
+            "name": f"[AI草稿][API]{payload['title']}",
+            "description": (
+                f"来源模块：{payload['module']}；"
+                f"来源用例：{payload['title']}；"
+                "当前为自动生成草稿，请补充真实接口绑定。"
+            ),
+            "type": 1,
+            "config": {
+                "params_id": None,
+                "env_id": None,
+                "cn_service": [],
+                "hw_service": [],
+            },
+            "script": script,
+        }
+        warnings = [
+            "API 草稿当前只生成测试场景骨架，仍需人工绑定真实接口。",
+            "保存后请进入 API 场景管理页面补充环境、参数依赖和断言细节。",
+        ]
+        return draft_payload, warnings
+
+    def _build_web_draft(
+        self, payload: Dict[str, Any]
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        script = []
+        for index, step_text in enumerate(payload["steps"], start=1):
+            script.append(self._build_web_step(index, step_text))
+
+        if script:
+            script[-1]["action"]["assert"] = self._build_web_asserts(
+                payload["expected_results"]
+            )
+
+        draft_payload = {
+            "menu_name": f"[AI草稿][WEB]{payload['title']}",
+            "script": script,
+        }
+        warnings = [
+            "Web 草稿中的网址、定位器和输入值可能是占位内容，保存前请人工校对。",
+            "当前断言仅作初稿建议，仍需结合页面真实结构补充。",
+        ]
+        return draft_payload, warnings
+
+    def _build_app_draft(
+        self, payload: Dict[str, Any]
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        script = []
+        for index, step_text in enumerate(payload["steps"], start=1):
+            script.append(self._build_app_step(index, step_text))
+
+        draft_payload = {
+            "menu_name": f"[AI草稿][APP]{payload['title']}",
+            "script": script,
+        }
+        warnings = [
+            "App 草稿中的包名、图像识别和设备相关信息仍需人工补充。",
+            "当前步骤仅保证可编辑，不保证保存后即可在所有设备上直接执行。",
+        ]
+        return draft_payload, warnings
+
+    def _build_web_step(self, index: int, step_text: str) -> Dict[str, Any]:
+        lowered = step_text.lower()
+        step_type = 17
+        step_name = f"自定义步骤-{index}"
+        action = {
+            "type": 1,
+            "locator": 1,
+            "locator_select": 1,
+            "target_locator": 1,
+            "target_locator_select": 1,
+            "input": "",
+            "element": step_text,
+            "element_id": None,
+            "target": "",
+            "target_id": "",
+            "target_type": 1,
+            "assert": [],
+            "up_type": 1,
+            "sway_type": 1,
+            "wait_time": 1,
+            "before_wait": 1,
+            "after_wait": 1,
+            "role": "button",
+            "cookies": [],
+            "localstorage": [],
+            "timeout": 15,
+        }
+        if any(flag in lowered for flag in ["打开", "进入", "访问", "open", "visit"]):
+            step_type = 0
+            step_name = f"首次打开网页-{index}"
+            action["element"] = "https://example.com"
+        elif any(flag in lowered for flag in ["点击", "提交", "确认", "click"]):
+            step_type = 1
+            step_name = f"左键点击-{index}"
+            action["element"] = "请补充点击目标定位器"
+        elif any(flag in lowered for flag in ["输入", "填写", "录入", "type"]):
+            step_type = 5
+            step_name = f"直接输入-{index}"
+            action["element"] = "请补充输入控件定位器"
+            action["input"] = step_text
+        elif any(flag in lowered for flag in ["等待", "wait", "轮询"]):
+            step_type = 12
+            step_name = f"等待事件-{index}"
+            action["element"] = 3
+        return {
+            "name": step_name,
+            "type": step_type,
+            "status": True,
+            "children": [],
+            "action": action,
+        }
+
+    def _build_web_asserts(self, expected_results: List[str]) -> List[Dict[str, Any]]:
+        result = []
+        for item in expected_results[:2]:
+            result.append(
+                {
+                    "type": 6,
+                    "locator": 1,
+                    "locator_select": 1,
+                    "page_type": 1,
+                    "element": item,
+                    "role": "button",
+                }
+            )
+        return result
+
+    def _build_app_step(self, index: int, step_text: str) -> Dict[str, Any]:
+        lowered = step_text.lower()
+        step_type = 2
+        step_name = f"点击事件-{index}"
+        item = {
+            "name": step_name,
+            "address": "",
+            "type": step_type,
+            "status": True,
+            "android": {"img": None, "assert": None},
+            "ios": {"img": None, "assert": None},
+        }
+        if any(flag in lowered for flag in ["启动", "打开app", "launch", "打开应用"]):
+            item["type"] = 1
+            item["name"] = f"启动App-{index}"
+            item["package"] = "请补充 App 包名"
+        elif any(flag in lowered for flag in ["输入", "填写", "录入", "type"]):
+            item["type"] = 3
+            item["name"] = f"输入事件-{index}"
+            item["value"] = step_text
+        elif any(flag in lowered for flag in ["等待", "wait", "轮询"]):
+            item["type"] = 0
+            item["name"] = f"等待事件-{index}"
+        elif any(flag in lowered for flag in ["关闭", "退出", "close"]):
+            item["type"] = 6
+            item["name"] = f"关闭App-{index}"
+            item["package"] = "请补充 App 包名"
+        return item
+
+    def _short_text(self, value: str, length: int = 18) -> str:
+        text = value.strip()
+        if len(text) <= length:
+            return text
+        return f"{text[:length]}..."
+
 
 class OpenAICompatibleProvider(BaseAIProvider):
     provider_name = "openai_compatible"
@@ -342,6 +581,18 @@ class OpenAICompatibleProvider(BaseAIProvider):
             "cases": cases,
         }
 
+    def generate_automation_draft(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        if not self.is_configured():
+            raise ValueError(f"{self.mode} 模式缺少必要配置")
+
+        message = self._request_chat_completion_for_automation(payload)
+        parsed = self._parse_automation_draft(message, payload["target_type"])
+        return {
+            "generation_source": "llm",
+            "draft_payload": parsed["draft_payload"],
+            "warnings": parsed["warnings"],
+        }
+
     def _request_chat_completion(self, payload: Dict[str, Any]) -> str:
         prompt = self._build_prompt(payload)
         body = json.dumps(
@@ -354,6 +605,40 @@ class OpenAICompatibleProvider(BaseAIProvider):
                         "content": (
                             "仅返回合法 JSON。"
                             "最外层对象必须包含 `cases` 字段。"
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+            }
+        ).encode("utf-8")
+        headers = {"Content-Type": "application/json"}
+        if self.config.get("api_key"):
+            headers["Authorization"] = f"Bearer {self.config['api_key']}"
+
+        endpoint = f"{self.config['base_url'].rstrip('/')}/chat/completions"
+        req = request.Request(endpoint, data=body, headers=headers, method="POST")
+
+        try:
+            with request.urlopen(req, timeout=60) as response:
+                raw = response.read().decode("utf-8")
+        except error.URLError as exc:
+            raise ValueError(f"{self.mode} 模式请求失败：{exc}") from exc
+
+        parsed = json.loads(raw)
+        return parsed["choices"][0]["message"]["content"]
+
+    def _request_chat_completion_for_automation(self, payload: Dict[str, Any]) -> str:
+        prompt = self._build_automation_prompt(payload)
+        body = json.dumps(
+            {
+                "model": self.config["model"],
+                "temperature": 0.2,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "仅返回合法 JSON。"
+                            "最外层对象必须包含 `draft_payload` 和 `warnings` 字段。"
                         ),
                     },
                     {"role": "user", "content": prompt},
@@ -402,6 +687,22 @@ class OpenAICompatibleProvider(BaseAIProvider):
             "}"
         )
 
+    def _build_automation_prompt(self, payload: Dict[str, Any]) -> str:
+        return (
+            "请根据以下测试用例，生成结构化自动化草稿。\n"
+            f"目标类型：{payload['target_type']}\n"
+            f"所属模块：{payload['module']}\n"
+            f"用例标题：{payload['title']}\n"
+            f"前置条件：{json.dumps(payload['preconditions'], ensure_ascii=False)}\n"
+            f"测试步骤：{json.dumps(payload['steps'], ensure_ascii=False)}\n"
+            f"预期结果：{json.dumps(payload['expected_results'], ensure_ascii=False)}\n\n"
+            "请只返回如下结构的 JSON：\n"
+            "{\n"
+            '  "draft_payload": {},\n'
+            '  "warnings": ["string"]\n'
+            "}"
+        )
+
     def _parse_cases(self, message: str) -> List[Dict[str, Any]]:
         cleaned = self._strip_code_fence(message)
         parsed = json.loads(cleaned)
@@ -421,6 +722,23 @@ class OpenAICompatibleProvider(BaseAIProvider):
         if not normalized_cases:
             raise ValueError(f"{self.mode} 模式返回的用例列表为空")
         return normalized_cases
+
+    def _parse_automation_draft(
+        self, message: str, target_type: str
+    ) -> Dict[str, Any]:
+        cleaned = self._strip_code_fence(message)
+        parsed = json.loads(cleaned)
+        draft_payload = parsed.get("draft_payload")
+        if not isinstance(draft_payload, dict) or not draft_payload:
+            raise ValueError(f"{self.mode} 模式返回的自动化草稿为空")
+        warnings = parsed.get("warnings") or []
+        if not isinstance(warnings, list):
+            warnings = [str(warnings)]
+        return {
+            "target_type": target_type,
+            "draft_payload": draft_payload,
+            "warnings": [str(item).strip() for item in warnings if str(item).strip()],
+        }
 
     def _strip_code_fence(self, message: str) -> str:
         cleaned = message.strip()
@@ -467,6 +785,14 @@ class AIGatewayService:
         request_payload = normalize_generation_request(payload)
         provider, info = self._resolve_provider(request_payload.get("mode") or None)
         result = provider.generate_test_cases(request_payload)
+        result.update(info)
+        result["provider"] = provider.describe()
+        return result
+
+    def generate_automation_draft(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        request_payload = normalize_automation_request(payload)
+        provider, info = self._resolve_provider(request_payload.get("mode") or None)
+        result = provider.generate_automation_draft(request_payload)
         result.update(info)
         result["provider"] = provider.describe()
         return result

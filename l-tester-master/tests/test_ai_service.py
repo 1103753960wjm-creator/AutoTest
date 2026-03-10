@@ -63,6 +63,36 @@ def test_invalid_or_unconfigured_mode_falls_back_to_none():
     assert result["provider"]["mode"] == "none"
 
 
+def test_none_mode_generates_structured_automation_draft():
+    service = AIGatewayService(
+        config={
+            "configured_mode_raw": "none",
+            "configured_mode": "none",
+            "local": {"base_url": "", "model": "", "api_key": ""},
+            "remote": {"base_url": "", "model": "", "api_key": ""},
+        }
+    )
+
+    result = service.generate_automation_draft(
+        {
+            "title": "登录主流程",
+            "module": "认证模块",
+            "priority": "P1",
+            "category": "happy_path",
+            "target_type": "web",
+            "preconditions": ["已准备账号"],
+            "steps": ["打开登录页", "输入账号密码", "点击登录"],
+            "expected_results": ["登录成功并进入首页"],
+        }
+    )
+
+    assert result["effective_mode"] == "none"
+    assert result["generation_source"] == "rules"
+    assert result["draft_payload"]["menu_name"] == "[AI草稿][WEB]登录主流程"
+    assert result["draft_payload"]["script"]
+    assert result["warnings"]
+
+
 def test_config_info_masks_remote_api_key():
     service = AIGatewayService(
         config={

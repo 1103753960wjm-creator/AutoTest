@@ -446,6 +446,20 @@ export const staticRouter: RouteRecordRaw[] = [
           isFull: "1",
           isAffix: "1"
         }
+      },
+      {
+        path: "/automation_draft",
+        component: () => import("@/views/automation_draft_view/index.vue"),
+        meta: {
+          title: "自动化草稿确认",
+          enName: "Automation Draft",
+          icon: "Promotion",
+          isHide: "0",
+          isLink: "",
+          isKeepAlive: "1",
+          isFull: "1",
+          isAffix: "0"
+        }
       }
     ]
   },

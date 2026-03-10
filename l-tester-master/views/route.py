@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from views.automation_draft import automation_draft_view
 from views.ai import ai_view
 from views.api import api_view, public_view
 from views.app import app_view, img_view, device_view
@@ -23,6 +24,7 @@ def include_router(app: FastAPI):
     # 统计
     app.include_router(count_view.router)
     app.include_router(ai_view.router)
+    app.include_router(automation_draft_view.router)
     app.include_router(requirement_view.router)
     app.include_router(testcase_view.router)
 

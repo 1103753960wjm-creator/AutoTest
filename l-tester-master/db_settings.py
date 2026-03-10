@@ -70,6 +70,7 @@ TORTOISE_ORM = {
                 "views.api.api_model",
                 "views.requirement.requirement_model",
                 "views.testcase.testcase_model",
+                "views.automation_draft.automation_draft_model",
                 "views.warning_call.call_model",
                 "views.exe_update.exe_update_model",
                 "views.app_mitmproxy.mitmproxy_model",

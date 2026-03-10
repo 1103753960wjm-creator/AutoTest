@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from "vue";
+import { nextTick, onMounted, ref, watch } from "vue";
 import { ElTree } from "element-plus";
+import { useRoute } from "vue-router";
 import { MsgBox, MsgError, MsgSuccess, NoticeError } from "@/utils/koi.ts";
 import {
   web_menu,
@@ -18,6 +19,7 @@ import {
 import { get_element_select } from "@/api/api_web/element";
 import { LocalStorage } from "@/utils/storage.ts";
 
+const route = useRoute();
 // 数据表格加载页面动画
 const loading = ref(false);
 const filterText = ref<any>("");
@@ -35,6 +37,7 @@ const script_info = ref<any>({
   }
 });
 const table_list = ref<any>([]);
+const hasHandledRouteLocate = ref(false);
 const tab_active = ref("");
 const tab_list = ref<any>([]);
 const add_menu_form = ref<any>({});
@@ -99,6 +102,8 @@ const get_web_menu = async () => {
     loading.value = true;
     const res: any = await web_menu({});
     tree_data.value = res.data;
+    await nextTick();
+    await autoLocateTargetMenu();
     loading.value = false;
   } catch {
     NoticeError("数据查询失败，请刷新重试🌻");
@@ -135,6 +140,37 @@ const addTab = async (node: any, target: any) => {
     });
   }
   tab_active.value = node.name;
+};
+
+const findMenuNodeById = (nodes: any[], menuId: number): any => {
+  for (const node of nodes || []) {
+    if (Number(node.id) === menuId) {
+      return node;
+    }
+    const childNode = findMenuNodeById(node.children || [], menuId);
+    if (childNode) {
+      return childNode;
+    }
+  }
+  return null;
+};
+
+const autoLocateTargetMenu = async () => {
+  const menuId = Number(route.query.menu_id || 0);
+  if (!menuId || hasHandledRouteLocate.value) {
+    return;
+  }
+
+  hasHandledRouteLocate.value = true;
+  const targetNode = findMenuNodeById(tree_data.value || [], menuId);
+  if (!targetNode) {
+    NoticeError("目标资产不存在，请确认资产未被删除");
+    return;
+  }
+
+  treeRef.value?.setCurrentKey(menuId);
+  await web_menu_click(targetNode);
+  MsgSuccess("已定位到自动生成的 Web 资产");
 };
 
 const removeTab = async (targetName: string) => {
@@ -642,7 +678,8 @@ onMounted(() => {
             <el-button type="text" style="padding-left: 5px" icon="Refresh" @click="get_web_menu()" />
           </div>
           <el-tree ref="treeRef" class="filter-tree" :data="tree_data" :props="defaultProps" default-expand-all
-            :filter-node-method="filterNode" @node-click="web_menu_click" :allow-drop="on_menu_allowDrop" draggable>
+            node-key="id" highlight-current :filter-node-method="filterNode" @node-click="web_menu_click"
+            :allow-drop="on_menu_allowDrop" draggable>
             <template #default="{ node, data }">
               <span class="custom-tree-node">
                 <span v-if="data.type === 0">

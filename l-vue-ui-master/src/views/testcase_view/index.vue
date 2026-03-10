@@ -1,9 +1,11 @@
 <script setup lang="ts" name="testcaseAssetsPage">
 import { onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { MsgSuccess, NoticeError } from "@/utils/koi.ts";
 import { listRequirementPage } from "@/api/api_requirement/requirement.ts";
 import { listTestcasePage, updateReviewStatus } from "@/api/api_testcase/testcase.ts";
 
+const router = useRouter();
 const loading = ref(false);
 const total = ref(0);
 const tableData = ref<any[]>([]);
@@ -110,6 +112,75 @@ const statusLoading = (id: number) => {
   return savingIds.value.includes(id);
 };
 
+const automationTargetOptions = [
+  { label: "API", value: "api" },
+  { label: "Web", value: "web" },
+  { label: "App", value: "app" }
+];
+
+const buildRouteQuery = (query: Record<string, any>) => {
+  return Object.keys(query || {}).reduce((result: Record<string, string>, key) => {
+    const value = query[key];
+    if (value === undefined || value === null || value === "") {
+      return result;
+    }
+    result[key] = String(value);
+    return result;
+  }, {});
+};
+
+const getAutomationItem = (row: any, targetType: string) => {
+  const latestItems = row?.automation_summary?.latest_items || [];
+  return latestItems.find((item: any) => item.target_type === targetType) || null;
+};
+
+const getAutomationStatusLabel = (item: any) => {
+  if (!item) {
+    return "未生成";
+  }
+  return item.save_status === "saved" ? "已保存" : "未保存";
+};
+
+const openDraftByQuery = async (query: Record<string, any>) => {
+  await router.push({
+    path: "/automation_draft",
+    query: buildRouteQuery(query)
+  });
+};
+
+const handleAutomationAction = async (row: any, targetType: string) => {
+  const existingItem = getAutomationItem(row, targetType);
+  if (existingItem?.draft_id) {
+    await openDraftByQuery({
+      testcase_id: row.id,
+      target_type: targetType,
+      draft_id: existingItem.draft_id
+    });
+    return;
+  }
+
+  if (row.review_status !== "approved") {
+    NoticeError("只有已审核测试用例才允许生成自动化草稿");
+    return;
+  }
+
+  await openDraftByQuery({
+    testcase_id: row.id,
+    target_type: targetType
+  });
+};
+
+const viewTargetAsset = async (item: any) => {
+  if (!item?.target_route || !item?.target_route_query) {
+    NoticeError("当前草稿还没有可跳转的目标资产");
+    return;
+  }
+  await router.push({
+    path: item.target_route,
+    query: buildRouteQuery(item.target_route_query || {})
+  });
+};
+
 onMounted(async () => {
   await Promise.all([loadRequirementOptions(), loadTableData()]);
 });
@@ -174,6 +245,56 @@ onMounted(async () => {
         <vxe-column field="category" title="用例类型" min-width="160" />
         <vxe-column field="target_type" title="目标类型" width="100" />
         <vxe-column field="requirement_title" title="所属需求" min-width="220" />
+        <vxe-column title="自动化进度" min-width="420">
+          <template #default="{ row }">
+            <div class="automation-summary-list">
+              <div
+                v-for="target in automationTargetOptions"
+                :key="`${row.id}-${target.value}`"
+                class="automation-summary-item"
+              >
+                <div class="summary-title-row">
+                  <span class="summary-target">{{ target.label }}</span>
+                  <el-tag
+                    size="small"
+                    :type="getAutomationItem(row, target.value)?.save_status === 'saved' ? 'success' : 'info'"
+                  >
+                    {{ getAutomationStatusLabel(getAutomationItem(row, target.value)) }}
+                  </el-tag>
+                </div>
+                <div class="summary-meta">
+                  <span>
+                    草稿：
+                    {{ getAutomationItem(row, target.value)?.draft_id || "-" }}
+                  </span>
+                  <span>
+                    资产：
+                    {{ getAutomationItem(row, target.value)?.target_asset_id || getAutomationItem(row, target.value)?.target_menu_id || "-" }}
+                  </span>
+                </div>
+                <div class="draft-actions">
+                  <el-button
+                    size="small"
+                    :type="getAutomationItem(row, target.value) ? 'primary' : 'default'"
+                    plain
+                    @click="handleAutomationAction(row, target.value)"
+                  >
+                    {{ getAutomationItem(row, target.value) ? "继续编辑" : "生成草稿" }}
+                  </el-button>
+                  <el-button
+                    v-if="getAutomationItem(row, target.value)?.save_status === 'saved'"
+                    size="small"
+                    type="success"
+                    plain
+                    @click="viewTargetAsset(getAutomationItem(row, target.value))"
+                  >
+                    查看目标资产
+                  </el-button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </vxe-column>
         <vxe-column title="审核状态" width="220" fixed="right">
           <template #default="{ row }">
             <div class="status-cell">
@@ -232,9 +353,57 @@ onMounted(async () => {
   gap: 6px;
 }
 
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.automation-summary-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.automation-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 10px;
+  background: var(--el-fill-color-blank);
+}
+
+.summary-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.summary-target {
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.summary-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
 .pager-wrapper {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+@media (max-width: 1400px) {
+  .automation-summary-list {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
