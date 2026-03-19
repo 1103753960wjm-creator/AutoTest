@@ -81,6 +81,26 @@
               <el-tag :type="getStatusType(row.status)">{{ getStatusText(row.status) }}</el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="设计资产" min-width="140">
+            <template #default="{ row }">
+              <span>{{ row.testcase_count || 0 }} 个用例</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="需求分析摘要" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.requirement_summary?.label || '尚未建立需求分析摘要' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="AI 生成摘要" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.ai_generation_summary?.label || '尚未建立 AI 生成摘要' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="自动化状态" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.automation_summary?.label || '待接自动化草稿' }}
+            </template>
+          </el-table-column>
           <el-table-column prop="owner.username" :label="$t('project.owner')" width="120" />
           <el-table-column prop="created_at" :label="$t('project.createdAt')" width="180">
             <template #default="{ row }">

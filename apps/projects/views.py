@@ -26,6 +26,14 @@ class ProjectListCreateView(generics.ListCreateAPIView):
         user = self.request.user
         return Project.objects.filter(
             models.Q(owner=user) | models.Q(members=user)
+        ).select_related(
+            'owner'
+        ).prefetch_related(
+            'projectmember_set__user',
+            'environments',
+            'testcases',
+            'requirement_documents__analysis',
+            'generation_tasks'
         ).distinct()
 
 @api_view(['GET'])
@@ -36,9 +44,19 @@ def get_all_projects(request):
     return Response(list(projects))
 
 class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return Project.objects.select_related(
+            'owner'
+        ).prefetch_related(
+            'projectmember_set__user',
+            'environments',
+            'testcases',
+            'requirement_documents__analysis',
+            'generation_tasks'
+        )
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])

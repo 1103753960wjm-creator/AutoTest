@@ -1,9 +1,86 @@
+import re
 from rest_framework import serializers
 from .models import (
     RequirementDocument, RequirementAnalysis, BusinessRequirement,
     GeneratedTestCase, AnalysisTask, AIModelConfig, PromptConfig, TestCaseGenerationTask,
     GenerationConfig
 )
+
+
+def _parse_generated_results(content):
+    if not content:
+        return []
+
+    clean_content = re.sub(r'\*\*([^*]+)\*\*', r'\1', content)
+    lines = [line.strip() for line in clean_content.split('\n') if line.strip()]
+    table_rows = []
+
+    for line in lines:
+        if '|' in line and not line.startswith('|-'):
+            columns = [cell.strip() for cell in line.split('|') if cell.strip()]
+            if len(columns) > 1:
+                table_rows.append(columns)
+
+    if len(table_rows) > 1:
+        headers = [header.lower() for header in table_rows[0]]
+        results = []
+        for index, row in enumerate(table_rows[1:], start=1):
+            item = {
+                'index': index,
+                'case_id': '',
+                'scenario': '',
+                'precondition': '',
+                'steps': '',
+                'expected': '',
+                'priority': 'P2'
+            }
+            for col_index, header in enumerate(headers):
+                value = row[col_index] if col_index < len(row) else ''
+                value = re.sub(r'<br\s*/?>', '\n', value, flags=re.IGNORECASE)
+                if '用例' in header or header == 'id':
+                    item['case_id'] = value
+                elif '场景' in header or '目标' in header or '标题' in header:
+                    item['scenario'] = value
+                elif '前置' in header:
+                    item['precondition'] = value
+                elif '步骤' in header and '预期' not in header:
+                    item['steps'] = value
+                elif '预期' in header or '结果' in header:
+                    item['expected'] = value
+                elif '优先级' in header or header == 'priority':
+                    item['priority'] = value or 'P2'
+            if item['scenario'] or item['case_id']:
+                results.append(item)
+        return results
+
+    results = []
+    current_case = None
+    for line in lines:
+        if line.startswith(('1.', '2.', '3.', '4.', '5.')) or '测试用例' in line or 'Test Case' in line:
+            if current_case:
+                results.append(current_case)
+            current_case = {
+                'index': len(results) + 1,
+                'case_id': f"TC{len(results) + 1:03d}",
+                'scenario': re.sub(r'^(\d+\.|测试用例[:：]?\s*|Test Case[:：]?\s*)', '', line).strip(),
+                'precondition': '',
+                'steps': '',
+                'expected': '',
+                'priority': 'P2'
+            }
+        elif current_case and ('前置条件' in line or '前提' in line):
+            current_case['precondition'] = re.sub(r'.*?[:：]\s*', '', line).strip()
+        elif current_case and ('测试步骤' in line or '操作步骤' in line or '步骤' in line):
+            current_case['steps'] = re.sub(r'.*?[:：]\s*', '', line).strip()
+        elif current_case and ('预期结果' in line or 'Expected' in line):
+            current_case['expected'] = re.sub(r'.*?[:：]\s*', '', line).strip()
+        elif current_case and '优先级' in line:
+            current_case['priority'] = re.sub(r'.*?[:：]\s*', '', line).strip() or 'P2'
+
+    if current_case:
+        results.append(current_case)
+
+    return results
 
 
 class RequirementDocumentSerializer(serializers.ModelSerializer):
@@ -42,12 +119,29 @@ class BusinessRequirementSerializer(serializers.ModelSerializer):
 class RequirementAnalysisSerializer(serializers.ModelSerializer):
     document_title = serializers.CharField(source='document.title', read_only=True)
     document_id = serializers.IntegerField(source='document.id', read_only=True)
+    project_id = serializers.IntegerField(source='document.project.id', read_only=True)
+    project_name = serializers.CharField(source='document.project.name', read_only=True)
     requirements = BusinessRequirementSerializer(many=True, read_only=True)
+    input_content_summary = serializers.SerializerMethodField()
+    analysis_status = serializers.CharField(source='document.status', read_only=True)
+    last_analysis_at = serializers.DateTimeField(source='updated_at', read_only=True)
     
     class Meta:
         model = RequirementAnalysis
         fields = ['id', 'document_id', 'document_title', 'analysis_report', 
-                 'requirements_count', 'analysis_time', 'created_at', 'updated_at', 'requirements']
+                 'requirements_count', 'analysis_time', 'created_at', 'updated_at', 'requirements',
+                 'project_id', 'project_name', 'input_content_summary', 'analysis_status', 'last_analysis_at']
+
+    def get_input_content_summary(self, obj):
+        document = obj.document
+        return {
+            'title': document.title,
+            'document_type': document.document_type,
+            'document_type_display': document.get_document_type_display(),
+            'file_size': document.file_size,
+            'text_length': len(document.extracted_text or ''),
+            'label': f"{document.get_document_type_display()} / {document.title}"
+        }
 
 
 class GeneratedTestCaseSerializer(serializers.ModelSerializer):
@@ -55,13 +149,27 @@ class GeneratedTestCaseSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     requirement_name = serializers.CharField(source='requirement.requirement_name', read_only=True)
     requirement_id_display = serializers.CharField(source='requirement.requirement_id', read_only=True)
+    project_id = serializers.IntegerField(source='requirement.analysis.document.project.id', read_only=True)
+    project_name = serializers.CharField(source='requirement.analysis.document.project.name', read_only=True)
+    source_task_id = serializers.SerializerMethodField()
+    save_status_summary = serializers.SerializerMethodField()
     
     class Meta:
         model = GeneratedTestCase
         fields = ['id', 'case_id', 'title', 'priority', 'priority_display', 'precondition',
                  'test_steps', 'expected_result', 'status', 'status_display', 'generated_by_ai',
                  'reviewed_by_ai', 'review_comments', 'requirement', 'requirement_name', 
-                 'requirement_id_display', 'created_at', 'updated_at']
+                 'requirement_id_display', 'project_id', 'project_name',
+                 'source_task_id', 'save_status_summary', 'created_at', 'updated_at']
+
+    def get_source_task_id(self, obj):
+        return ''
+
+    def get_save_status_summary(self, obj):
+        return {
+            'is_saved_to_testcases': obj.status == 'adopted',
+            'label': '已保存为测试用例' if obj.status == 'adopted' else '尚未保存为正式测试用例'
+        }
 
 
 class AnalysisTaskSerializer(serializers.ModelSerializer):
@@ -235,6 +343,11 @@ class TestCaseGenerationTaskSerializer(serializers.ModelSerializer):
     reviewer_model_name = serializers.CharField(source='reviewer_model_config.name', read_only=True)
     writer_prompt_name = serializers.CharField(source='writer_prompt_config.name', read_only=True)
     reviewer_prompt_name = serializers.CharField(source='reviewer_prompt_config.name', read_only=True)
+    generation_config_summary = serializers.SerializerMethodField()
+    result_count = serializers.SerializerMethodField()
+    save_status_summary = serializers.SerializerMethodField()
+    generated_results_preview = serializers.SerializerMethodField()
+    source_summary = serializers.SerializerMethodField()
     
     class Meta:
         model = TestCaseGenerationTask
@@ -243,10 +356,42 @@ class TestCaseGenerationTaskSerializer(serializers.ModelSerializer):
                  'reviewer_model_config', 'reviewer_model_name', 'writer_prompt_config', 'writer_prompt_name',
                  'reviewer_prompt_config', 'reviewer_prompt_name', 'generated_test_cases',
                  'review_feedback', 'final_test_cases', 'generation_log', 'error_message',
-                 'created_by', 'created_by_name', 'created_at', 'updated_at', 'completed_at']
+                 'created_by', 'created_by_name', 'created_at', 'updated_at', 'completed_at',
+                 'generation_config_summary', 'result_count', 'save_status_summary',
+                 'generated_results_preview', 'source_summary', 'is_saved_to_records', 'saved_at']
         read_only_fields = ['task_id', 'status', 'progress', 'generated_test_cases', 
                           'review_feedback', 'final_test_cases', 'generation_log', 
                           'error_message', 'created_by', 'completed_at']
+
+    def get_generation_config_summary(self, obj):
+        config = GenerationConfig.get_active_config()
+        return {
+            'name': config.name if config else '',
+            'is_inferred': True,
+            'label': f"当前活跃配置：{config.name}" if config else '未找到活跃生成配置',
+            'detail': '当前任务模型未持久化任务级生成配置，本轮先展示当前活跃配置摘要。'
+        }
+
+    def get_result_count(self, obj):
+        return len(_parse_generated_results(obj.final_test_cases or obj.generated_test_cases))
+
+    def get_save_status_summary(self, obj):
+        return {
+            'is_saved': obj.is_saved_to_records,
+            'label': '已保存为正式测试用例' if obj.is_saved_to_records else '尚未保存为正式测试用例',
+            'saved_at': obj.saved_at
+        }
+
+    def get_generated_results_preview(self, obj):
+        return _parse_generated_results(obj.final_test_cases or obj.generated_test_cases)[:3]
+
+    def get_source_summary(self, obj):
+        return {
+            'project_id': obj.project_id,
+            'project_name': obj.project.name if obj.project else '',
+            'label': f"来源项目：{obj.project.name}" if obj.project else '来源项目未记录',
+            'detail': '生成任务对象承接测试设计项目、需求输入与 AI 配置上下文。'
+        }
     
     def create(self, validated_data):
         # 自动设置创建者和任务ID
@@ -270,6 +415,7 @@ class TestCaseGenerationRequestSerializer(serializers.Serializer):
     """新的测试用例生成请求序列化器"""
     title = serializers.CharField(max_length=200, help_text="任务标题")
     requirement_text = serializers.CharField(help_text="需求描述")
+    project = serializers.IntegerField(required=False, allow_null=True, help_text="关联项目ID")
     use_writer_model = serializers.BooleanField(default=True, help_text="是否使用编写模型")
     use_reviewer_model = serializers.BooleanField(default=True, help_text="是否使用评审模型")
 

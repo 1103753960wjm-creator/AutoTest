@@ -1,8 +1,26 @@
 <template>
   <div class="requirement-analysis">
-    <div class="page-header">
-      <h1>{{ $t('requirementAnalysis.title') }}</h1>
-      <p>{{ $t('requirementAnalysis.subtitle') }}</p>
+    <div class="analysis-object-strip">
+      <div class="analysis-object-card">
+        <span class="analysis-object-card__label">关联项目</span>
+        <strong class="analysis-object-card__value">{{ currentProjectLabel }}</strong>
+        <span class="analysis-object-card__desc">需求输入与生成任务都会优先挂到当前项目。</span>
+      </div>
+      <div class="analysis-object-card">
+        <span class="analysis-object-card__label">配置来源</span>
+        <strong class="analysis-object-card__value">{{ configSummaryLabel }}</strong>
+        <span class="analysis-object-card__desc">模型、提示词和生成配置统一作为分析对象的来源摘要。</span>
+      </div>
+      <div class="analysis-object-card">
+        <span class="analysis-object-card__label">生成任务</span>
+        <strong class="analysis-object-card__value">{{ currentTaskId || '未启动' }}</strong>
+        <span class="analysis-object-card__desc">{{ taskSummaryLabel }}</span>
+      </div>
+      <div class="analysis-object-card">
+        <span class="analysis-object-card__label">下游挂接</span>
+        <strong class="analysis-object-card__value">{{ showResults ? '结果已生成' : '待生成结果' }}</strong>
+        <span class="analysis-object-card__desc">后续将继续挂接正式测试用例与自动化草稿中心。</span>
+      </div>
     </div>
 
     <!-- 配置引导弹出窗口 -->
@@ -435,6 +453,32 @@ export default {
       return this.manualInput.title.trim() &&
              this.manualInput.description.trim() &&
              this.manualInput.description.length <= 2000
+    },
+    currentProjectLabel() {
+      const currentProjectId = this.manualInput.selectedProject || this.selectedProject
+      if (!currentProjectId) {
+        return '未关联项目'
+      }
+      const currentProject = this.projects.find((item) => String(item.id) === String(currentProjectId))
+      return currentProject?.name || `项目 #${currentProjectId}`
+    },
+    configSummaryLabel() {
+      if (this.checkingConfig) {
+        return '配置检查中'
+      }
+      if (this.configStatus?.overall_status === 'ready') {
+        return '配置已就绪'
+      }
+      return this.configStatus?.message || '配置待补齐'
+    },
+    taskSummaryLabel() {
+      if (this.showResults && this.generationResult?.task_id) {
+        return `结果批次 ${this.generationResult.task_id} 已生成，可继续查看和保存。`
+      }
+      if (this.isGenerating && this.currentTaskId) {
+        return `任务 ${this.currentTaskId} 正在运行。`
+      }
+      return '当前页面用于承接需求输入、分析活动和生成任务入口。'
     }
   },
 
@@ -471,6 +515,11 @@ export default {
       try {
         const response = await api.get('/projects/')
         this.projects = response.data.results || response.data
+        const projectFromQuery = this.$route.query.project
+        if (projectFromQuery) {
+          this.manualInput.selectedProject = Number(projectFromQuery)
+          this.selectedProject = Number(projectFromQuery)
+        }
       } catch (error) {
         console.error(this.$t('requirementAnalysis.loadProjectsFailed'), error)
       }
@@ -1481,25 +1530,55 @@ export default {
   position: relative;
 }
 
-.page-header {
-  text-align: center;
-  margin-bottom: 40px;
+.analysis-object-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-.page-header h1 {
-  font-size: 2.5rem;
-  color: #2c3e50;
-  margin-bottom: 10px;
+.analysis-object-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
-.page-header p {
-  color: #666;
-  font-size: 1.1rem;
+.analysis-object-card__label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.analysis-object-card__value {
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.analysis-object-card__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
 }
 
 /* 输出模式设置区域 - 全局 */
 .output-mode-section {
   margin-bottom: 30px;
+}
+
+@media (max-width: 1024px) {
+  .analysis-object-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .analysis-object-strip {
+    grid-template-columns: 1fr;
+  }
 }
 
 .output-mode-card {

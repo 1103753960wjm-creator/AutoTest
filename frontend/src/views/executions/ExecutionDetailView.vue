@@ -17,6 +17,23 @@
       <p class="execution-summary-card__description">
         执行进度、用例状态和历史记录继续由页面主体承接，本轮只补齐统一头部和回跳动作。
       </p>
+      <div class="execution-source-strip">
+        <div class="execution-source-card">
+          <span class="execution-source-card__label">设计来源</span>
+          <strong class="execution-source-card__value">{{ executionSourceSummary.projectLabel }}</strong>
+          <span class="execution-source-card__desc">当前仅展示来源项目与设计资产预留位，不重做执行链路。</span>
+        </div>
+        <div class="execution-source-card">
+          <span class="execution-source-card__label">关联用例</span>
+          <strong class="execution-source-card__value">{{ executionSourceSummary.caseCount }}</strong>
+          <span class="execution-source-card__desc">测试计划已和正式测试用例资产关联。</span>
+        </div>
+        <div class="execution-source-card">
+          <span class="execution-source-card__label">自动化来源</span>
+          <strong class="execution-source-card__value">预留</strong>
+          <span class="execution-source-card__desc">后续自动化草稿与自动化资产回链将在执行对象继续挂接。</span>
+        </div>
+      </div>
     </div>
 
     <div v-if="testPlan.test_runs && testPlan.test_runs.length > 0">
@@ -252,6 +269,17 @@ const executionMetaItems = computed(() => {
       value: `${testPlan.value.projects?.length || 0}`
     }
   ]
+})
+
+const executionSourceSummary = computed(() => {
+  const projects = testPlan.value.projects || []
+  const runs = testPlan.value.test_runs || []
+  const caseCount = runs.reduce((sum, run) => sum + (run.run_cases?.length || 0), 0)
+
+  return {
+    projectLabel: projects.length > 0 ? projects.join('、') : '未记录来源项目',
+    caseCount
+  }
 })
 
 usePlatformPageHeader(() => ({
@@ -502,6 +530,39 @@ onMounted(() => {
   line-height: 1.7;
 }
 
+.execution-source-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.execution-source-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.execution-source-card__label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.execution-source-card__value {
+  font-size: 17px;
+  color: #0f172a;
+}
+
+.execution-source-card__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
+}
+
 .no-data {
   color: #94a3b8;
   font-style: italic;
@@ -633,5 +694,11 @@ onMounted(() => {
   margin-top: 20px;
   display: flex;
   justify-content: center;
+}
+
+@media screen and (max-width: 960px) {
+  .execution-source-strip {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

@@ -1,27 +1,5 @@
 <template>
   <div class="page-container">
-    <div class="page-header">
-      <h1 class="page-title">{{ $t('testcase.title') }}</h1>
-      <div class="header-actions">
-        <el-button
-          v-if="selectedTestCases.length > 0"
-          type="danger"
-          @click="batchDeleteTestCases"
-          :disabled="isDeleting">
-          <el-icon><Delete /></el-icon>
-          {{ $t('testcase.batchDelete') }} ({{ selectedTestCases.length }})
-        </el-button>
-        <el-button type="success" @click="exportToExcel">
-          <el-icon><Download /></el-icon>
-          {{ $t('testcase.exportExcel') }}
-        </el-button>
-        <el-button type="primary" @click="$router.push('/ai-generation/testcases/create')">
-          <el-icon><Plus /></el-icon>
-          {{ $t('testcase.newCase') }}
-        </el-button>
-      </div>
-    </div>
-    
     <div class="card-container">
       <div class="filter-bar">
         <el-row :gutter="20">
@@ -105,6 +83,16 @@
               <el-tag :class="`priority-tag ${row.priority}`">{{ getPriorityText(row.priority) }}</el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="来源摘要" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.source_summary?.label || '来源未记录' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="自动化状态" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.automation_summary?.label || '待接自动化草稿' }}
+            </template>
+          </el-table-column>
           <el-table-column prop="test_type" :label="$t('testcase.testType')" width="120">
             <template #default="{ row }">
               {{ getTypeText(row.test_type) }}
@@ -148,6 +136,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Download, Delete } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 import * as XLSX from 'xlsx'
 import { buildDeeplinkLocation } from '@/router/deeplink'
 
@@ -165,6 +154,46 @@ const projectFilter = ref('')
 const priorityFilter = ref('')
 const selectedTestCases = ref([])
 const isDeleting = ref(false)
+const sourceProjectName = computed(() => String(route.query.projectName || ''))
+
+const listMetaItems = computed(() => ([
+  { label: '当前列表', value: `${total.value}` },
+  { label: '项目筛选', value: projectFilter.value ? '已按项目收敛' : '全部项目' },
+  { label: 'AI 来源位', value: '已展示' },
+  { label: '自动化状态位', value: '已预留' }
+]))
+
+usePlatformPageHeader(() => ({
+  helperText: sourceProjectName.value
+    ? `当前从项目 ${sourceProjectName.value} 进入，列表会优先按项目收敛。`
+    : '测试用例已作为测试设计资产对象展示来源摘要和自动化状态位。',
+  metaItems: listMetaItems.value,
+  actions: [
+    selectedTestCases.value.length > 0
+      ? {
+          key: 'delete-selected',
+          label: `${t('testcase.batchDelete')} (${selectedTestCases.value.length})`,
+          type: 'danger',
+          icon: Delete,
+          onClick: batchDeleteTestCases
+        }
+      : null,
+    {
+      key: 'export-list',
+      label: t('testcase.exportExcel'),
+      plain: true,
+      icon: Download,
+      onClick: exportToExcel
+    },
+    {
+      key: 'create-testcase',
+      label: t('testcase.newCase'),
+      type: 'primary',
+      icon: Plus,
+      onClick: () => router.push('/ai-generation/testcases/create')
+    }
+  ].filter(Boolean)
+}))
 
 const fetchTestCases = async () => {
   loading.value = true
@@ -505,6 +534,10 @@ const fetchProjects = async () => {
 }
 
 onMounted(() => {
+  const projectFromQuery = route.query.project
+  if (projectFromQuery) {
+    projectFilter.value = Number(projectFromQuery)
+  }
   fetchProjects()
   fetchTestCases()
 })

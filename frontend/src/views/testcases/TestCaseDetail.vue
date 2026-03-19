@@ -1,5 +1,28 @@
 <template>
   <div class="page-container">
+    <div v-if="testcase" class="asset-summary-grid">
+      <div class="asset-summary-card">
+        <span class="asset-summary-card__label">所属项目</span>
+        <strong class="asset-summary-card__value">{{ testcase.project?.name || '未关联' }}</strong>
+        <span class="asset-summary-card__desc">测试设计资产默认归属到项目对象之下。</span>
+      </div>
+      <div class="asset-summary-card">
+        <span class="asset-summary-card__label">来源摘要</span>
+        <strong class="asset-summary-card__value">{{ testcase.source_summary?.label || '来源未记录' }}</strong>
+        <span class="asset-summary-card__desc">{{ testcase.generation_source_summary?.detail || testcase.source_summary?.detail }}</span>
+      </div>
+      <div class="asset-summary-card">
+        <span class="asset-summary-card__label">评审状态</span>
+        <strong class="asset-summary-card__value">{{ testcase.review_summary?.label || '评审状态待补齐' }}</strong>
+        <span class="asset-summary-card__desc">{{ testcase.review_summary?.detail }}</span>
+      </div>
+      <div class="asset-summary-card">
+        <span class="asset-summary-card__label">自动化状态</span>
+        <strong class="asset-summary-card__value">{{ testcase.automation_summary?.label || '待接自动化草稿' }}</strong>
+        <span class="asset-summary-card__desc">{{ testcase.automation_summary?.detail }}</span>
+      </div>
+    </div>
+
     <div class="card-container" v-if="testcase">
       <el-descriptions :column="2" border>
         <el-descriptions-item :label="$t('testcase.caseTitle')" :span="2">{{ testcase.title }}</el-descriptions-item>
@@ -7,6 +30,8 @@
           <el-tag :class="`priority-tag ${testcase.priority}`">{{ getPriorityText(testcase.priority) }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item :label="$t('testcase.testType')">{{ getTypeText(testcase.test_type) }}</el-descriptions-item>
+        <el-descriptions-item label="来源摘要">{{ testcase.source_summary?.label || '来源未记录' }}</el-descriptions-item>
+        <el-descriptions-item label="自动化状态">{{ testcase.automation_summary?.label || '待接自动化草稿' }}</el-descriptions-item>
         <el-descriptions-item :label="$t('testcase.project')">{{ testcase.project?.name || $t('testcase.noProject') }}</el-descriptions-item>
         <el-descriptions-item :label="$t('testcase.relatedVersions')" :span="2">
           <div v-if="testcase.versions && testcase.versions.length > 0" class="version-tags">
@@ -143,6 +168,14 @@ const testcaseMetaItems = computed(() => {
     {
       label: '关联版本',
       value: `${testcase.value.versions?.length || 0}`
+    },
+    {
+      label: '来源',
+      value: testcase.value.source_summary?.label || '来源未记录'
+    },
+    {
+      label: '自动化',
+      value: testcase.value.automation_summary?.label || '待接自动化草稿'
     }
   ]
 })
@@ -219,5 +252,51 @@ onMounted(() => {
   line-height: 1.6;
   color: #303133;
   font-family: inherit;
+}
+
+.asset-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.asset-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.asset-summary-card__label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.asset-summary-card__value {
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.asset-summary-card__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
+}
+
+@media screen and (max-width: 1100px) {
+  .asset-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .asset-summary-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

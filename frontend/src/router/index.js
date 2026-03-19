@@ -125,6 +125,7 @@ const routes = [
         component: () => import('@/views/requirement-analysis/RequirementAnalysisView.vue'),
         meta: createRouteMeta({
           title: '需求分析',
+          description: '围绕需求输入、分析对象和生成任务入口管理测试设计源头信息。',
           module: 'test-design',
           pageType: 'workspace',
           icon: 'sparkles',
@@ -149,7 +150,7 @@ const routes = [
         component: () => import('@/views/projects/ProjectDetail.vue'),
         meta: createRouteMeta({
           title: '项目详情',
-          description: '查看项目成员、环境和基础信息，不在页面内部重复承担平台级导航。',
+          description: '作为测试设计源头对象页，查看项目摘要、需求分析、AI 生成与测试资产关系。',
           module: 'test-design',
           pageType: 'detail-result',
           icon: 'folder-opened',
@@ -164,6 +165,7 @@ const routes = [
         component: () => import('@/views/testcases/TestCaseList.vue'),
         meta: createRouteMeta({
           title: '测试用例',
+          description: '统一管理测试设计资产，并查看来源、优先级和自动化预留状态。',
           module: 'test-design',
           pageType: 'list',
           icon: 'document'
@@ -189,6 +191,7 @@ const routes = [
         component: () => import('@/views/testcases/TestCaseDetail.vue'),
         meta: createRouteMeta({
           title: '测试用例详情',
+          description: '作为测试设计资产详情页，查看内容、来源摘要和自动化挂接位。',
           module: 'test-design',
           pageType: 'detail-result',
           icon: 'tickets',
@@ -203,6 +206,7 @@ const routes = [
         component: () => import('@/views/testcases/TestCaseEdit.vue'),
         meta: createRouteMeta({
           title: '编辑测试用例',
+          description: '在明确所属项目与回跳上下文的前提下编辑测试设计资产。',
           module: 'test-design',
           pageType: 'workspace',
           icon: 'edit',
@@ -314,6 +318,7 @@ const routes = [
         component: () => import('@/views/executions/ExecutionDetailView.vue'),
         meta: createRouteMeta({
           title: '执行详情',
+          description: '查看测试执行结果，并预留设计来源与自动化来源展示位。',
           module: 'test-design',
           pageType: 'detail-result',
           icon: 'data-analysis',
@@ -339,6 +344,7 @@ const routes = [
         component: () => import('@/views/requirement-analysis/GeneratedTestCaseList.vue'),
         meta: createRouteMeta({
           title: 'AI 生成用例',
+          description: '按结果批次查看 AI 生成产物、保存状态与来源任务。',
           module: 'test-design',
           pageType: 'list',
           icon: 'magic-stick'
@@ -350,6 +356,7 @@ const routes = [
         component: () => import('@/views/requirement-analysis/TaskDetail.vue'),
         meta: createRouteMeta({
           title: '任务详情',
+          description: '作为生成任务对象页，查看来源项目、配置摘要、结果数量与保存状态。',
           module: 'test-design',
           pageType: 'detail-result',
           icon: 'timer',

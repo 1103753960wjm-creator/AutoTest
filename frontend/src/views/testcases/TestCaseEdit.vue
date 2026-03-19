@@ -1,5 +1,20 @@
 <template>
   <div class="page-container">
+    <div class="edit-context-card" v-if="!loading">
+      <div class="edit-context-card__item">
+        <span class="edit-context-card__label">所属项目</span>
+        <strong class="edit-context-card__value">{{ currentProjectName }}</strong>
+      </div>
+      <div class="edit-context-card__item">
+        <span class="edit-context-card__label">返回位置</span>
+        <strong class="edit-context-card__value">{{ returnTarget?.label || '返回测试用例' }}</strong>
+      </div>
+      <div class="edit-context-card__item">
+        <span class="edit-context-card__label">对象语义</span>
+        <strong class="edit-context-card__value">正在编辑测试设计资产</strong>
+      </div>
+    </div>
+
     <div class="card-container" v-if="!loading">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item :label="$t('testcase.caseTitle')" prop="title">
@@ -142,6 +157,9 @@ const loading = ref(true)
 const submitting = ref(false)
 const projects = ref([])
 const projectVersions = ref([])
+const currentProjectName = computed(() => {
+  return projects.value.find((item) => item.id === form.project_id)?.name || '未关联项目'
+})
 
 const form = reactive({
   title: '',
@@ -202,11 +220,15 @@ const convertNewlineToBr = (text) => {
 const testcaseMetaItems = computed(() => ([
   {
     label: '所属项目',
-    value: form.project_id ? `${form.project_id}` : '未关联'
+    value: currentProjectName.value
   },
   {
     label: '关联版本',
     value: `${form.version_ids.length}`
+  },
+  {
+    label: '返回位置',
+    value: returnTarget.value?.label || '返回测试用例'
   }
 ]))
 
@@ -338,3 +360,39 @@ onMounted(async () => {
   await fetchTestCase()
 })
 </script>
+
+<style scoped>
+.edit-context-card {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.edit-context-card__item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+}
+
+.edit-context-card__label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.edit-context-card__value {
+  font-size: 16px;
+  color: #0f172a;
+}
+
+@media screen and (max-width: 960px) {
+  .edit-context-card {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

@@ -205,7 +205,14 @@ class BusinessRequirementViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = BusinessRequirementSerializer
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().select_related(
+            'project',
+            'writer_model_config',
+            'reviewer_model_config',
+            'writer_prompt_config',
+            'reviewer_prompt_config',
+            'created_by'
+        )
         analysis_id = self.request.query_params.get('analysis_id')
         if analysis_id:
             queryset = queryset.filter(analysis_id=analysis_id)
@@ -1290,6 +1297,10 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
         if created_by:
             queryset = queryset.filter(created_by_id=created_by)
 
+        project_id = self.request.query_params.get('project')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
         return queryset.order_by('-created_at')
 
     @action(detail=False, methods=['post'])
@@ -1801,17 +1812,11 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
         try:
             # DRF会根据lookup_field自动从URL提取task_id并调用get_object()
             task = self.get_object()
-
-            return Response({
-                'task_id': task.task_id,
-                'status': task.status,
-                'progress': task.progress,
-                'generated_test_cases': task.generated_test_cases,
-                'review_feedback': task.review_feedback,
-                'final_test_cases': task.final_test_cases,
-                'error_message': task.error_message,
-                'completed_at': task.completed_at
-            }, status=status.HTTP_200_OK)
+            serializer_data = TestCaseGenerationTaskSerializer(task).data
+            serializer_data.update({
+                'generated_results': self._parse_test_cases_content(task.final_test_cases or task.generated_test_cases)
+            })
+            return Response(serializer_data, status=status.HTTP_200_OK)
 
         except Exception as e:
             logger.error(f"获取任务进度时出错: {e}")
@@ -2236,7 +2241,16 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                             expected_result=test_case.get('expected', ''),
                             priority=self._map_priority(test_case.get('priority', '中')),
                             test_type='functional',
-                            status='draft'
+                            status='draft',
+                            tags=[
+                                {
+                                    'source': 'ai_generation_task',
+                                    'task_id': task.task_id,
+                                    'project_id': task.project_id,
+                                    'project_name': task.project.name if task.project else '',
+                                    'source_label': '由 AI 生成任务批量保存'
+                                }
+                            ]
                         )
                         adopted_count += 1
 
@@ -2373,7 +2387,16 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                         expected_result=test_case.get('expected', ''),
                         priority=self._map_priority(test_case.get('priority', '中')),
                         test_type='functional',
-                        status='draft'
+                        status='draft',
+                        tags=[
+                            {
+                                'source': 'ai_generation_task',
+                                'task_id': task.task_id,
+                                'project_id': task.project_id,
+                                'project_name': task.project.name if task.project else '',
+                                'source_label': '由 AI 生成任务批量采纳'
+                            }
+                        ]
                     )
                     adopted_count += 1
 
@@ -2456,6 +2479,14 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
                 adopted_count = 0
                 for case_data in test_cases_data:
+                    case_tags = case_data.get('tags') if isinstance(case_data.get('tags'), list) else []
+                    case_tags.append({
+                        'source': 'ai_generation_task',
+                        'task_id': task.task_id,
+                        'project_id': task.project_id,
+                        'project_name': task.project.name if task.project else '',
+                        'source_label': '由 AI 生成任务选择性采纳'
+                    })
                     TestCase.objects.create(
                         project=project,  # 使用统一的项目选择逻辑
                         author=task.created_by,
@@ -2466,7 +2497,8 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                         expected_result=case_data.get('expected_result', ''),
                         priority=case_data.get('priority', 'medium'),
                         test_type=case_data.get('test_type', 'functional'),
-                        status=case_data.get('status', 'draft')
+                        status=case_data.get('status', 'draft'),
+                        tags=case_tags
                     )
                     adopted_count += 1
 

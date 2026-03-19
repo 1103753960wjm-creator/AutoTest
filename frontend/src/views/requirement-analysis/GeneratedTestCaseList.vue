@@ -1,11 +1,40 @@
 <template>
   <div class="generated-testcase-list">
-    <div class="page-header">
-      <h2>{{ $t('generatedTestCases.title') }}</h2>
+    <div class="result-object-strip">
+      <div class="result-object-card">
+        <span class="result-object-card__label">当前项目</span>
+        <strong class="result-object-card__value">{{ currentProjectLabel }}</strong>
+        <span class="result-object-card__desc">生成结果批次会优先按项目对象聚合。</span>
+      </div>
+      <div class="result-object-card">
+        <span class="result-object-card__label">结果批次</span>
+        <strong class="result-object-card__value">{{ pagination.total }}</strong>
+        <span class="result-object-card__desc">任务列表已收口为生成结果批次入口。</span>
+      </div>
+      <div class="result-object-card">
+        <span class="result-object-card__label">已保存</span>
+        <strong class="result-object-card__value">{{ allStats.saved }}</strong>
+        <span class="result-object-card__desc">已保存为正式测试用例的批次数量。</span>
+      </div>
+      <div class="result-object-card">
+        <span class="result-object-card__label">对象语义</span>
+        <strong class="result-object-card__value">生成结果对象</strong>
+        <span class="result-object-card__desc">点击任务详情可继续查看来源任务、配置摘要和结果内容。</span>
+      </div>
     </div>
 
     <div class="filters-section">
       <div class="filter-card">
+        <div class="filter-group">
+          <label>项目筛选</label>
+          <select v-model="selectedProject" @change="handleProjectChange" class="filter-select">
+            <option value="">全部项目</option>
+            <option v-for="project in projects" :key="project.id" :value="String(project.id)">
+              {{ project.name }}
+            </option>
+          </select>
+        </div>
+
         <div class="filter-group">
           <label>{{ $t('generatedTestCases.statusFilter') }}</label>
           <select v-model="selectedStatus" @change="loadTasks" class="filter-select">
@@ -81,8 +110,10 @@
           <div class="header-cell serial-cell">{{ $t('generatedTestCases.serialNumber') }}</div>
           <div class="header-cell task-id-cell">{{ $t('generatedTestCases.taskId') }}</div>
           <div class="header-cell requirement-name-cell">{{ $t('generatedTestCases.requirement') }}</div>
+          <div class="header-cell project-cell">来源项目</div>
           <div class="header-cell status-cell">{{ $t('generatedTestCases.status') }}</div>
           <div class="header-cell count-cell">{{ $t('generatedTestCases.caseCount') }}</div>
+          <div class="header-cell count-cell">保存状态</div>
           <div class="header-cell time-cell">{{ $t('generatedTestCases.generationTime') }}</div>
           <div class="header-cell action-cell">{{ $t('generatedTestCases.actions') }}</div>
         </div>
@@ -105,13 +136,17 @@
             <div class="body-cell requirement-name-cell">
               <span class="requirement-name">{{ task.title }}</span>
             </div>
+            <div class="body-cell project-cell">{{ task.project_name || '未关联项目' }}</div>
             <div class="body-cell status-cell">
               <span class="status-tag" :class="task.status">
                 {{ getStatusText(task.status) }}
               </span>
             </div>
             <div class="body-cell count-cell">
-              <span class="count-badge">{{ getTestCaseCount(task) }}</span>
+              <span class="count-badge">{{ task.result_count || getTestCaseCount(task) }}</span>
+            </div>
+            <div class="body-cell count-cell">
+              <span class="save-status-text">{{ task.save_status_summary?.label || '尚未保存' }}</span>
             </div>
             <div class="body-cell time-cell">{{ formatDateTime(task.created_at) }}</div>
             <div class="body-cell action-cell">
@@ -390,6 +425,7 @@ export default {
       isLoading: false,
       tasks: [], // 改为任务列表
       selectedStatus: '',
+      selectedProject: '',
       selectedTaskDetail: null,
       selectedTestCaseDetail: null,
       showAdoptModal: false,
@@ -426,12 +462,20 @@ export default {
         total: 0,
         completed: 0,
         running: 0,
-        failed: 0
+        failed: 0,
+        saved: 0
       }
     }
   },
 
   computed: {
+    currentProjectLabel() {
+      if (!this.selectedProject) {
+        return this.$route.query.projectName || '全部项目'
+      }
+      const currentProject = this.projects.find((item) => String(item.id) === String(this.selectedProject))
+      return currentProject?.name || `项目 #${this.selectedProject}`
+    },
     // 可用版本列表 - 根据是否选择项目来决定显示哪些版本
     availableVersions() {
       if (this.adoptForm.project_id) {
@@ -462,6 +506,9 @@ export default {
   },
   
   mounted() {
+    if (this.$route.query.project) {
+      this.selectedProject = String(this.$route.query.project)
+    }
     this.loadTasks()
     this.fetchProjects()
     this.fetchAllVersions()
@@ -480,6 +527,10 @@ export default {
         
         if (this.selectedStatus) {
           params.append('status', this.selectedStatus)
+        }
+
+        if (this.selectedProject) {
+          params.append('project', this.selectedProject)
         }
         
         if (params.toString()) {
@@ -605,6 +656,10 @@ export default {
         if (this.selectedStatus) {
           params.append('status', this.selectedStatus)
         }
+
+        if (this.selectedProject) {
+          params.append('project', this.selectedProject)
+        }
         
         url += '?' + params.toString()
         
@@ -616,7 +671,8 @@ export default {
         this.allStats.completed = allTasks.filter(t => t.status === 'completed').length
         this.allStats.running = allTasks.filter(t => ['pending', 'generating', 'reviewing'].includes(t.status)).length
         this.allStats.failed = allTasks.filter(t => t.status === 'failed').length
-        
+        this.allStats.saved = allTasks.filter(t => t.is_saved_to_records).length
+
       } catch (error) {
         console.error(this.$t('generatedTestCases.loadStatsFailed'), error)
         // 如果获取统计失败，使用分页信息的总数作为备选
@@ -624,7 +680,13 @@ export default {
         this.allStats.completed = 0
         this.allStats.running = 0
         this.allStats.failed = 0
+        this.allStats.saved = 0
       }
+    },
+
+    handleProjectChange() {
+      this.pagination.currentPage = 1
+      this.loadTasks()
     },
 
     getStatusText(status) {
@@ -698,12 +760,16 @@ export default {
       }
       
       if (task.status === 'completed') {
-        // 在新标签页打开任务详情
-        const url = this.$router.resolve({
+        this.$router.push({
           name: 'TaskDetail',
-          params: { taskId: task.task_id }
-        }).href
-        window.open(url, '_blank')
+          params: { taskId: task.task_id },
+          query: {
+            from: 'list',
+            fromPath: this.$route.fullPath,
+            fromTitle: this.$route.meta?.title || 'AI 生成用例',
+            fromModule: this.$route.meta?.module || 'test-design'
+          }
+        })
       }
     },
 
@@ -869,7 +935,16 @@ export default {
           preconditions: this.adoptForm.preconditions,
           steps: this.adoptForm.steps,
           expected_result: this.adoptForm.expected_result,
-          version_ids: this.adoptForm.version_id ? [this.adoptForm.version_id] : []
+          version_ids: this.adoptForm.version_id ? [this.adoptForm.version_id] : [],
+          tags: [
+            {
+              source: 'ai_generation_task',
+              task_id: this.currentAdoptingTask?.task_id || '',
+              project_id: this.adoptForm.project_id,
+              project_name: this.getProjectName(this.adoptForm.project_id),
+              source_label: '由 AI 生成结果列表采纳'
+            }
+          ]
         }
         
         // 确保优先级有默认值
@@ -940,7 +1015,7 @@ export default {
 
     // 获取项目名称的辅助方法
     getProjectName(projectId) {
-      const project = this.projects.find(p => p.id === projectId)
+      const project = this.projects.find(p => String(p.id) === String(projectId))
       return project ? project.name : ''
     },
 
@@ -1019,21 +1094,38 @@ export default {
   margin: 0 auto;
 }
 
-.page-header {
-  text-align: center;
-  margin-bottom: 15px; /* 进一步减少底部边距 */
+.result-object-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
-.page-header h2 {
-  font-size: 1.6rem; /* H2标题适合的字体大小 */
-  color: #2c3e50;
-  margin-bottom: 0; /* 移除底部边距 */
-  margin-top: 5px; /* 减少顶部边距 */
+.result-object-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
-.page-header p {
-  color: #666;
-  font-size: 1.1rem;
+.result-object-card__label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.result-object-card__value {
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.result-object-card__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
 }
 
 /* 过滤器部分 */
@@ -1194,12 +1286,13 @@ export default {
 .testcases-table {
   border: 1px solid #ddd;
   border-radius: 8px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .table-header {
   display: grid;
-  grid-template-columns: 50px 60px 180px 320px 100px 100px 180px 200px;
+  grid-template-columns: 50px 60px 180px 280px 160px 100px 100px 180px 200px;
   background: #f8f9fa;
   font-weight: bold;
   color: #2c3e50;
@@ -1207,7 +1300,7 @@ export default {
 
 .table-body .table-row {
   display: grid;
-  grid-template-columns: 50px 60px 180px 320px 100px 100px 180px 200px;
+  grid-template-columns: 50px 60px 180px 280px 160px 100px 100px 180px 200px;
   border-bottom: 1px solid #eee;
   transition: background 0.2s ease;
 }
@@ -1246,6 +1339,12 @@ export default {
 .header-cell:last-child,
 .body-cell:last-child {
   border-right: none;
+}
+
+.save-status-text {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #475569;
 }
 
 .checkbox-cell {
@@ -1789,9 +1888,13 @@ export default {
 
 /* 响应式设计 */
 @media (max-width: 1200px) {
+  .result-object-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .table-header,
   .table-body .table-row {
-    grid-template-columns: 150px 1fr 100px 140px 260px;
+    min-width: 1510px;
   }
 
   .action-buttons {
@@ -1811,6 +1914,10 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .result-object-strip {
+    grid-template-columns: 1fr;
+  }
+
   .filter-card {
     flex-direction: column;
     align-items: stretch;

@@ -1,26 +1,54 @@
 <template>
   <div class="task-detail">
-    <div class="page-header">
-      <div class="header-left">
-        <h2>{{ $t('taskDetail.title') }} <span v-if="task.title">- {{ task.title }}</span></h2>
-        <div class="task-info">
-          <span class="task-id">{{ $t('taskDetail.taskId') }}: {{ taskId }}</span>
-          <span class="task-status" :class="task.status">{{ getStatusText(task.status) }}</span>
-        </div>
+    <div class="task-object-strip">
+      <div class="task-object-card">
+        <span class="task-object-card__label">任务对象</span>
+        <strong class="task-object-card__value">{{ task.task_id || taskId }}</strong>
+        <span class="task-object-card__desc">{{ task.title || '当前页面承接生成任务对象摘要。' }}</span>
       </div>
-      <div class="header-actions">
-        <button
-          v-if="testCases.length > 0"
-          class="export-btn"
-          @click="exportToExcel"
-          :disabled="isExporting">
-          <span v-if="isExporting">{{ $t('taskDetail.exporting') }}</span>
-          <span v-else>{{ $t('taskDetail.exportBtn') }}</span>
-        </button>
+      <div class="task-object-card">
+        <span class="task-object-card__label">来源项目</span>
+        <strong class="task-object-card__value">{{ currentProjectName }}</strong>
+        <span class="task-object-card__desc">{{ task.source_summary?.label || '当前任务未记录来源项目' }}</span>
+      </div>
+      <div class="task-object-card">
+        <span class="task-object-card__label">配置摘要</span>
+        <strong class="task-object-card__value">{{ task.generation_config_summary?.name || '当前活跃配置' }}</strong>
+        <span class="task-object-card__desc">{{ task.generation_config_summary?.detail || '当前展示任务使用的模型、提示词与生成配置摘要。' }}</span>
+      </div>
+      <div class="task-object-card">
+        <span class="task-object-card__label">结果状态</span>
+        <strong class="task-object-card__value">{{ resultCount }}</strong>
+        <span class="task-object-card__desc">{{ task.save_status_summary?.label || '尚未保存为正式测试用例' }}</span>
       </div>
     </div>
 
-    <!-- 需求描述折叠卡片 -->
+    <div class="task-action-bar">
+      <button class="secondary-btn" @click="handleReturn">{{ returnTarget.label }}</button>
+      <button
+        v-if="task.project"
+        class="secondary-btn"
+        @click="goToProjectCases">
+        查看项目测试用例
+      </button>
+      <button
+        v-if="testCases.length > 0"
+        class="export-btn"
+        @click="exportToExcel"
+        :disabled="isExporting">
+        <span v-if="isExporting">{{ $t('taskDetail.exporting') }}</span>
+        <span v-else>{{ $t('taskDetail.exportBtn') }}</span>
+      </button>
+    </div>
+
+    <div class="task-status-row" v-if="task.status">
+      <span class="task-id">{{ $t('taskDetail.taskId') }}: {{ taskId }}</span>
+      <span class="task-status" :class="task.status">{{ getStatusText(task.status) }}</span>
+      <span class="task-status-detail">{{ task.writer_model_name || '未记录编写模型' }} / {{ task.writer_prompt_name || '未记录编写提示词' }}</span>
+      <span class="task-status-detail">{{ task.reviewer_model_name || '未记录评审模型' }} / {{ task.reviewer_prompt_name || '未记录评审提示词' }}</span>
+      <span class="task-status-detail">{{ task.generation_config_summary?.label || '未记录生成配置摘要' }}</span>
+    </div>
+
     <div v-if="task.requirement_text" class="requirement-description-card">
       <el-collapse>
         <el-collapse-item name="requirement">
@@ -258,6 +286,7 @@ import api from '@/utils/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { DocumentCopy } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
+import { resolveReturnTarget } from '@/router/deeplink'
 
 export default {
   name: 'TaskDetail',
@@ -289,6 +318,25 @@ export default {
   },
 
   computed: {
+    returnTarget() {
+      return resolveReturnTarget({
+        route: this.$route,
+        fallbackPath: '/ai-generation/generated-testcases',
+        fallbackTitle: 'AI 生成用例'
+      }) || {
+        path: '/ai-generation/generated-testcases',
+        label: '返回AI生成用例'
+      }
+    },
+
+    currentProjectName() {
+      return this.task.project_name || (this.task.project ? `项目 #${this.task.project}` : '未关联项目')
+    },
+
+    resultCount() {
+      return this.task.result_count || this.testCases.length
+    },
+
     isAllSelected() {
       return this.testCases.length > 0 && this.selectedCases.length === this.testCases.length
     },
@@ -318,6 +366,29 @@ export default {
   },
 
   methods: {
+    handleReturn() {
+      if (this.returnTarget?.path) {
+        this.$router.push(this.returnTarget.path)
+        return
+      }
+
+      this.$router.back()
+    },
+
+    goToProjectCases() {
+      this.$router.push({
+        path: '/ai-generation/testcases',
+        query: {
+          project: String(this.task.project || ''),
+          projectName: this.task.project_name || '',
+          from: 'detail',
+          fromPath: this.$route.fullPath,
+          fromTitle: this.$route.meta?.title || '任务详情',
+          fromModule: this.$route.meta?.module || 'test-design'
+        }
+      })
+    },
+
     // 复制需求描述文本
     async copyRequirementText() {
       try {
@@ -343,12 +414,15 @@ export default {
 
     async loadTaskDetail() {
       try {
-        // 获取任务基本信息
-        const taskResponse = await api.get(`/requirement-analysis/testcase-generation/${this.taskId}/`)
+        const taskResponse = await api.get(`/requirement-analysis/testcase-generation/${this.taskId}/progress/`)
         this.task = taskResponse.data
 
-        // 解析最终测试用例
-        if (this.task.final_test_cases) {
+        if (Array.isArray(this.task.generated_results) && this.task.generated_results.length > 0) {
+          this.testCases = this.task.generated_results.map((item) => ({
+            ...item,
+            caseId: item.case_id || item.caseId || ''
+          }))
+        } else if (this.task.final_test_cases) {
           this.testCases = this.parseTestCases(this.task.final_test_cases)
         }
       } catch (error) {
@@ -543,12 +617,22 @@ export default {
         const casesData = this.selectedCases.map((testCase, index) => ({
           title: testCase.scenario || `Test Case ${index + 1}`,
           description: testCase.scenario || '',
+          project_id: this.task.project || null,
           preconditions: testCase.precondition || '',
           steps: testCase.steps || '',
           expected_result: testCase.expected || '',
           priority: this.mapPriority(testCase.priority),
           test_type: 'functional',
-          status: 'draft'
+          status: 'draft',
+          tags: [
+            {
+              source: 'ai_generation_task',
+              task_id: this.taskId,
+              project_id: this.task.project || null,
+              project_name: this.task.project_name || '',
+              source_label: '由生成任务详情批量采纳'
+            }
+          ]
         }))
 
         await api.post(`/requirement-analysis/testcase-generation/${this.taskId}/batch-adopt-selected/`, {
@@ -786,12 +870,22 @@ export default {
         const caseData = {
           title: testCase.scenario || `测试用例${index + 1}`,
           description: testCase.scenario || '',
+          project_id: this.task.project || null,
           preconditions: testCase.precondition || '',
           steps: testCase.steps || '',
           expected_result: testCase.expected || '',
           priority: this.mapPriority(testCase.priority),
           test_type: 'functional',
-          status: 'draft'
+          status: 'draft',
+          tags: [
+            {
+              source: 'ai_generation_task',
+              task_id: this.taskId,
+              project_id: this.task.project || null,
+              project_name: this.task.project_name || '',
+              source_label: '由生成任务详情采纳'
+            }
+          ]
         }
 
         await api.post('/testcases/', caseData)
@@ -1069,28 +1163,62 @@ export default {
   padding: 0 20px 16px;
 }
 
-.page-header {
-  margin-bottom: 20px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid #eee;
+.task-object-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.task-object-card {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
-.header-left {
-  flex: 1;
+.task-object-card__label {
+  font-size: 13px;
+  color: #64748b;
 }
 
-.page-header h2 {
-  color: #2c3e50;
-  margin: 0 0 10px 0;
+.task-object-card__value {
+  font-size: 18px;
+  color: #0f172a;
 }
 
-.task-info {
+.task-object-card__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
+}
+
+.task-action-bar {
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.secondary-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  padding: 10px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.task-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   align-items: center;
+  margin-bottom: 20px;
 }
 
 .task-id {
@@ -1110,9 +1238,10 @@ export default {
   color: #388e3c;
 }
 
-.header-actions {
-  display: flex;
-  gap: 10px;
+.task-status-detail {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.6;
 }
 
 .export-btn {
@@ -1391,6 +1520,18 @@ export default {
 .pagination-buttons button:disabled {
   color: #ccc;
   cursor: not-allowed;
+}
+
+@media (max-width: 1100px) {
+  .task-object-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .task-object-strip {
+    grid-template-columns: 1fr;
+  }
 }
 
 .case-detail-modal {
