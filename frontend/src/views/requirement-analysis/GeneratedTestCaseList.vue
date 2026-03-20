@@ -113,7 +113,7 @@
           <div class="header-cell project-cell">来源项目</div>
           <div class="header-cell status-cell">{{ $t('generatedTestCases.status') }}</div>
           <div class="header-cell count-cell">{{ $t('generatedTestCases.caseCount') }}</div>
-          <div class="header-cell count-cell">保存状态</div>
+          <div class="header-cell count-cell">处理状态</div>
           <div class="header-cell time-cell">{{ $t('generatedTestCases.generationTime') }}</div>
           <div class="header-cell action-cell">{{ $t('generatedTestCases.actions') }}</div>
         </div>
@@ -146,27 +146,30 @@
               <span class="count-badge">{{ task.result_count || getTestCaseCount(task) }}</span>
             </div>
             <div class="body-cell count-cell">
-              <span class="save-status-text">{{ task.save_status_summary?.label || '尚未保存' }}</span>
+              <span class="save-status-text" :title="getProcessingSummary(task).detail">
+                {{ getProcessingSummary(task).label }}
+              </span>
             </div>
             <div class="body-cell time-cell">{{ formatDateTime(task.created_at) }}</div>
             <div class="body-cell action-cell">
               <div class="action-buttons">
+                <span v-if="task.is_saved_to_records" class="save-status-hint">已进入正式测试资产</span>
                 <button
                   class="view-detail-btn"
                   @click="viewTaskDetail(task)">
                   {{ $t('generatedTestCases.viewDetail') }}
                 </button>
                 <button
-                  v-if="task.status === 'completed'"
+                  v-if="canMutateTaskResults(task)"
                   class="adopt-btn"
                   @click="batchAdoptTask(task)">
-                  {{ $t('generatedTestCases.batchAdopt') }}
+                  {{ getBatchAdoptLabel(task) }}
                 </button>
                 <button
-                  v-if="task.status === 'completed'"
+                  v-if="canMutateTaskResults(task)"
                   class="discard-btn"
                   @click="batchDiscardTask(task)">
-                  {{ $t('generatedTestCases.batchDiscard') }}
+                  {{ getBatchDiscardLabel(task) }}
                 </button>
               </div>
             </div>
@@ -700,6 +703,36 @@ export default {
       return statusMap[status] || status
     },
 
+    getProcessingSummary(task) {
+      return task?.processing_status_summary || {
+        status: 'pending',
+        label: '尚未处理',
+        detail: '采纳 0，弃用 0，未标记 0',
+        total_count: task?.result_count || this.getTestCaseCount(task),
+        handled_count: 0,
+        adopted_count: 0,
+        discarded_count: 0,
+        pending_count: task?.result_count || this.getTestCaseCount(task)
+      }
+    },
+
+    canMutateTaskResults(task) {
+      if (task?.status !== 'completed') {
+        return false
+      }
+      return this.getProcessingSummary(task).pending_count > 0
+    },
+
+    getBatchAdoptLabel(task) {
+      const summary = this.getProcessingSummary(task)
+      return summary.pending_count < summary.total_count ? '采纳剩余结果' : this.$t('generatedTestCases.batchAdopt')
+    },
+
+    getBatchDiscardLabel(task) {
+      const summary = this.getProcessingSummary(task)
+      return summary.pending_count < summary.total_count ? '弃用剩余结果' : this.$t('generatedTestCases.batchDiscard')
+    },
+
     // 获取测试用例条数
     getTestCaseCount(task) {
       if (!task.final_test_cases) {
@@ -774,6 +807,11 @@ export default {
     },
 
     async batchAdoptTask(task) {
+      const summary = this.getProcessingSummary(task)
+      if (summary.pending_count === 0) {
+        ElMessage.warning(task.is_saved_to_records ? '当前结果批次已全部进入正式测试资产。' : '当前结果批次已无可采纳的待处理结果。')
+        return
+      }
       if (!confirm(this.$t('generatedTestCases.adoptConfirm', { title: task.title }))) {
         return
       }
@@ -786,11 +824,19 @@ export default {
         this.loadTasks()
       } catch (error) {
         console.error(this.$t('generatedTestCases.adoptFailed'), error)
+        if (error.response?.status === 400) {
+          this.loadTasks()
+        }
         ElMessage.error(this.$t('generatedTestCases.adoptFailed') + ': ' + (error.response?.data?.message || error.message))
       }
     },
 
     async batchDiscardTask(task) {
+      const summary = this.getProcessingSummary(task)
+      if (summary.pending_count === 0) {
+        ElMessage.warning(task.is_saved_to_records ? '当前结果批次已全部进入正式测试资产。' : '当前结果批次已无可弃用的待处理结果。')
+        return
+      }
       if (!confirm(this.$t('generatedTestCases.discardConfirm', { title: task.title }))) {
         return
       }
@@ -803,6 +849,9 @@ export default {
         this.loadTasks()
       } catch (error) {
         console.error(this.$t('generatedTestCases.discardFailed'), error)
+        if (error.response?.status === 400) {
+          this.loadTasks()
+        }
         ElMessage.error(this.$t('generatedTestCases.discardFailed') + ': ' + (error.response?.data?.message || error.message))
       }
     },
@@ -936,12 +985,16 @@ export default {
           steps: this.adoptForm.steps,
           expected_result: this.adoptForm.expected_result,
           version_ids: this.adoptForm.version_id ? [this.adoptForm.version_id] : [],
+          case_id: this.currentAdoptingTask?.case_id || this.currentAdoptingTask?.caseId || '',
+          case_index: this.currentAdoptingTask?.index ?? null,
           tags: [
             {
               source: 'ai_generation_task',
-              task_id: this.currentAdoptingTask?.task_id || '',
+              task_id: this.currentAdoptingTask?.task_id || this.currentAdoptingTask?.source_task_id || '',
               project_id: this.adoptForm.project_id,
               project_name: this.getProjectName(this.adoptForm.project_id),
+              case_id: this.currentAdoptingTask?.case_id || this.currentAdoptingTask?.caseId || '',
+              case_index: this.currentAdoptingTask?.index ?? null,
               source_label: '由 AI 生成结果列表采纳'
             }
           ]
@@ -953,7 +1006,7 @@ export default {
         }
         
         // 调用API创建测试用例
-        await api.post('/testcases/', submitData)
+        const response = await api.post('/testcases/', submitData)
         
         // 将AI生成的用例状态更新为"已采纳"
         try {
@@ -965,7 +1018,7 @@ export default {
           // 即使状态更新失败，用例已成功导入，仍然提示成功
         }
 
-        alert(this.$t('generatedTestCases.adoptModalSuccess'))
+        alert(response.data?.deduplicated ? '该结果已采纳，已返回现有测试用例。' : this.$t('generatedTestCases.adoptModalSuccess'))
         this.closeAdoptModal()
         this.loadTestCases() // 重新加载列表
 

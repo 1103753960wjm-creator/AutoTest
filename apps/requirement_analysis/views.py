@@ -44,7 +44,23 @@ from .serializers import (
     AIModelConfigSerializer, PromptConfigSerializer, TestCaseGenerationTaskSerializer,
     GenerationConfigSerializer
 )
+from .result_parser import parse_generated_results
+from .result_status import (
+    RESULT_STATUS_PENDING,
+    RESULT_STATUS_ADOPTED,
+    RESULT_STATUS_DISCARDED,
+    attach_result_status,
+    get_result_status_summary,
+    mark_result_status,
+)
 from .services import RequirementAnalysisService, DocumentProcessor
+from apps.projects.models import Project
+from apps.testcases.models import TestCase
+from apps.testcases.ai_source_dedup import get_or_create_ai_testcase
+from apps.versions.models import Version
+
+
+_parse_generated_results = parse_generated_results
 
 logger = logging.getLogger(__name__)
 
@@ -1812,9 +1828,15 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
         try:
             # DRF会根据lookup_field自动从URL提取task_id并调用get_object()
             task = self.get_object()
+            generated_results, processing_status_summary = self._annotate_generated_results(
+                task,
+                request,
+                _parse_generated_results(task.final_test_cases or task.generated_test_cases),
+            )
             serializer_data = TestCaseGenerationTaskSerializer(task).data
             serializer_data.update({
-                'generated_results': self._parse_test_cases_content(task.final_test_cases or task.generated_test_cases)
+                'generated_results': generated_results,
+                'processing_status_summary': processing_status_summary,
             })
             return Response(serializer_data, status=status.HTTP_200_OK)
 
@@ -2183,93 +2205,80 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                 )
 
             # 解析并导入测试用例到测试用例管理系统
-            test_cases = self._parse_test_cases_content(task.final_test_cases)
+            adopted_count = 0
+            deduplicated_count = 0
+            parsed_results = _parse_generated_results(task.final_test_cases or task.generated_test_cases)
+            generated_results, _ = self._annotate_generated_results(task, request, parsed_results)
+            test_cases = [item for item in generated_results if item.get('result_status') == RESULT_STATUS_PENDING]
+
+            if not test_cases:
+                return Response(
+                    {
+                        'error': '当前任务已无可保存的待处理结果',
+                        **self._build_processing_status_payload(task),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
             if test_cases:
                 try:
-                    from apps.testcases.models import TestCase
-                    from apps.projects.models import Project
-                    from django.db import models
+                    project = self._resolve_task_target_project(task, request, request.data.get('project_id'))
 
-                    # 优先使用任务关联的项目
-                    if task.project:
-                        project = task.project
-                        logger.info(f"使用任务关联的项目: {project.name}")
-                    else:
-                        # 回退到项目选择逻辑
-                        user = task.created_by
-                        accessible_projects = Project.objects.filter(
-                            models.Q(owner=user) | models.Q(members=user)
-                        ).distinct()
-
-                        # 尝试从前端获取项目ID
-                        project_id = request.data.get('project_id')
-
-                        if project_id:
-                            try:
-                                project = accessible_projects.get(id=project_id)
-                            except Project.DoesNotExist:
-                                # 如果指定项目不存在或无权限，使用第一个可访问的项目
-                                project = accessible_projects.first()
-                                if not project:
-                                    # 如果用户没有任何项目，创建默认项目
-                                    project = Project.objects.create(
-                                        name="默认项目",
-                                        owner=user,
-                                        description='系统自动创建的默认项目'
-                                    )
-                        else:
-                            # 没有指定项目，使用第一个可访问的项目
-                            project = accessible_projects.first()
-                            if not project:
-                                # 如果用户没有任何项目，创建默认项目
-                                project = Project.objects.create(
-                                    name="默认项目",
-                                    owner=user,
-                                    description='系统自动创建的默认项目'
-                                )
-
-                    adopted_count = 0
-                    for test_case in test_cases:
-                        TestCase.objects.create(
+                    for index, test_case in enumerate(test_cases, start=1):
+                        testcase, created, _, _ = self._create_or_get_ai_testcase(
                             project=project,
-                            author=task.created_by,
-                            title=test_case.get('scenario', '测试用例'),
-                            description=test_case.get('scenario', ''),
-                            preconditions=test_case.get('precondition', ''),
-                            steps=test_case.get('steps', ''),
-                            expected_result=test_case.get('expected', ''),
-                            priority=self._map_priority(test_case.get('priority', '中')),
-                            test_type='functional',
-                            status='draft',
-                            tags=[
-                                {
-                                    'source': 'ai_generation_task',
-                                    'task_id': task.task_id,
-                                    'project_id': task.project_id,
-                                    'project_name': task.project.name if task.project else '',
-                                    'source_label': '由 AI 生成任务批量保存'
-                                }
-                            ]
+                            task=task,
+                            source_label='由 AI 生成任务批量保存',
+                            testcase_payload={
+                                'title': test_case.get('scenario', '测试用例'),
+                                'description': test_case.get('scenario', ''),
+                                'preconditions': test_case.get('precondition', ''),
+                                'steps': test_case.get('steps', ''),
+                                'expected_result': test_case.get('expected', ''),
+                                'priority': self._map_priority(test_case.get('priority', '中')),
+                                'test_type': 'functional',
+                                'status': 'draft',
+                                'case_id': test_case.get('caseId') or test_case.get('case_id') or '',
+                                'case_index': test_case.get('index') or index,
+                            },
                         )
-                        adopted_count += 1
+                        mark_result_status(
+                            task,
+                            case_id=test_case.get('caseId') or test_case.get('case_id') or '',
+                            case_index=test_case.get('index') or index,
+                            status=RESULT_STATUS_ADOPTED,
+                            adopted_testcase_id=testcase.id,
+                            parsed_results=parsed_results,
+                            save=True,
+                        )
+                        if created:
+                            adopted_count += 1
+                        else:
+                            deduplicated_count += 1
 
                     logger.info(f"成功导入 {adopted_count} 条测试用例到项目 {project.name}")
 
                 except Exception as import_error:
                     logger.error(f"导入测试用例失败: {import_error}")
-                    # 即使导入失败，仍然标记为已保存
+                    return Response(
+                        {'error': f'导入测试用例失败: {str(import_error)}'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
 
-            # 标记任务为已保存
-            task.is_saved_to_records = True
-            task.saved_at = timezone.now()
-            task.save(update_fields=['is_saved_to_records', 'saved_at'])
+            processing_status_summary = get_result_status_summary(task, parsed_results=parsed_results)
 
             return Response({
                 'message': '测试用例已成功保存到AI生成用例记录并导入到测试用例管理系统',
                 'task_id': task.task_id,
                 'saved_at': task.saved_at,
-                'imported_count': adopted_count if test_cases else 0
+                'imported_count': adopted_count if test_cases else 0,
+                'created_count': adopted_count,
+                'deduplicated_count': deduplicated_count,
+                'handled_count': processing_status_summary['handled_count'],
+                'discarded_count': processing_status_summary['discarded_count'],
+                'pending_count': processing_status_summary['pending_count'],
+                'processing_status_summary': processing_status_summary,
+                'task_saved': task.is_saved_to_records,
             }, status=status.HTTP_200_OK)
 
         except Exception as e:
@@ -2310,6 +2319,10 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
         try:
             task = self.get_object()
 
+            saved_task_response = self._reject_saved_task_mutation(task, '重复采纳')
+            if saved_task_response:
+                return saved_task_response
+
             if task.status != 'completed':
                 return Response(
                     {'error': '只能采纳已完成的测试用例生成任务'},
@@ -2322,88 +2335,70 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # 解析最终测试用例
-            test_cases = self._parse_test_cases_content(task.final_test_cases)
+            parsed_results = _parse_generated_results(task.final_test_cases or task.generated_test_cases)
+            generated_results, _ = self._annotate_generated_results(task, request, parsed_results)
+            test_cases = [item for item in generated_results if item.get('result_status') == RESULT_STATUS_PENDING]
 
             if not test_cases:
                 return Response(
-                    {'error': '无法解析测试用例内容'},
+                    {
+                        'error': '当前任务已无可采纳的待处理结果',
+                        **self._build_processing_status_payload(task),
+                    },
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
             # 导入到testcases应用（使用与单条采纳相同的逻辑）
             try:
-                from apps.testcases.models import TestCase
-                from apps.projects.models import Project
-                from django.db import models
-
-                # 优先使用任务关联的项目
-                if task.project:
-                    project = task.project
-                    logger.info(f"使用任务关联的项目: {project.name}")
-                else:
-                    # 回退到项目选择逻辑
-                    user = task.created_by
-                    accessible_projects = Project.objects.filter(
-                        models.Q(owner=user) | models.Q(members=user)
-                    ).distinct()
-
-                    # 尝试从前端获取项目ID
-                    project_id = request.data.get('project_id')
-
-                    if project_id:
-                        try:
-                            project = accessible_projects.get(id=project_id)
-                        except Project.DoesNotExist:
-                            # 如果指定项目不存在或无权限，使用第一个可访问的项目
-                            project = accessible_projects.first()
-                            if not project:
-                                # 如果用户没有任何项目，创建默认项目
-                                project = Project.objects.create(
-                                    name="默认项目",
-                                    owner=user,
-                                    description='系统自动创建的默认项目'
-                                )
-                    else:
-                        # 没有指定项目，使用第一个可访问的项目
-                        project = accessible_projects.first()
-                        if not project:
-                            # 如果用户没有任何项目，创建默认项目
-                            project = Project.objects.create(
-                                name="默认项目",
-                                owner=user,
-                                description='系统自动创建的默认项目'
-                            )
-
+                project = self._resolve_task_target_project(task, request, request.data.get('project_id'))
                 adopted_count = 0
-                for test_case in test_cases:
-                    TestCase.objects.create(
-                        project=project,  # 使用统一的项目选择逻辑
-                        author=task.created_by,
-                        title=test_case.get('scenario', '测试用例'),
-                        description=test_case.get('scenario', ''),  # 使用scenario作为描述
-                        preconditions=test_case.get('precondition', ''),
-                        steps=test_case.get('steps', ''),
-                        expected_result=test_case.get('expected', ''),
-                        priority=self._map_priority(test_case.get('priority', '中')),
-                        test_type='functional',
-                        status='draft',
-                        tags=[
-                            {
-                                'source': 'ai_generation_task',
-                                'task_id': task.task_id,
-                                'project_id': task.project_id,
-                                'project_name': task.project.name if task.project else '',
-                                'source_label': '由 AI 生成任务批量采纳'
-                            }
-                        ]
+                deduplicated_count = 0
+                for index, test_case in enumerate(test_cases, start=1):
+                    testcase, created, _, _ = self._create_or_get_ai_testcase(
+                        project=project,
+                        task=task,
+                        source_label='由 AI 生成任务批量采纳',
+                        testcase_payload={
+                            'title': test_case.get('scenario', '测试用例'),
+                            'description': test_case.get('scenario', ''),
+                            'preconditions': test_case.get('precondition', ''),
+                            'steps': test_case.get('steps', ''),
+                            'expected_result': test_case.get('expected', ''),
+                            'priority': self._map_priority(test_case.get('priority', '中')),
+                            'test_type': 'functional',
+                            'status': 'draft',
+                            'case_id': test_case.get('caseId') or test_case.get('case_id') or '',
+                            'case_index': test_case.get('index') or index,
+                        },
                     )
-                    adopted_count += 1
+                    mark_result_status(
+                        task,
+                        case_id=test_case.get('caseId') or test_case.get('case_id') or '',
+                        case_index=test_case.get('index') or index,
+                        status=RESULT_STATUS_ADOPTED,
+                        adopted_testcase_id=testcase.id,
+                        parsed_results=parsed_results,
+                        save=True,
+                    )
+                    if created:
+                        adopted_count += 1
+                    else:
+                        deduplicated_count += 1
 
+                handled_count = adopted_count + deduplicated_count
+                processing_status_summary = get_result_status_summary(task, parsed_results=parsed_results)
                 return Response({
-                    'message': f'成功采纳 {adopted_count} 条测试用例到项目 "{project.name}"',
+                    'message': f'成功处理 {handled_count} 条测试用例到项目 "{project.name}"',
                     'adopted_count': adopted_count,
-                    'project_name': project.name
+                    'created_count': adopted_count,
+                    'deduplicated_count': deduplicated_count,
+                    'handled_count': processing_status_summary['handled_count'],
+                    'discarded_count': processing_status_summary['discarded_count'],
+                    'pending_count': processing_status_summary['pending_count'],
+                    'processing_status_summary': processing_status_summary,
+                    'project_name': project.name,
+                    'task_saved': task.is_saved_to_records,
+                    'saved_at': task.saved_at
                 }, status=status.HTTP_200_OK)
 
             except Exception as import_error:
@@ -2427,6 +2422,10 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
             task = self.get_object()
             test_cases_data = request.data.get('test_cases', [])
 
+            saved_task_response = self._reject_saved_task_mutation(task, '重复采纳')
+            if saved_task_response:
+                return saved_task_response
+
             if not test_cases_data:
                 return Response(
                     {'error': '没有提供要采纳的测试用例数据'},
@@ -2435,77 +2434,76 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
             # 导入到testcases应用
             try:
-                from apps.testcases.models import TestCase
-                from apps.projects.models import Project
-                from django.db import models
-
-                # 优先使用任务关联的项目
-                if task.project:
-                    project = task.project
-                    logger.info(f"使用任务关联的项目: {project.name}")
-                else:
-                    # 回退到项目选择逻辑
-                    user = task.created_by
-                    accessible_projects = Project.objects.filter(
-                        models.Q(owner=user) | models.Q(members=user)
-                    ).distinct()
-
-                    # 尝试从前端获取项目ID
-                    project_id = request.data.get('project_id')
-
-                    if project_id:
-                        try:
-                            project = accessible_projects.get(id=project_id)
-                        except Project.DoesNotExist:
-                            # 如果指定项目不存在或无权限，使用第一个可访问的项目
-                            project = accessible_projects.first()
-                            if not project:
-                                # 如果用户没有任何项目，创建默认项目
-                                project = Project.objects.create(
-                                    name="默认项目",
-                                    owner=user,
-                                    description='系统自动创建的默认项目'
-                                )
-                    else:
-                        # 没有指定项目，使用第一个可访问的项目
-                        project = accessible_projects.first()
-                        if not project:
-                            # 如果用户没有任何项目，创建默认项目
-                            project = Project.objects.create(
-                                name="默认项目",
-                                owner=user,
-                                description='系统自动创建的默认项目'
-                            )
-
+                project = self._resolve_task_target_project(task, request, request.data.get('project_id'))
                 adopted_count = 0
-                for case_data in test_cases_data:
-                    case_tags = case_data.get('tags') if isinstance(case_data.get('tags'), list) else []
-                    case_tags.append({
-                        'source': 'ai_generation_task',
-                        'task_id': task.task_id,
-                        'project_id': task.project_id,
-                        'project_name': task.project.name if task.project else '',
-                        'source_label': '由 AI 生成任务选择性采纳'
-                    })
-                    TestCase.objects.create(
-                        project=project,  # 使用统一的项目选择逻辑
-                        author=task.created_by,
-                        title=case_data.get('title', '测试用例'),
-                        description=case_data.get('description', ''),
-                        preconditions=case_data.get('preconditions', ''),
-                        steps=case_data.get('steps', ''),
-                        expected_result=case_data.get('expected_result', ''),
-                        priority=case_data.get('priority', 'medium'),
-                        test_type=case_data.get('test_type', 'functional'),
-                        status=case_data.get('status', 'draft'),
-                        tags=case_tags
-                    )
-                    adopted_count += 1
+                deduplicated_count = 0
+                parsed_results = _parse_generated_results(task.final_test_cases or task.generated_test_cases)
+                generated_results, _ = self._annotate_generated_results(task, request, parsed_results)
+                pending_indexes = {
+                    item.get('index')
+                    for item in generated_results
+                    if item.get('result_status') == RESULT_STATUS_PENDING
+                }
 
+                for case_data in test_cases_data:
+                    case_index = self._resolve_result_case_index(case_data.get('case_index'), task)
+                    if case_index not in pending_indexes:
+                        continue
+
+                    testcase, created, _, _ = self._create_or_get_ai_testcase(
+                        project=project,
+                        task=task,
+                        source_label='由 AI 生成任务选择性采纳',
+                        testcase_payload={
+                            'title': case_data.get('title', '测试用例'),
+                            'description': case_data.get('description', ''),
+                            'preconditions': case_data.get('preconditions', ''),
+                            'steps': case_data.get('steps', ''),
+                            'expected_result': case_data.get('expected_result', ''),
+                            'priority': case_data.get('priority', 'medium'),
+                            'test_type': case_data.get('test_type', 'functional'),
+                            'status': case_data.get('status', 'draft'),
+                            'tags': case_data.get('tags') if isinstance(case_data.get('tags'), list) else [],
+                            'case_id': case_data.get('case_id') or case_data.get('caseId') or '',
+                            'case_index': case_index,
+                        },
+                    )
+                    mark_result_status(
+                        task,
+                        case_id=case_data.get('case_id') or case_data.get('caseId') or '',
+                        case_index=case_index,
+                        status=RESULT_STATUS_ADOPTED,
+                        adopted_testcase_id=testcase.id,
+                        parsed_results=parsed_results,
+                        save=True,
+                    )
+                    if created:
+                        adopted_count += 1
+                    else:
+                        deduplicated_count += 1
+
+                handled_count = adopted_count + deduplicated_count
+                if handled_count == 0:
+                    return Response(
+                        {
+                            'error': '当前选中结果已无可采纳的待处理项',
+                            **self._build_processing_status_payload(task),
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                processing_status_summary = get_result_status_summary(task, parsed_results=parsed_results)
                 return Response({
-                    'message': f'成功采纳 {adopted_count} 条测试用例到项目 "{project.name}"',
+                    'message': f'成功处理 {handled_count} 条测试用例到项目 "{project.name}"',
                     'adopted_count': adopted_count,
-                    'project_name': project.name
+                    'created_count': adopted_count,
+                    'deduplicated_count': deduplicated_count,
+                    'handled_count': processing_status_summary['handled_count'],
+                    'discarded_count': processing_status_summary['discarded_count'],
+                    'pending_count': processing_status_summary['pending_count'],
+                    'processing_status_summary': processing_status_summary,
+                    'project_name': project.name,
+                    'task_saved': task.is_saved_to_records,
+                    'saved_at': task.saved_at
                 }, status=status.HTTP_200_OK)
 
             except Exception as import_error:
@@ -2524,18 +2522,48 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='batch_discard')
     def batch_discard(self, request, task_id=None):
-        """批量弃用任务的所有测试用例 - 删除整个任务"""
+        """批量弃用任务的所有待处理测试用例"""
         try:
             task = self.get_object()
+            saved_task_response = self._reject_saved_task_mutation(task, '弃用结果')
+            if saved_task_response:
+                return saved_task_response
 
-            logger.info(f"开始批量弃用任务 {task.task_id}")
+            generated_results, _ = self._annotate_generated_results(
+                task,
+                request,
+                _parse_generated_results(task.final_test_cases or task.generated_test_cases),
+            )
+            pending_results = [item for item in generated_results if item.get('result_status') == 'pending']
 
-            # 直接删除整个任务记录
-            task.delete()
+            if not pending_results:
+                return Response(
+                    {
+                        'error': '当前任务已无可弃用的待处理结果',
+                        **self._build_processing_status_payload(task),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            return Response({
-                'message': '任务已被弃用并删除，不会再在列表中显示'
-            }, status=status.HTTP_200_OK)
+            for result in pending_results:
+                mark_result_status(
+                    task,
+                    case_id=result.get('case_id') or result.get('caseId') or '',
+                    case_index=result.get('index'),
+                    status=RESULT_STATUS_DISCARDED,
+                    adopted_testcase_id=None,
+                    parsed_results=generated_results,
+                    save=True,
+                )
+
+            return Response(
+                {
+                    'message': f'已弃用 {len(pending_results)} 条待处理测试用例',
+                    'discarded_count': len(pending_results),
+                    **self._build_processing_status_payload(task),
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             logger.error(f"批量弃用任务时出错: {e}")
@@ -2546,9 +2574,12 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'], url_path='discard-selected-cases')
     def discard_selected_cases(self, request, task_id=None):
-        """弃用选中的测试用例 - 从final_test_cases中删除"""
+        """弃用选中的测试用例"""
         try:
             task = self.get_object()
+            saved_task_response = self._reject_saved_task_mutation(task, '弃用结果')
+            if saved_task_response:
+                return saved_task_response
             case_indices = request.data.get('case_indices', [])
 
             if not case_indices:
@@ -2565,42 +2596,62 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
             logger.info(f"开始弃用任务 {task.task_id} 的测试用例，索引: {case_indices}")
 
-            # 解析现有的测试用例
-            test_cases = self._parse_test_cases_content(task.final_test_cases)
-
-            # 按索引从大到小排序，避免删除时索引变化
-            case_indices.sort(reverse=True)
+            generated_results, _ = self._annotate_generated_results(
+                task,
+                request,
+                _parse_generated_results(task.final_test_cases or task.generated_test_cases),
+            )
+            indexed_results = {
+                item.get('index'): item
+                for item in generated_results
+            }
 
             discarded_count = 0
-            for index in case_indices:
-                if 0 <= index < len(test_cases):
-                    removed_case = test_cases.pop(index)
-                    discarded_count += 1
-                    logger.debug(f"弃用测试用例 {index}: {removed_case.get('scenario', 'unknown')}")
+            for raw_index in case_indices:
+                case_index = self._resolve_result_case_index(raw_index, task)
+                result = indexed_results.get(case_index)
+                if not result:
+                    continue
+                if result.get('result_status') == RESULT_STATUS_ADOPTED:
+                    return Response(
+                        {
+                            'error': '已采纳结果不能再弃用',
+                            **self._build_processing_status_payload(task),
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if result.get('result_status') == RESULT_STATUS_DISCARDED:
+                    continue
 
-            # 如果所有用例都被弃用了，删除整个任务
-            if not test_cases:
-                logger.info(f"任务 {task.task_id} 的所有用例都被弃用，删除任务")
-                task.delete()
-                return Response({
-                    'message': f'已弃用 {discarded_count} 条测试用例，任务已被删除',
+                mark_result_status(
+                    task,
+                    case_id=result.get('case_id') or result.get('caseId') or '',
+                    case_index=result.get('index'),
+                    status=RESULT_STATUS_DISCARDED,
+                    adopted_testcase_id=None,
+                    parsed_results=generated_results,
+                    save=True,
+                )
+                discarded_count += 1
+
+            if discarded_count == 0:
+                return Response(
+                    {
+                        'error': '未找到可弃用的待处理结果',
+                        **self._build_processing_status_payload(task),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            return Response(
+                {
+                    'message': f'已弃用 {discarded_count} 条测试用例',
                     'discarded_count': discarded_count,
-                    'task_deleted': True
-                }, status=status.HTTP_200_OK)
-
-            # 重新生成final_test_cases内容
-            task.final_test_cases = self._reconstruct_test_cases_content(test_cases)
-            task.save()
-
-            logger.debug(f"重构后的测试用例内容: {task.final_test_cases[:200]}...")
-
-            return Response({
-                'message': f'已弃用 {discarded_count} 条测试用例',
-                'discarded_count': discarded_count,
-                'remaining_cases': len(test_cases),
-                'task_deleted': False,
-                'updated_test_cases': task.final_test_cases
-            }, status=status.HTTP_200_OK)
+                    'task_deleted': False,
+                    **self._build_processing_status_payload(task),
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             logger.error(f"弃用选中测试用例时出错: {e}")
@@ -2614,6 +2665,9 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
         """弃用单个测试用例"""
         try:
             task = self.get_object()
+            saved_task_response = self._reject_saved_task_mutation(task, '弃用结果')
+            if saved_task_response:
+                return saved_task_response
             case_index = request.data.get('case_index')
 
             if case_index is None:
@@ -2630,42 +2684,57 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
             logger.info(f"开始弃用任务 {task.task_id} 的单个测试用例，索引: {case_index}")
 
-            # 解析现有的测试用例
-            test_cases = self._parse_test_cases_content(task.final_test_cases)
+            generated_results, _ = self._annotate_generated_results(
+                task,
+                request,
+                _parse_generated_results(task.final_test_cases or task.generated_test_cases),
+            )
+            resolved_case_index = self._resolve_result_case_index(case_index, task)
+            result = next((item for item in generated_results if item.get('index') == resolved_case_index), None)
 
-            if case_index < 0 or case_index >= len(test_cases):
+            if not result:
                 return Response(
-                    {'error': f'测试用例索引 {case_index} 超出范围，总共有 {len(test_cases)} 个测试用例'},
+                    {'error': f'测试用例索引 {case_index} 超出范围'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
-            # 删除指定索引的测试用例
-            removed_case = test_cases.pop(case_index)
-            logger.debug(f"弃用测试用例 {case_index}: {removed_case.get('scenario', 'unknown')}")
+            if result.get('result_status') == RESULT_STATUS_ADOPTED:
+                return Response(
+                    {
+                        'error': '已采纳结果不能再弃用',
+                        **self._build_processing_status_payload(task),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-            # 如果所有用例都被弃用了，删除整个任务
-            if not test_cases:
-                logger.info(f"任务 {task.task_id} 的所有用例都被弃用，删除任务")
-                task.delete()
-                return Response({
-                    'message': '已弃用测试用例，任务已被删除',
+            if result.get('result_status') == RESULT_STATUS_DISCARDED:
+                return Response(
+                    {
+                        'error': '该结果已弃用',
+                        **self._build_processing_status_payload(task),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            mark_result_status(
+                task,
+                case_id=result.get('case_id') or result.get('caseId') or '',
+                case_index=result.get('index'),
+                status=RESULT_STATUS_DISCARDED,
+                adopted_testcase_id=None,
+                parsed_results=generated_results,
+                save=True,
+            )
+
+            return Response(
+                {
+                    'message': '已弃用测试用例',
                     'discarded_count': 1,
-                    'task_deleted': True
-                }, status=status.HTTP_200_OK)
-
-            # 重新生成final_test_cases内容
-            task.final_test_cases = self._reconstruct_test_cases_content(test_cases)
-            task.save()
-
-            logger.debug(f"单个弃用 - 重构后的测试用例内容: {task.final_test_cases[:200]}...")
-
-            return Response({
-                'message': '已弃用测试用例',
-                'discarded_count': 1,
-                'remaining_cases': len(test_cases),
-                'task_deleted': False,
-                'updated_test_cases': task.final_test_cases
-            }, status=status.HTTP_200_OK)
+                    'task_deleted': False,
+                    **self._build_processing_status_payload(task),
+                },
+                status=status.HTTP_200_OK,
+            )
 
         except Exception as e:
             logger.error(f"弃用单个测试用例时出错: {e}")
@@ -2961,6 +3030,149 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
         return "\n".join(content_lines)
 
+    def _resolve_default_version_ids(self, project):
+        if not project:
+            return []
+
+        baseline_ids = list(
+            Version.objects.filter(projects=project, is_baseline=True).values_list('id', flat=True)
+        )
+        if baseline_ids:
+            return baseline_ids
+
+        project_version_ids = list(
+            Version.objects.filter(projects=project).order_by('-created_at').values_list('id', flat=True)
+        )
+        if len(project_version_ids) == 1:
+            return project_version_ids
+
+        return []
+
+    def _apply_default_versions(self, testcase, project):
+        default_version_ids = self._resolve_default_version_ids(project)
+        if default_version_ids and not testcase.versions.exists():
+            testcase.versions.set(default_version_ids)
+
+    def _get_processing_status_summary(self, task):
+        return get_result_status_summary(task)
+
+    def _reject_saved_task_mutation(self, task, action_label):
+        if not task.is_saved_to_records:
+            return None
+
+        return Response(
+            {
+                'error': f'任务已保存为正式测试用例，不能继续{action_label}',
+                'task_id': task.task_id,
+                'already_saved': True
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    def _resolve_task_target_project(self, task, request, project_id=None, create_default=True):
+        if task.project:
+            return task.project
+
+        user = task.created_by
+        accessible_projects = Project.objects.filter(
+            models.Q(owner=user) | models.Q(members=user)
+        ).distinct()
+
+        if project_id:
+            try:
+                return accessible_projects.get(id=project_id)
+            except Project.DoesNotExist:
+                project = accessible_projects.first()
+                if project:
+                    return project
+        else:
+            project = accessible_projects.first()
+            if project:
+                return project
+
+        if not create_default:
+            return None
+
+        return Project.objects.create(
+            name="默认项目",
+            owner=user,
+            description='系统自动创建的默认项目'
+        )
+
+    def _build_ai_case_tags(self, task, project, source_label, case_id='', case_index=None):
+        return [
+            {
+                'source': 'ai_generation_task',
+                'task_id': task.task_id,
+                'project_id': getattr(project, 'id', None),
+                'project_name': getattr(project, 'name', '') or '',
+                'case_id': case_id or '',
+                'case_index': case_index,
+                'source_label': source_label,
+            }
+        ]
+
+    def _create_or_get_ai_testcase(self, *, project, task, testcase_payload, source_label):
+        payload = dict(testcase_payload)
+        payload['tags'] = self._build_ai_case_tags(
+            task,
+            project,
+            source_label,
+            case_id=payload.get('case_id') or payload.get('caseId') or '',
+            case_index=payload.get('case_index'),
+        )
+
+        return get_or_create_ai_testcase(
+            project=project,
+            testcase_payload=payload,
+            create_callback=lambda normalized_payload: TestCase.objects.create(
+                project=project,
+                author=task.created_by,
+                title=normalized_payload.get('title', '测试用例'),
+                description=normalized_payload.get('description', ''),
+                preconditions=normalized_payload.get('preconditions', ''),
+                steps=normalized_payload.get('steps', ''),
+                expected_result=normalized_payload.get('expected_result', ''),
+                priority=normalized_payload.get('priority', 'medium'),
+                test_type=normalized_payload.get('test_type', 'functional'),
+                status=normalized_payload.get('status', 'draft'),
+                tags=normalized_payload.get('tags', []),
+            ),
+            apply_default_versions=self._apply_default_versions,
+        )
+
+    def _annotate_generated_results(self, task, request, generated_results):
+        project = self._resolve_task_target_project(task, request, create_default=False)
+        return attach_result_status(task, generated_results, project=project, save=True)
+
+    def _resolve_result_case_index(self, value, task):
+        parsed_results = _parse_generated_results(task.final_test_cases or task.generated_test_cases)
+
+        try:
+            normalized_value = int(value)
+        except (TypeError, ValueError):
+            return None
+
+        if any(item.get('index') == normalized_value for item in parsed_results):
+            return normalized_value
+
+        if 0 <= normalized_value < len(parsed_results):
+            return normalized_value + 1
+
+        return normalized_value
+
+    def _build_processing_status_payload(self, task):
+        processing_status_summary = self._get_processing_status_summary(task)
+        return {
+            'processing_status_summary': processing_status_summary,
+            'handled_count': processing_status_summary['handled_count'],
+            'adopted_count': processing_status_summary['adopted_count'],
+            'discarded_count': processing_status_summary['discarded_count'],
+            'pending_count': processing_status_summary['pending_count'],
+            'task_saved': task.is_saved_to_records,
+            'saved_at': task.saved_at,
+        }
+
     def _map_priority(self, priority_str):
         """映射优先级"""
         priority_map = {
@@ -3129,9 +3341,12 @@ class ConfigStatusViewSet(viewsets.ViewSet):
                     overall_status = 'not_configured'
                     message = '尚未配置AI模型和提示词'
 
+            is_ready = writer_configured and generation_config is not None
+
             # 构建返回数据
             response_data = {
                 'overall_status': overall_status,
+                'is_ready': is_ready,
                 'message': message,
                 'writer_model': {
                     'configured': writer_model_enabled is not None or writer_model_disabled is not None,
@@ -3179,6 +3394,13 @@ class ConfigStatusViewSet(viewsets.ViewSet):
                     'required': True,
                     'default_output_mode': generation_config.default_output_mode if generation_config else None,
                     'enable_auto_review': generation_config.enable_auto_review if generation_config else None
+                },
+                'config_source_summary': {
+                    'is_ready': is_ready,
+                    'label': '当前活跃配置已就绪' if is_ready else '当前活跃配置待补齐',
+                    'detail': 'RequirementAnalysisView 当前展示的是活跃配置推断摘要；TaskDetail 若已有模型或 Prompt 外键，应优先展示任务执行时使用信息。',
+                    'generation_config_is_inferred': True,
+                    'task_generation_config_snapshot': False
                 }
             }
 

@@ -399,6 +399,7 @@ class TestCaseGenerationTask(models.Model):
     # 元数据
     generation_log = models.TextField(blank=True, verbose_name='生成日志')
     error_message = models.TextField(blank=True, verbose_name='错误信息')
+    result_status_snapshot = models.JSONField(default=dict, blank=True, verbose_name='结果状态快照')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, verbose_name='创建者')
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')

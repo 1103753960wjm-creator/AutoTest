@@ -3,23 +3,23 @@
     <div class="analysis-object-strip">
       <div class="analysis-object-card">
         <span class="analysis-object-card__label">关联项目</span>
-        <strong class="analysis-object-card__value">{{ currentProjectLabel }}</strong>
+        <strong class="analysis-object-card__value">{{ resolvedProjectLabel }}</strong>
         <span class="analysis-object-card__desc">需求输入与生成任务都会优先挂到当前项目。</span>
       </div>
       <div class="analysis-object-card">
         <span class="analysis-object-card__label">配置来源</span>
-        <strong class="analysis-object-card__value">{{ configSummaryLabel }}</strong>
-        <span class="analysis-object-card__desc">模型、提示词和生成配置统一作为分析对象的来源摘要。</span>
+        <strong class="analysis-object-card__value">{{ currentAnalysisLabel }}</strong>
+        <span class="analysis-object-card__desc">{{ currentAnalysisDesc }}</span>
       </div>
       <div class="analysis-object-card">
-        <span class="analysis-object-card__label">生成任务</span>
+        <span class="analysis-object-card__label">配置来源</span>
+        <strong class="analysis-object-card__value">{{ resolvedConfigSummaryLabel }}</strong>
+        <span class="analysis-object-card__desc">{{ configSummaryDesc }}</span>
+      </div>
+      <div class="analysis-object-card">
+        <span class="analysis-object-card__label">任务链入口</span>
         <strong class="analysis-object-card__value">{{ currentTaskId || '未启动' }}</strong>
-        <span class="analysis-object-card__desc">{{ taskSummaryLabel }}</span>
-      </div>
-      <div class="analysis-object-card">
-        <span class="analysis-object-card__label">下游挂接</span>
-        <strong class="analysis-object-card__value">{{ showResults ? '结果已生成' : '待生成结果' }}</strong>
-        <span class="analysis-object-card__desc">后续将继续挂接正式测试用例与自动化草稿中心。</span>
+        <span class="analysis-object-card__desc">{{ resolvedTaskSummaryLabel }}</span>
       </div>
     </div>
 
@@ -129,6 +129,18 @@
           </label>
         </div>
       </div>
+    </div>
+
+    <div class="analysis-action-bar">
+      <button v-if="currentProjectId" class="secondary-btn" @click="goToProjectDetail">
+        返回项目
+      </button>
+      <button class="secondary-btn" @click="goToConfig">
+        查看配置来源
+      </button>
+      <button v-if="currentTaskRouteId" class="secondary-btn" @click="goToCurrentTask">
+        查看当前任务
+      </button>
     </div>
 
     <div class="main-content">
@@ -361,9 +373,17 @@ import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
 import * as XLSX from 'xlsx'
 import { useUserStore } from '@/stores/user'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 
 export default {
   name: 'RequirementAnalysisView',
+  setup() {
+    usePlatformPageHeader(() => ({
+      title: '需求分析',
+      description: '围绕当前项目的需求输入、分析上下文和任务发起入口组织 AI 生成前半链。',
+      helperText: '本页展示的是分析对象与当前活跃配置推断摘要，不代表真实任务级配置快照。'
+    }))
+  },
   data() {
     return {
       // 全局输出模式设置
@@ -454,6 +474,58 @@ export default {
              this.manualInput.description.trim() &&
              this.manualInput.description.length <= 2000
     },
+    currentProjectId() {
+      return this.manualInput.selectedProject || this.selectedProject || ''
+    },
+    resolvedProjectLabel() {
+      if (!this.currentProjectId) {
+        return '未关联项目'
+      }
+      const currentProject = this.projects.find((item) => String(item.id) === String(this.currentProjectId))
+      return currentProject?.name || `项目 #${this.currentProjectId}`
+    },
+    currentAnalysisLabel() {
+      if (this.manualInput.title) {
+        return this.manualInput.title
+      }
+      if (this.documentTitle) {
+        return this.documentTitle
+      }
+      return '待创建分析对象'
+    },
+    currentAnalysisDesc() {
+      if (this.selectedFile && this.documentTitle) {
+        return '当前分析对象来自上传文档，本轮只先承接输入上下文与任务发起关系。'
+      }
+      if (this.manualInput.title || this.manualInput.description) {
+        return '当前分析对象来自手工需求输入，本轮只记录分析上下文摘要，不伪造真实 analysis 绑定。'
+      }
+      return '当前页面用于承接需求输入、分析上下文和生成任务入口。'
+    },
+    resolvedConfigSummaryLabel() {
+      if (this.checkingConfig) {
+        return '配置检查中'
+      }
+      if (this.configStatus?.config_source_summary?.is_ready || this.configStatus?.is_ready) {
+        return '配置已就绪'
+      }
+      return this.configStatus?.config_source_summary?.label || this.configStatus?.message || '配置待补齐'
+    },
+    configSummaryDesc() {
+      return this.configStatus?.config_source_summary?.detail || '当前页面展示的是活跃配置推断摘要，任务页若有真实外键信息，应优先展示任务执行信息。'
+    },
+    currentTaskRouteId() {
+      return this.currentTaskId || this.generationResult?.task_id || ''
+    },
+    resolvedTaskSummaryLabel() {
+      if (this.showResults && this.generationResult?.task_id) {
+        return `任务 ${this.generationResult.task_id} 已完成，可继续进入任务页查看任务对象摘要。`
+      }
+      if (this.isGenerating && this.currentTaskId) {
+        return `任务 ${this.currentTaskId} 正在运行，可随时进入任务详情页查看状态。`
+      }
+      return '当前页面用于承接需求输入、分析活动和生成任务入口。'
+    },
     currentProjectLabel() {
       const currentProjectId = this.manualInput.selectedProject || this.selectedProject
       if (!currentProjectId) {
@@ -488,7 +560,17 @@ export default {
     this.checkConfigStatus()
   },
 
+  watch: {
+    '$route.query.project'() {
+      this.syncProjectContextFromRoute()
+    },
+    '$route.query.projectName'() {
+      this.syncProjectContextFromRoute()
+    }
+  },
+
   activated() {
+    this.syncProjectContextFromRoute()
     // 当从其他页面返回时，重新检查配置状态
     // 立即隐藏弹窗和遮罩层，强制重新渲染
     this.showConfigGuide = false
@@ -511,15 +593,53 @@ export default {
   },
 
   methods: {
+    syncProjectContextFromRoute() {
+      const projectFromQuery = this.$route.query.project
+      if (!projectFromQuery) {
+        return
+      }
+
+      this.manualInput.selectedProject = String(projectFromQuery)
+      this.selectedProject = String(projectFromQuery)
+    },
+
+    goToProjectDetail() {
+      if (!this.currentProjectId) {
+        return
+      }
+
+      this.$router.push({
+        path: `/ai-generation/projects/${this.currentProjectId}`,
+        query: {
+          from: 'detail',
+          fromPath: this.$route.fullPath,
+          fromTitle: this.$route.meta?.title || '需求分析',
+          fromModule: this.$route.meta?.module || 'test-design'
+        }
+      })
+    },
+
+    goToCurrentTask() {
+      if (!this.currentTaskRouteId) {
+        return
+      }
+
+      this.$router.push({
+        path: `/ai-generation/task-detail/${this.currentTaskRouteId}`,
+        query: {
+          from: 'detail',
+          fromPath: this.$route.fullPath,
+          fromTitle: this.$route.meta?.title || '需求分析',
+          fromModule: this.$route.meta?.module || 'test-design'
+        }
+      })
+    },
+
     async loadProjects() {
       try {
         const response = await api.get('/projects/')
         this.projects = response.data.results || response.data
-        const projectFromQuery = this.$route.query.project
-        if (projectFromQuery) {
-          this.manualInput.selectedProject = Number(projectFromQuery)
-          this.selectedProject = Number(projectFromQuery)
-        }
+        this.syncProjectContextFromRoute()
       } catch (error) {
         console.error(this.$t('requirementAnalysis.loadProjectsFailed'), error)
       }
@@ -1562,6 +1682,22 @@ export default {
   font-size: 13px;
   line-height: 1.7;
   color: #475569;
+}
+
+.analysis-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.secondary-btn {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  padding: 10px 18px;
+  border-radius: 8px;
+  cursor: pointer;
 }
 
 /* 输出模式设置区域 - 全局 */

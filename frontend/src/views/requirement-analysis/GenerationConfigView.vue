@@ -1,8 +1,26 @@
 <template>
   <div class="generation-config">
-    <div class="page-header">
-      <h1>{{ $t('generationConfig.title') }}</h1>
-      <p>{{ $t('generationConfig.subtitle') }}</p>
+    <div class="config-source-strip">
+      <div class="config-source-card">
+        <span class="config-source-card__label">当前活跃生成配置</span>
+        <strong class="config-source-card__value">{{ activeGenerationConfig?.name || '待配置' }}</strong>
+        <span class="config-source-card__desc">需求分析页默认消费当前活跃生成配置，任务页只将其作为推断摘要展示。</span>
+      </div>
+      <div class="config-source-card">
+        <span class="config-source-card__label">默认输出模式</span>
+        <strong class="config-source-card__value">{{ activeOutputModeLabel }}</strong>
+        <span class="config-source-card__desc">仅代表当前活跃配置的默认行为，不代表历史任务真实快照。</span>
+      </div>
+      <div class="config-source-card">
+        <span class="config-source-card__label">AI 评审开关</span>
+        <strong class="config-source-card__value">{{ activeGenerationConfig?.enable_auto_review ? '开启' : '关闭' }}</strong>
+        <span class="config-source-card__desc">决定任务链是否进入评审阶段，但本轮不展开完整结果确认流。</span>
+      </div>
+      <div class="config-source-card">
+        <span class="config-source-card__label">来源边界</span>
+        <strong class="config-source-card__value">推断摘要</strong>
+        <span class="config-source-card__desc">当前系统尚未持久化任务级生成配置快照，本页只提供上游来源层语义。</span>
+      </div>
     </div>
 
     <div class="main-content">
@@ -187,11 +205,17 @@ import { getGenerationConfigs, createGenerationConfig, updateGenerationConfig, d
 import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 
 export default {
   name: 'GenerationConfigView',
   setup() {
     const { t, locale } = useI18n()
+    usePlatformPageHeader(() => ({
+      title: '生成配置',
+      description: '维护生成链的行为来源，并为需求分析页和任务页提供当前活跃配置推断摘要。',
+      helperText: '本页展示的是当前活跃生成配置来源层，不代表历史任务执行快照。'
+    }))
     return { t, locale }
   },
   data() {
@@ -215,6 +239,18 @@ export default {
   mounted() {
     this.configForm.name = this.t('generationConfig.defaultConfigName')
     this.loadConfigs()
+  },
+
+  computed: {
+    activeGenerationConfig() {
+      return this.configs.find((config) => config?.is_active)
+    },
+    activeOutputModeLabel() {
+      if (!this.activeGenerationConfig) {
+        return '待配置'
+      }
+      return this.activeGenerationConfig.default_output_mode === 'stream' ? this.t('generationConfig.realtimeStream') : this.t('generationConfig.completeOutput')
+    }
   },
 
   methods: {
@@ -354,20 +390,38 @@ export default {
   margin: 0 auto;
 }
 
-.page-header {
-  text-align: center;
-  margin-bottom: 40px;
+.config-source-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-.page-header h1 {
-  font-size: 2.5rem;
-  color: #2c3e50;
-  margin-bottom: 10px;
+.config-source-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
-.page-header p {
-  color: #666;
-  font-size: 1.1rem;
+.config-source-card__label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.config-source-card__value {
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.config-source-card__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
 }
 
 .section-header {
@@ -768,6 +822,10 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .config-source-strip {
+    grid-template-columns: 1fr;
+  }
+
   .configs-grid {
     grid-template-columns: 1fr;
   }

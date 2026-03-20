@@ -1,8 +1,26 @@
 <template>
   <div class="prompt-config">
-    <div class="page-header">
-      <h1>{{ $t('promptConfig.title') }}</h1>
-      <p>{{ $t('promptConfig.subtitle') }}</p>
+    <div class="config-source-strip">
+      <div class="config-source-card">
+        <span class="config-source-card__label">编写 Prompt 来源</span>
+        <strong class="config-source-card__value">{{ activeWriterPrompt?.name || '待配置' }}</strong>
+        <span class="config-source-card__desc">需求分析页发起任务时，会优先消费当前活跃编写 Prompt。</span>
+      </div>
+      <div class="config-source-card">
+        <span class="config-source-card__label">评审 Prompt 来源</span>
+        <strong class="config-source-card__value">{{ activeReviewerPrompt?.name || '待配置' }}</strong>
+        <span class="config-source-card__desc">任务对象若启用评审链，会优先消费当前活跃评审 Prompt。</span>
+      </div>
+      <div class="config-source-card">
+        <span class="config-source-card__label">来源语义</span>
+        <strong class="config-source-card__value">上游提示词层</strong>
+        <span class="config-source-card__desc">本页用于维护生成链上游 Prompt 来源，不在本轮重构后台流程。</span>
+      </div>
+      <div class="config-source-card">
+        <span class="config-source-card__label">活跃配置数</span>
+        <strong class="config-source-card__value">{{ activePromptCount }}</strong>
+        <span class="config-source-card__desc">当前可被分析页和任务页消费的活跃 Prompt 数量。</span>
+      </div>
     </div>
 
     <div class="main-content">
@@ -242,9 +260,17 @@
 <script>
 import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 
 export default {
   name: 'PromptConfig',
+  setup() {
+    usePlatformPageHeader(() => ({
+      title: '提示词配置',
+      description: '维护生成链上游 Prompt 来源，并为需求分析页和任务页提供活跃提示词摘要。',
+      helperText: '本页展示的是当前活跃 Prompt 来源层，不等于历史任务执行时的真实配置快照。'
+    }))
+  },
   data() {
     return {
       configs: [],
@@ -273,6 +299,18 @@ export default {
 
   mounted() {
     this.loadConfigs()
+  },
+
+  computed: {
+    activeWriterPrompt() {
+      return this.configs.find((config) => config?.prompt_type === 'writer' && config?.is_active)
+    },
+    activeReviewerPrompt() {
+      return this.configs.find((config) => config?.prompt_type === 'reviewer' && config?.is_active)
+    },
+    activePromptCount() {
+      return this.configs.filter((config) => config?.is_active).length
+    }
   },
 
   methods: {
@@ -475,20 +513,38 @@ export default {
   margin: 0 auto;
 }
 
-.page-header {
-  text-align: center;
-  margin-bottom: 40px;
+.config-source-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-.page-header h1 {
-  font-size: 2.5rem;
-  color: #2c3e50;
-  margin-bottom: 10px;
+.config-source-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
-.page-header p {
-  color: #666;
-  font-size: 1.1rem;
+.config-source-card__label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.config-source-card__value {
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.config-source-card__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
 }
 
 .section-header {
@@ -1014,6 +1070,10 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .config-source-strip {
+    grid-template-columns: 1fr;
+  }
+
   .configs-grid {
     grid-template-columns: 1fr;
   }

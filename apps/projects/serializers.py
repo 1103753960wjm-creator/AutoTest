@@ -28,12 +28,14 @@ class ProjectSerializer(serializers.ModelSerializer):
     requirement_summary = serializers.SerializerMethodField()
     ai_generation_summary = serializers.SerializerMethodField()
     automation_summary = serializers.SerializerMethodField()
+    latest_task_summary = serializers.SerializerMethodField()
     
     class Meta:
         model = Project
         fields = ['id', 'name', 'description', 'status', 'owner', 'members', 
                  'environments', 'created_at', 'updated_at', 'testcase_count',
-                 'requirement_summary', 'ai_generation_summary', 'automation_summary']
+                 'requirement_summary', 'ai_generation_summary', 'automation_summary',
+                 'latest_task_summary']
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_testcase_count(self, obj):
@@ -82,6 +84,24 @@ class ProjectSerializer(serializers.ModelSerializer):
             'status': 'pending',
             'label': '自动化草稿中心待接入',
             'detail': '本轮仅预留项目级自动化状态位，2.3 再挂接自动化草稿中心。'
+        }
+
+    def get_latest_task_summary(self, obj):
+        latest_task = obj.generation_tasks.all().order_by('-created_at').first()
+        if not latest_task:
+            return {
+                'has_task': False,
+                'label': '当前项目尚无生成任务',
+                'detail': '可先进入需求分析页，从当前项目上下文发起新的生成任务。'
+            }
+
+        return {
+            'has_task': True,
+            'task_id': latest_task.task_id,
+            'status': latest_task.status,
+            'created_at': latest_task.created_at,
+            'label': f'最近任务：{latest_task.task_id}',
+            'detail': '项目详情可继续挂接到最近一次生成任务，但本轮不展开结果确认层。'
         }
 
 class ProjectCreateSerializer(serializers.ModelSerializer):

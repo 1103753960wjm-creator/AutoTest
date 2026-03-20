@@ -1,8 +1,26 @@
 <template>
   <div class="ai-model-config">
-    <div class="page-header">
-      <h1>{{ $t('configuration.aiModel.title') }}</h1>
-      <p>{{ $t('configuration.aiModel.description') }}</p>
+    <div class="config-source-strip">
+      <div class="config-source-card">
+        <span class="config-source-card__label">编写模型来源</span>
+        <strong class="config-source-card__value">{{ activeWriterModel?.name || '待配置' }}</strong>
+        <span class="config-source-card__desc">需求分析页会优先消费当前活跃的编写模型。</span>
+      </div>
+      <div class="config-source-card">
+        <span class="config-source-card__label">评审模型来源</span>
+        <strong class="config-source-card__value">{{ activeReviewerModel?.name || '待配置' }}</strong>
+        <span class="config-source-card__desc">任务对象若开启 AI 评审，将优先使用当前活跃评审模型。</span>
+      </div>
+      <div class="config-source-card">
+        <span class="config-source-card__label">来源语义</span>
+        <strong class="config-source-card__value">活跃配置推断摘要</strong>
+        <span class="config-source-card__desc">本页管理的是生成链上游来源层，不代表历史任务快照。</span>
+      </div>
+      <div class="config-source-card">
+        <span class="config-source-card__label">链路挂接</span>
+        <strong class="config-source-card__value">{{ activeModelCount }}</strong>
+        <span class="config-source-card__desc">当前可被 RequirementAnalysisView 和 TaskDetail 消费的活跃模型数量。</span>
+      </div>
     </div>
 
     <div class="main-content">
@@ -275,11 +293,17 @@
 import api from '@/utils/api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 
 export default {
   name: 'AIModelConfig',
   setup() {
     const { t } = useI18n()
+    usePlatformPageHeader(() => ({
+      title: 'AI 模型配置',
+      description: '维护生成链上游的模型来源，并为需求分析页和任务页提供活跃配置摘要。',
+      helperText: '本页展示的是当前可被消费的模型来源层，不等于历史任务执行快照。'
+    }))
     return { t }
   },
   data() {
@@ -322,6 +346,15 @@ export default {
   },
 
   computed: {
+    activeWriterModel() {
+      return this.configs.find((config) => config?.role === 'writer' && config?.is_active)
+    },
+    activeReviewerModel() {
+      return this.configs.find((config) => config?.role === 'reviewer' && config?.is_active)
+    },
+    activeModelCount() {
+      return this.configs.filter((config) => config?.is_active).length
+    },
     shouldShowModal() {
       const show = this.showAddModal || this.showEditModal
       console.log('Computed shouldShowModal:', show, {
@@ -687,20 +720,38 @@ export default {
   margin: 0 auto;
 }
 
-.page-header {
-  text-align: center;
-  margin-bottom: 40px;
+.config-source-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
-.page-header h1 {
-  font-size: 2.5rem;
-  color: #2c3e50;
-  margin-bottom: 10px;
+.config-source-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 20px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
 }
 
-.page-header p {
-  color: #666;
-  font-size: 1.1rem;
+.config-source-card__label {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.config-source-card__value {
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.config-source-card__desc {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
 }
 
 .section-header {
@@ -1099,6 +1150,10 @@ export default {
 }
 
 @media (max-width: 768px) {
+  .config-source-strip {
+    grid-template-columns: 1fr;
+  }
+
   .configs-grid {
     grid-template-columns: 1fr;
   }

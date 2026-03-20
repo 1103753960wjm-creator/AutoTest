@@ -47,8 +47,13 @@
           <h3>下一步入口</h3>
           <div class="relation-actions">
             <el-button type="primary" @click="goToRequirementAnalysis">进入需求分析</el-button>
+            <el-button v-if="latestTaskSummary.has_task" @click="goToLatestTask">查看最近任务</el-button>
             <el-button @click="goToGeneratedResults">查看生成结果</el-button>
             <el-button @click="goToTestCases">查看测试用例</el-button>
+          </div>
+          <div class="task-entry-summary">
+            <strong>{{ latestTaskSummary.label }}</strong>
+            <span>{{ latestTaskSummary.detail }}</span>
           </div>
         </div>
       </div>
@@ -193,6 +198,14 @@ const returnTarget = computed(() => {
   })
 })
 
+const latestTaskSummary = computed(() => {
+  return project.value?.latest_task_summary || {
+    has_task: false,
+    label: '当前项目尚无生成任务',
+    detail: '可先进入需求分析页，从当前项目上下文发起新的生成任务。'
+  }
+})
+
 const handleReturn = () => {
   if (returnTarget.value?.path) {
     router.push(returnTarget.value.path)
@@ -232,6 +245,24 @@ const goToTestCases = () => {
   })
 }
 
+const goToLatestTask = () => {
+  if (!latestTaskSummary.value?.has_task || !latestTaskSummary.value?.task_id) {
+    return
+  }
+
+  router.push({
+    path: `/ai-generation/task-detail/${latestTaskSummary.value.task_id}`,
+    query: {
+      project: String(project.value?.id || ''),
+      projectName: project.value?.name || '',
+      from: 'detail',
+      fromPath: route.fullPath,
+      fromTitle: route.meta?.title || '项目详情',
+      fromModule: route.meta?.module || 'test-design'
+    }
+  })
+}
+
 usePlatformPageHeader(() => ({
   title: project.value?.name || '',
   description: project.value?.description || '',
@@ -255,13 +286,21 @@ usePlatformPageHeader(() => ({
       plain: true,
       onClick: goToRequirementAnalysis
     },
+    latestTaskSummary.value?.has_task
+      ? {
+          key: 'go-latest-task',
+          label: '最近任务',
+          plain: true,
+          onClick: goToLatestTask
+        }
+      : null,
     {
       key: 'go-testcases',
       label: '测试用例',
       plain: true,
       onClick: goToTestCases
     }
-  ]
+  ].filter(Boolean)
 }))
 
 const fetchProject = async () => {
@@ -395,6 +434,28 @@ watch(activeTab, (nextTab) => {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.task-entry-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  color: #475569;
+}
+
+.task-entry-summary strong {
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.task-entry-summary span {
+  font-size: 13px;
+  line-height: 1.7;
 }
 
 .members-section,
