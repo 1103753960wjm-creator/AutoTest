@@ -417,6 +417,58 @@ class TestCaseGenerationTask(models.Model):
         return f"{self.title} - {self.get_status_display()}"
 
 
+class TaskAutoReviewRecord(models.Model):
+    """生成链中的自动 AI 评审记录对象"""
+
+    REVIEW_STATUS_CHOICES = [
+        ('reviewing', '评审中'),
+        ('completed', '已完成'),
+        ('failed', '失败'),
+        ('cancelled', '已取消'),
+    ]
+
+    task = models.ForeignKey(
+        TestCaseGenerationTask,
+        on_delete=models.CASCADE,
+        related_name='auto_review_records',
+        verbose_name='关联生成任务'
+    )
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='task_auto_review_records',
+        verbose_name='关联项目'
+    )
+    review_source = models.CharField(max_length=20, default='ai_auto', verbose_name='评审来源')
+    source_stage = models.CharField(max_length=50, default='generation_review', verbose_name='来源阶段')
+    review_status = models.CharField(
+        max_length=20,
+        choices=REVIEW_STATUS_CHOICES,
+        default='reviewing',
+        verbose_name='评审状态'
+    )
+    review_summary = models.CharField(max_length=500, blank=True, verbose_name='评审摘要')
+    review_content = models.TextField(blank=True, verbose_name='评审内容')
+    reviewer_model_name = models.CharField(max_length=100, blank=True, verbose_name='评审模型名称')
+    reviewer_prompt_name = models.CharField(max_length=100, blank=True, verbose_name='评审提示词名称')
+    result_identity_snapshot = models.JSONField(default=list, blank=True, verbose_name='结果身份快照')
+    failure_message = models.TextField(blank=True, verbose_name='失败信息')
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name='完成时间')
+
+    class Meta:
+        db_table = 'task_auto_review_record'
+        verbose_name = '自动 AI 评审记录'
+        verbose_name_plural = '自动 AI 评审记录'
+        ordering = ['-created_at', '-id']
+
+    def __str__(self):
+        return f"{self.task.task_id} - {self.review_status}"
+
+
 class AIModelService:
     """AI模型服务类"""
 

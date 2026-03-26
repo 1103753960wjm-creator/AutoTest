@@ -1,278 +1,221 @@
-# AI 生成链路规范（2.2 第一阶段）
+# AI 生成链路规范
 
 ## 1. 文档目标
 
-本规范用于约束阶段 2.2 第一阶段《AI 生成链路与 AI 助手收口》的实现范围。
+本文档用于约束阶段 2.2 当前轮次的 AI 生成链路收口范围，聚焦以下 5 个问题：
 
-本阶段只处理以下三层：
+- 真取消
+- 刷新恢复
+- SSE / 轮询 / 本地状态一致性
+- 保存后边界
+- 自动 AI 评审记录与统一入口
 
-- 配置来源层
-- `ProjectDetail -> RequirementAnalysisView -> TaskDetail` 前半链
-- 生成任务对象页基础收口
+本轮不回头重做 2.1 对象层，也不进入 2.3 自动化草稿中心。
 
-本阶段不处理生成结果确认层、正式测试资产回链深化、业务链 AI 助手重构、自动化草稿中心和执行闭环。
+## 2. 本轮对象关系
 
-## 2. 本阶段边界
+当前链路按如下对象关系承接：
 
-### 2.1 本阶段要解决的问题
+`RequirementAnalysisView -> TestCaseGenerationTask -> Generated Results -> TaskAutoReviewRecord -> TestCase`
 
-- 让 `AIModelConfig`、`PromptConfig`、`GenerationConfigView` 不再只是孤立配置页，而是生成链上游来源层
-- 让用户看懂一次任务是从哪个项目、哪个分析上下文中发起
-- 让 `RequirementAnalysisView` 更像“分析对象页 + 发起任务节点”
-- 让 `TaskDetail` 更像“生成链核心对象页”，而不是纯进度页
-- 在语义上明确区分“当前活跃配置推断摘要”和“任务执行时使用信息”
-- 轻量补最少可用的失败信息表达与下游入口位
+对象职责如下：
 
-### 2.2 本阶段明确不处理
+- 需求分析对象：承接项目上下文、输入上下文、当前任务入口和最近任务入口
+- 生成任务对象：承接任务状态、配置来源、处理状态、取消状态、自动评审摘要和结果入口
+- 生成结果对象：承接任务内中间产物，仅在任务层与结果批次页中查看和处理
+- 自动 AI 评审对象：承接生成链中的自动评审记录，不并入现有手工评审对象
+- 测试用例对象：承接正式测试资产，生成结果进入正式资产后回到测试用例资产页继续维护
 
-- 不深改 `GeneratedTestCaseList`
-- 不深改 `TestCaseDetail` / `TestCaseEdit`
-- 不重写 `AssistantView`
-- 不展开完整结果确认 / 编辑 / 保存流程
-- 不深化正式测试用例资产回链
+## 3. 本轮必做范围
+
+- 真取消
+- 刷新恢复
+- SSE / polling / local state 收口
+- 保存后边界稳定化
+- 自动 AI 评审记录对象化和统一入口
+
+## 4. 本轮明确不做
+
+- 不回头重做 2.1 对象层
 - 不做自动化草稿中心
+- 不重写 AssistantView
+- 不重构模型配置 / Prompt / 生成配置体系
+- 不重构整套异步任务架构
+- 不把自动 AI 评审强塞进现有手工评审列表
+- 不重做 reviews 域现有分配、待办、审批流
 - 不做执行闭环
-- 不做复杂 AI 调用治理后台
-- 不重构 AI 模型配置体系
-- 不重构 Prompt 配置体系
-- 不建设真正的历史配置快照系统
+- 不做复杂任务恢复中心
+- 不做 AI 厂商侧远端硬中断
 
-## 3. 链路范围
+## 5. 取消语义
 
-本阶段固定的主链路如下：
+本轮采用“应用层协作式真取消”。
 
-`配置来源层 -> ProjectDetail -> RequirementAnalysisView -> 发起生成任务 -> TaskDetail`
+冻结规则如下：
 
-说明：
+- 前端点击取消必须调用真实后端取消接口
+- 后端一旦写入 `status = cancelled`，后台执行链必须在关键阶段停止推进
+- 所有最终结果写库前必须再次执行取消检查
+- 已取消任务不得再被后续流程覆写成 `completed` 或 `failed`
+- 已取消前产生的中间内容允许保留，但取消后不得继续写新的最终结果
 
-- `ProjectDetail` 继续作为测试设计源头对象页
-- `RequirementAnalysisView` 承接当前项目下的需求输入、分析上下文和任务发起动作
-- `TaskDetail` 承接生成任务对象本身的来源、配置、状态、失败和下游入口位
-- 生成结果层和正式资产层仅保留关系预留，不在本阶段深化
+## 6. 刷新恢复语义
 
-## 4. 配置来源层语义
+本轮恢复采用以下组合：
 
-### 4.1 配置来源层对象
+- `route.query.taskId`
+- `sessionStorage`
+- `progress` 接口
 
-- `AIModelConfig`
-- `PromptConfig`
-- `GenerationConfigView`
+恢复上下文按项目维度持久化，避免跨项目恢复污染。
 
-### 4.2 本阶段职责
+固定 key 规则：
 
-- 提供可被分析页和任务页稳定消费的来源摘要
-- 说明当前活跃配置的可用状态
-- 说明这些配置将服务于哪些生成链节点
+- `testhub.ai-generation.current-task.project:{projectId}`
+- 无项目时：`testhub.ai-generation.current-task.project:none`
 
-### 4.3 必须区分的两类语义
+恢复优先级：
 
-#### 当前活跃配置推断摘要
+1. `route.query.taskId`
+2. 当前项目对应的 `sessionStorage`
+3. 无恢复上下文
 
-定义：
+终态任务上下文保留 30 分钟，超时后不再自动恢复。
 
-- 基于当前数据库中 `is_active = true` 的配置对象推断出的来源摘要
+## 7. SSE / 轮询 / 本地状态收口原则
 
-适用场景：
+- RequirementAnalysisView 只能存在一个活跃 tracker
+- 页面切换、keepAlive deactivated、beforeUnmount 都必须清理旧 tracker
+- SSE 失败只能降级出一个 polling
+- `completed / failed / cancelled` 一律视为终态，进入终态后统一关闭 SSE / polling
+- TaskDetail 不恢复完整流式显示，只做轻量 polling 刷新任务对象与结果状态
 
-- `RequirementAnalysisView` 的配置来源展示
-- `TaskDetail` 中无法取得真实快照时的兜底摘要
+## 8. 保存后边界
 
-展示要求：
+生成结果对象与正式测试资产对象必须区分。
 
-- 必须明确标记为“当前活跃配置”
-- 必须说明这是推断摘要，不等于任务执行时的历史快照
+冻结规则如下：
 
-#### 任务执行时使用信息
+- `pending` 结果：可查看、可编辑、可采纳、可弃用
+- `adopted` 结果：任务层只读，可跳正式测试资产，不可再采纳 / 弃用
+- `discarded` 结果：任务层只读，不可再采纳 / 弃用
+- `processing_status_summary.pending_count = 0` 时，任务层整体只读
+- `task.status in ['cancelled', 'failed']` 时，任务详情可见，但不允许继续处理结果
 
-定义：
+## 9. 自动 AI 评审对象
 
-- 任务模型中真实持有的模型、Prompt 等字段
+### 9.1 模型定位
 
-本阶段现状：
+新增 `TaskAutoReviewRecord`，定位为“生成链中的自动 AI 评审记录对象”。
 
-- 当前任务模型已有 `writer_model_config`、`reviewer_model_config`、`writer_prompt_config`、`reviewer_prompt_config`
-- 当前任务模型没有 `generation_config` 快照字段
-- 当前任务模型没有 `analysis` 外键
+本轮明确：
 
-展示要求：
+- 不等于手工评审对象
+- 不并入现有 `apps/reviews.TestCaseReview`
+- 使用 `ForeignKey(task)`，不锁死一对一
 
-- 对已有真实字段，按“任务执行时使用信息”展示
-- 对缺失字段，只能展示“当前活跃配置推断摘要”，不得伪装成真实执行快照
+### 9.2 字段
 
-## 5. 前半链关系
+固定字段如下：
 
-### 5.1 ProjectDetail
+- `task = ForeignKey(TestCaseGenerationTask, related_name='auto_review_records')`
+- `project = ForeignKey(Project, null=True, blank=True, related_name='task_auto_review_records')`
+- `review_source = 'ai_auto'`
+- `source_stage = 'generation_review'`
+- `review_status = reviewing / completed / failed / cancelled`
+- `review_summary`
+- `review_content`
+- `reviewer_model_name`
+- `reviewer_prompt_name`
+- `result_identity_snapshot`
+- `failure_message`
+- `created_at`
+- `updated_at`
+- `completed_at`
 
-本阶段职责：
+### 9.3 最新记录规则
 
-- 继续作为设计源头对象页
-- 明确挂接到需求分析页
-- 明确挂接到任务链入口
-- 保持 2.1 已建立的对象层结构，不重做大布局
+页面默认只展示“每个任务最新一条自动评审记录”。
 
-本阶段应体现：
+最新记录排序规则固定为：
 
-- 项目级需求分析摘要
-- 项目级 AI 任务摘要
-- 前往需求分析的稳定入口
-- 前往最近任务或任务链入口的稳定入口
+- 主排序：`created_at DESC`
+- 稳定兜底：`id DESC`
 
-### 5.2 RequirementAnalysisView
+### 9.4 统一入口
 
-本阶段职责：
+本轮提供独立统一入口：
 
-- 承接“当前分析对象”
-- 承接“当前项目上下文”
-- 承接“配置来源摘要”
-- 承接“发起任务动作”
-- 承接“已有关联任务入口”
+- 路由：`/ai-generation/reviews/ai-auto`
+- 页面：`AutoReviewList`
 
-本阶段应体现：
+列表页默认不展开历史记录，但每条记录必须支持展开查看完整评审内容。
 
-- 当前关联项目
-- 当前分析对象身份
-- 当前依赖的配置来源摘要
-- 当前任务状态或最近任务提示
-- 发起任务入口
+## 10. auto_review_summary 语义
 
-### 5.3 关于“来源分析对象摘要位”的强约束
+后后端统一固定状态枚举，不靠文案猜测：
 
-当前任务模型没有 `analysis` 外键，因此：
+- `not_triggered`
+- `reviewing`
+- `completed`
+- `failed`
+- `cancelled`
 
-- 只能做“来源分析对象摘要位”
-- 只能表达“当前分析上下文摘要 / 来源分析说明”
-- 不得伪造真实对象绑定
-- 不得把它包装成强回链真数据
+前端只负责映射 label 和 tag。
 
-推荐语义：
+固定结构如下：
 
-- `source_analysis_summary`
-- `is_inferred = true`
-- `label`
-- `detail`
+```json
+{
+  "has_record": true,
+  "review_id": 12,
+  "status": "completed",
+  "label": "已生成 AI 自动评审",
+  "detail": "来自当前生成任务的自动评审记录，可进入统一 AI 评审入口查看",
+  "entry_path": "/ai-generation/reviews/ai-auto?taskId=TASK_XXXX",
+  "created_at": "2026-03-25T10:00:00+08:00"
+}
+```
 
-## 6. TaskDetail 的核心页定位
+无记录时：
 
-`TaskDetail` 在 2.2 第一阶段中的定位是：
+- `has_record = false`
+- `status = not_triggered`
 
-- 生成链核心对象页
-- 不是纯进度页
-- 也不是结果确认流程页
+## 11. 页面职责
 
-本阶段 `TaskDetail` 必须承接：
+### RequirementAnalysisView
 
-- 来源项目
-- 来源分析对象摘要位
-- 模型摘要
-- Prompt 摘要
-- 生成配置摘要
-- 触发时间
-- 任务状态
-- 结果数量摘要
-- 保存状态摘要
-- 失败信息摘要
-- 下游入口位
+- 承接当前项目上下文
+- 承接当前生成任务
+- 提供真取消入口
+- 提供任务恢复入口
 
-### 6.1 结果区处理原则
+### TaskDetail
 
-可以做：
+- 对所有任务状态可见
+- 承接任务对象状态、配置来源、处理状态、自动评审摘要
+- 操作能力受“任务状态 + 结果处理状态”双重限制
 
-- 弱化结果处理页感
-- 将结果区降级为摘要区或次级区块
-- 为后续结果层保留入口
+### GeneratedTestCaseList
 
-不可以做：
+- 继续作为结果批次 / 产物层页面
+- 所有任务状态都允许进入任务详情
+- 列表展示处理状态和自动评审摘要入口
 
-- 不顺手重做 `GeneratedTestCaseList`
-- 不展开完整确认流
-- 不把本阶段变成结果层重构
+### AutoReviewList
 
-## 7. 失败信息与最少可用留痕
-
-本阶段只做最少可用语义：
-
-- 当前任务状态
-- 失败信息摘要
-- 保存状态摘要
-- 配置来源摘要
-
-本阶段不做：
-
-- 全量 AI 调用治理后台
-- 完整阶段化失败审计
-- 执行级链路追踪系统
-
-推荐展示口径：
-
-- 是否成功
-- 若失败，失败发生在任务链中的哪一类阶段
-- 用户下一步可以做什么，例如返回、重试、检查配置、查看结果页
-
-## 8. 页面约束
-
-- 页面头部只能由 `PlatformPageHeader` 承接
-- 不允许新增第二套页面头部体系
-- 深链接与回跳规则继续适用
-- 不破坏阶段 1 的 Layout、Home、搜索、最近访问、收藏体系
-- 不回头重做 2.1 已稳定的对象层结构
-
-## 9. 后端约束
-
-- 优先补摘要字段和轻量聚合字段
-- 优先增强 `RequirementAnalysisView`、`TaskDetail`、`ProjectDetail` 相关接口
-- 不大规模重构模型结构
-- 不要求现在补真正的 `generation_config` 历史快照
-- 不要求现在补 `analysis` 外键绑定
-
-## 10. 本阶段推荐字段
-
-### 10.1 分析页推荐摘要
-
-- `config_source_summary`
-- `analysis_context_summary`
-- `task_entry_summary`
-
-### 10.2 任务页推荐摘要
-
-- `source_summary`
-- `source_analysis_summary`
-- `model_source_summary`
-- `prompt_source_summary`
-- `generation_config_summary`
-- `result_count`
-- `save_status_summary`
-- `failure_summary`
-- `downstream_summary`
-
-说明：
-
-- 上述字段允许以轻量聚合形式存在
-- 但必须显式区分真实字段和推断字段
-
-## 11. 后续阶段挂接说明
-
-### 11.1 2.2 下一阶段
-
-后续再进入：
-
-- 生成结果层深化
-- 确认 / 编辑 / 保存关系深化
-- 正式资产层回链深化
-
-### 11.2 2.3 自动化草稿中心
-
-推荐挂接位：
-
-- 主挂接位在正式测试用例资产层
-- 项目层提供聚合入口
-- 任务层和结果层只提供来源说明，不作为自动化草稿中心的最终归属层
+- 统一 AI 自动评审入口页
+- 默认展示每任务最新一条自动评审记录
+- 可按项目 / 任务 / 状态筛选
+- 每条记录可展开查看完整内容，并跳回任务详情
 
 ## 12. 验收标准
 
-- 配置页开始具备“生成链上游来源层”语义
-- `RequirementAnalysisView` 更像分析对象页和发起任务节点
-- `ProjectDetail -> RequirementAnalysisView -> TaskDetail` 前半链更清楚
-- `TaskDetail` 更像生成链核心对象页，而不是纯进度页
-- 用户能够区分“当前活跃配置推断摘要”和“任务执行时使用信息”
-- 没有提前混入结果确认层、正式资产层、助手重构、自动化草稿中心
-- 没有破坏阶段 1 已完成的平台骨架
+- 取消生成不再是假取消
+- 刷新页面后不再轻易丢失当前生成任务
+- 页面状态、轮询 / SSE 状态、后端任务状态更一致
+- 自动 AI 评审不再“生成过但找不到”
+- 任务详情页更像生成任务对象页
+- 生成结果与正式测试用例保存关系更清楚
+- 没有破坏阶段 1 已完成的平台骨架，也没有回头推翻 2.1

@@ -3,12 +3,13 @@
 进入仓库后，先按顺序读取并遵守以下文件：
 
 1. `C:\Users\Administrator\.gemini\GEMINI.md`
-2. `E:\AutoTest\.antigravity\prompt.md`
-3. `E:\AutoTest\.antigravity\workflow_rules.md`
-4. `E:\AutoTest\.antigravity\architecture.md`
-5. `E:\AutoTest\.antigravity\storage_rules.md`
-6. `E:\AutoTest\.antigravity\project_rules.md`
-7. 当前仓库根目录下的`MEMORY.md`（如存在）
+2. 当前仓库 `.antigravity/prompt.md`
+3. 当前仓库 `.antigravity/workflow_rules.md`
+4. 当前仓库 `.antigravity/architecture.md`
+5. 当前仓库 `.antigravity/storage_rules.md`
+6. 当前仓库 `.antigravity/project_rules.md`
+7. `docs/project-memory/current_phase.md`（如存在）
+8. `docs/project-memory/dialogue_bootstrap.md`（如存在，仅用于快速进入上下文，不属于正式规则层）
 
 默认交付流程：
 
@@ -28,6 +29,7 @@
 
 当前仓库基线：
 
-- 后端：`l-tester-master`，FastAPI + Tortoise ORM + MySQL
-- 前端：`l-vue-ui-master`，Vue 3 + TypeScript + Vite + Pinia + Element Plus
+- 项目：`TestHub` 智能测试管理平台
+- 后端目录：`backend` + `apps`，Django 4.2 + Django REST Framework + MySQL + SimpleJWT + Channels + Celery
+- 前端目录：`frontend`，Vue 3 + JavaScript + Vite + Pinia + Element Plus
 - 后续 AI 能力必须通过统一入口接入，禁止在业务模块直接散接模型调用

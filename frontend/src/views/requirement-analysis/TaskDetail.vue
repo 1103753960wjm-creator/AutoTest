@@ -38,6 +38,12 @@
         查看生成结果页
       </button>
       <button
+        v-if="taskStatusAllowsCancel"
+        class="secondary-btn"
+        @click="cancelGenerationTask">
+        取消生成
+      </button>
+      <button
         v-if="testCases.length > 0"
         class="export-btn"
         @click="exportToExcel"
@@ -80,6 +86,17 @@
         <span class="task-context-card__label">下游入口预留</span>
         <strong class="task-context-card__value">{{ task.downstream_summary?.label || '结果层入口预留' }}</strong>
         <span class="task-context-card__desc">{{ task.downstream_summary?.detail || '当前可继续跳往生成结果页或项目测试用例。' }}</span>
+      </div>
+      <div class="task-context-card">
+        <span class="task-context-card__label">AI 自动评审</span>
+        <strong class="task-context-card__value">{{ autoReviewSummary.label }}</strong>
+        <span class="task-context-card__desc">{{ autoReviewSummary.detail }}</span>
+        <button
+          v-if="autoReviewSummary.has_record"
+          class="asset-btn"
+          @click="goToAutoReviews">
+          查看 AI 自动评审
+        </button>
       </div>
     </div>
 
@@ -207,8 +224,8 @@
                   @click="goToAdoptedAsset(testCase)">
                   查看资产
                 </button>
-                <button v-if="testCase.result_status === 'pending'" class="adopt-btn" @click="adoptSingleCase(testCase, index)">{{ $t('taskDetail.adopt') }}</button>
-                <button v-if="testCase.result_status === 'pending'" class="discard-btn" @click="discardSingleCase(testCase, index)">{{ $t('taskDetail.discard') }}</button>
+                <button v-if="canMutateSingleCase(testCase)" class="adopt-btn" @click="adoptSingleCase(testCase, index)">{{ $t('taskDetail.adopt') }}</button>
+                <button v-if="canMutateSingleCase(testCase)" class="discard-btn" @click="discardSingleCase(testCase, index)">{{ $t('taskDetail.discard') }}</button>
               </div>
             </div>
           </div>
@@ -366,6 +383,7 @@ export default {
       // 编辑相关状态
       isEditing: false,
       isSaving: false,
+      pollTimer: null,
       editForm: {
         caseId: '',
         scenario: '',
@@ -410,8 +428,25 @@ export default {
       }
     },
 
+    autoReviewSummary() {
+      return this.task.auto_review_summary || {
+        has_record: false,
+        status: 'not_triggered',
+        label: '未触发自动评审',
+        detail: '当前任务尚未生成自动 AI 评审记录。'
+      }
+    },
+
+    taskStatusAllowsCancel() {
+      return ['pending', 'generating', 'reviewing', 'revising'].includes(this.task?.status)
+    },
+
+    taskStatusAllowsResultMutation() {
+      return this.task?.status === 'completed'
+    },
+
     isResultReadonly() {
-      return this.processingSummary.pending_count === 0
+      return !this.taskStatusAllowsResultMutation || this.processingSummary.pending_count === 0
     },
 
     resultReadonlyHint() {
@@ -456,6 +491,10 @@ export default {
     this.loadTaskDetail()
   },
 
+  beforeUnmount() {
+    this.stopTaskPolling()
+  },
+
   methods: {
     handleReturn() {
       if (this.returnTarget?.path) {
@@ -495,6 +534,51 @@ export default {
       })
     },
 
+    goToAutoReviews() {
+      this.$router.push({
+        path: '/ai-generation/reviews/ai-auto',
+        query: {
+          taskId: this.task.task_id || this.taskId,
+          project: String(this.task.project || ''),
+          from: 'detail',
+          fromPath: this.$route.fullPath,
+          fromTitle: this.$route.meta?.title || '任务详情',
+          fromModule: this.$route.meta?.module || 'test-design'
+        }
+      })
+    },
+
+    async cancelGenerationTask() {
+      if (!this.taskStatusAllowsCancel) {
+        return
+      }
+
+      try {
+        await api.post(`/requirement-analysis/testcase-generation/${this.taskId}/cancel/`)
+        ElMessage.success('任务已取消')
+        await this.loadTaskDetail()
+      } catch (error) {
+        ElMessage.error(`取消任务失败: ${error.response?.data?.error || error.message}`)
+      }
+    },
+
+    startTaskPolling() {
+      if (!this.taskStatusAllowsCancel || this.pollTimer) {
+        return
+      }
+
+      this.pollTimer = setInterval(() => {
+        this.loadTaskDetail({ silent: true })
+      }, 3000)
+    },
+
+    stopTaskPolling() {
+      if (this.pollTimer) {
+        clearInterval(this.pollTimer)
+        this.pollTimer = null
+      }
+    },
+
     // 复制需求描述文本
     async copyRequirementText() {
       try {
@@ -518,7 +602,7 @@ export default {
       }
     },
 
-    async loadTaskDetail() {
+    async loadTaskDetail({ silent = false } = {}) {
       try {
         const taskResponse = await api.get(`/requirement-analysis/testcase-generation/${this.taskId}/progress/`)
         this.task = taskResponse.data
@@ -531,9 +615,16 @@ export default {
           this.testCases = []
         }
         this.selectedCases = []
+        if (this.taskStatusAllowsCancel) {
+          this.startTaskPolling()
+        } else {
+          this.stopTaskPolling()
+        }
       } catch (error) {
         console.error('Failed to load task details:', error)
-        ElMessage.error(this.$t('taskDetail.loadFailed'))
+        if (!silent) {
+          ElMessage.error(this.$t('taskDetail.loadFailed'))
+        }
       } finally {
         this.isLoading = false
       }
@@ -715,8 +806,12 @@ export default {
       this.selectedCases = this.selectedCases.filter(testCase => !this.isCaseReadonly(testCase))
     },
 
+    canMutateSingleCase(testCase) {
+      return this.taskStatusAllowsResultMutation && testCase?.result_status === 'pending'
+    },
+
     isCaseReadonly(testCase) {
-      return testCase?.result_status !== 'pending'
+      return !this.canMutateSingleCase(testCase)
     },
 
     buildCaseSourceTag(testCase, fallbackIndex) {
@@ -732,6 +827,10 @@ export default {
     },
 
     async batchAdopt() {
+      if (!this.taskStatusAllowsResultMutation) {
+        ElMessage.warning('当前任务状态不允许继续处理生成结果。')
+        return
+      }
       if (this.processingSummary.pending_count === 0) {
         ElMessage.warning('当前任务已无可采纳的待处理结果。')
         return
@@ -794,6 +893,10 @@ export default {
     },
 
     async batchDiscard() {
+      if (!this.taskStatusAllowsResultMutation) {
+        ElMessage.warning('当前任务状态不允许继续处理生成结果。')
+        return
+      }
       if (this.processingSummary.pending_count === 0) {
         ElMessage.warning('当前任务已无可弃用的待处理结果。')
         return
@@ -862,6 +965,10 @@ export default {
 
     // 开始编辑
     startEdit() {
+      if (this.isCaseReadonly(this.selectedCase)) {
+        ElMessage.info('当前结果已进入只读状态，请前往正式测试用例资产页继续编辑。')
+        return
+      }
       this.isEditing = true
 
       this.editForm = {
@@ -891,6 +998,10 @@ export default {
 
     // 保存编辑
     async saveEdit() {
+      if (!this.taskStatusAllowsResultMutation) {
+        ElMessage.warning('当前任务状态不允许继续编辑生成结果。')
+        return
+      }
       // 简单验证
       if (!this.editForm.scenario?.trim()) {
         ElMessage.warning(this.$t('taskDetail.enterScenario'))
@@ -983,6 +1094,10 @@ export default {
     },
 
     async adoptSingleCase(testCase, index) {
+      if (!this.taskStatusAllowsResultMutation) {
+        ElMessage.warning('当前任务状态不允许继续处理生成结果。')
+        return
+      }
       if (this.processingSummary.pending_count === 0) {
         ElMessage.warning('当前任务已无可采纳的待处理结果。')
         return
@@ -1052,6 +1167,10 @@ export default {
     },
 
     async discardSingleCase(testCase, index) {
+      if (!this.taskStatusAllowsResultMutation) {
+        ElMessage.warning('当前任务状态不允许继续处理生成结果。')
+        return
+      }
       if (this.processingSummary.pending_count === 0) {
         ElMessage.warning('当前任务已无可弃用的待处理结果。')
         return

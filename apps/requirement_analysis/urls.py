@@ -10,6 +10,7 @@ from .views import (
     PromptConfigViewSet,
     GenerationConfigViewSet,
     TestCaseGenerationTaskViewSet,
+    TaskAutoReviewRecordViewSet,
     ConfigStatusViewSet,
     upload_and_analyze,
     analyze_text
@@ -26,6 +27,7 @@ router.register(r'ai-models', AIModelConfigViewSet, basename='aimodelconfig')
 router.register(r'prompts', PromptConfigViewSet, basename='promptconfig')
 router.register(r'generation-config', GenerationConfigViewSet, basename='generationconfig')
 router.register(r'testcase-generation', TestCaseGenerationTaskViewSet, basename='testcasegenerationtask')
+router.register(r'auto-reviews', TaskAutoReviewRecordViewSet, basename='taskautoreviewrecord')
 router.register(r'config', ConfigStatusViewSet, basename='configstatus')
 
 app_name = 'requirement_analysis'

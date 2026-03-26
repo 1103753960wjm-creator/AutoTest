@@ -263,7 +263,7 @@
       </div>
 
       <!-- 生成进度和结果 -->
-      <div v-if="isGenerating || showResults" class="generation-progress">
+      <div v-if="showGenerationPanel" class="generation-progress">
         <div class="progress-card">
           <h3>
             {{ $t('requirementAnalysis.aiGeneratingTitle') }}
@@ -343,7 +343,7 @@
               <span>📝 {{ $t('requirementAnalysis.newGeneration') }}</span>
             </button>
           </div>
-          <button v-else class="cancel-generation-btn" @click="cancelGeneration">
+          <button v-else-if="canCancelCurrentTask" class="cancel-generation-btn" @click="cancelGeneration">
             {{ $t('requirementAnalysis.cancelGeneration') }}
           </button>
         </div>
@@ -374,6 +374,13 @@ import { ElMessage } from 'element-plus'
 import * as XLSX from 'xlsx'
 import { useUserStore } from '@/stores/user'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
+import {
+  GENERATION_TERMINAL_STATUSES,
+  clearGenerationTaskContext,
+  createGenerationTaskTracker,
+  loadGenerationTaskContext,
+  saveGenerationTaskContext
+} from '@/composables/useGenerationTaskTracking'
 
 export default {
   name: 'RequirementAnalysisView',
@@ -406,14 +413,15 @@ export default {
       // 生成状态
       isGenerating: false,
       currentTaskId: null,
+      currentTaskStatus: '',
       progressText: '',
       currentStep: 0,
-      pollInterval: null,
-      eventSource: null,  // SSE连接
+      taskTracker: null,
       streamedContent: '',  // 流式接收的内容
       streamedReviewContent: '',  // 流式接收的评审内容
       finalTestCases: '',  // 最终版用例
       hasShownCompletionMessage: false,  // 是否已经显示过完成消息
+      lastFailureNoticeKey: '',  // 已提示过的失败标识，避免轮询重复弹错
       showReviewStep: true,  // 是否显示评审步骤（根据生成配置决定）
 
       // 生成结果
@@ -517,9 +525,21 @@ export default {
     currentTaskRouteId() {
       return this.currentTaskId || this.generationResult?.task_id || ''
     },
+    showGenerationPanel() {
+      return this.isGenerating || this.showResults || Boolean(this.currentTaskRouteId)
+    },
+    canCancelCurrentTask() {
+      return ['pending', 'generating', 'reviewing', 'revising'].includes(this.currentTaskStatus)
+    },
     resolvedTaskSummaryLabel() {
       if (this.showResults && this.generationResult?.task_id) {
         return `任务 ${this.generationResult.task_id} 已完成，可继续进入任务页查看任务对象摘要。`
+      }
+      if (this.currentTaskStatus === 'cancelled' && this.currentTaskId) {
+        return `任务 ${this.currentTaskId} 已取消，当前页面仍保留任务对象与查看入口。`
+      }
+      if (this.currentTaskStatus === 'failed' && this.currentTaskId) {
+        return `任务 ${this.currentTaskId} 已失败，可继续进入任务详情页查看失败信息与结果边界。`
       }
       if (this.isGenerating && this.currentTaskId) {
         return `任务 ${this.currentTaskId} 正在运行，可随时进入任务详情页查看状态。`
@@ -554,18 +574,24 @@ export default {
     }
   },
 
-  mounted() {
+  async mounted() {
     this.progressText = this.$t('requirementAnalysis.preparing')
-    this.loadProjects()
-    this.checkConfigStatus()
+    this.ensureTaskTracker()
+    await this.loadProjects()
+    await this.checkConfigStatus()
+    await this.recoverTaskContext()
   },
 
   watch: {
     '$route.query.project'() {
       this.syncProjectContextFromRoute()
+      this.recoverTaskContext()
     },
     '$route.query.projectName'() {
       this.syncProjectContextFromRoute()
+    },
+    '$route.query.taskId'() {
+      this.recoverTaskContext()
     }
   },
 
@@ -580,13 +606,16 @@ export default {
     // 延迟检查配置，确保页面完全加载后再显示弹窗
     setTimeout(async () => {
       await this.checkConfigStatus()
+      await this.recoverTaskContext()
     }, 200)
   },
 
+  deactivated() {
+    this.disposeTaskTracker()
+  },
+
   beforeUnmount() {
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval)
-    }
+    this.disposeTaskTracker()
     // 停止token自动刷新定时器
     const userStore = useUserStore()
     userStore.stopAutoRefresh()
@@ -601,6 +630,188 @@ export default {
 
       this.manualInput.selectedProject = String(projectFromQuery)
       this.selectedProject = String(projectFromQuery)
+    },
+
+    ensureTaskTracker() {
+      if (!this.taskTracker) {
+        this.taskTracker = createGenerationTaskTracker()
+      }
+    },
+
+    disposeTaskTracker() {
+      this.taskTracker?.dispose()
+      this.taskTracker = null
+    },
+
+    getTaskContextProjectId(task = null) {
+      const candidate = task?.project || this.currentProjectId || this.$route.query.project || ''
+      return candidate ? String(candidate) : 'none'
+    },
+
+    replaceTaskIdQuery(taskId = '') {
+      const nextQuery = { ...this.$route.query }
+      if (taskId) {
+        nextQuery.taskId = taskId
+      } else {
+        delete nextQuery.taskId
+      }
+      this.$router.replace({ query: nextQuery })
+    },
+
+    persistTaskContext(task = null) {
+      const taskId = task?.task_id || this.currentTaskId
+      if (!taskId) {
+        return
+      }
+
+      saveGenerationTaskContext(this.getTaskContextProjectId(task), {
+        taskId,
+        projectId: this.getTaskContextProjectId(task),
+        projectName: task?.project_name || this.currentProjectLabel,
+        title: task?.title || this.manualInput.title || this.documentTitle || '生成任务',
+        status: task?.status || this.currentTaskStatus || 'pending',
+        outputMode: task?.output_mode || this.globalOutputMode || 'stream',
+        lastSeenAt: new Date().toISOString()
+      })
+    },
+
+    clearPersistedTaskContext(projectId = '') {
+      clearGenerationTaskContext(projectId || this.getTaskContextProjectId())
+    },
+
+    async recoverTaskContext() {
+      const routeTaskId = this.$route.query.taskId
+      const projectScopedContext = loadGenerationTaskContext(this.getTaskContextProjectId())
+      const taskId = routeTaskId || projectScopedContext?.taskId
+
+      if (!taskId) {
+        return
+      }
+
+      try {
+        const response = await api.get(`/requirement-analysis/testcase-generation/${taskId}/progress/`)
+        this.replaceTaskIdQuery(taskId)
+        this.applyTaskRuntimeState(response.data, { allowSuccessMessage: false })
+
+        if (!GENERATION_TERMINAL_STATUSES.includes(response.data?.status)) {
+          this.startTaskTracking(response.data.task_id, response.data.output_mode || 'stream')
+        }
+      } catch (error) {
+        this.clearPersistedTaskContext(this.getTaskContextProjectId())
+      }
+    },
+
+    startTaskTracking(taskId, outputMode = 'stream') {
+      if (!taskId) {
+        return
+      }
+
+      this.ensureTaskTracker()
+      this.taskTracker.startTracking({
+        taskId,
+        outputMode,
+        onSsePayload: (payload) => this.handleTrackedPayload(payload),
+        onPollData: (task) => this.applyTaskRuntimeState(task, { allowSuccessMessage: false }),
+        onTerminal: (task) => this.applyTaskRuntimeState(task, { allowSuccessMessage: true }),
+        onError: () => {}
+      })
+    },
+
+    handleTrackedPayload(data) {
+      if (data.type === 'progress') {
+        this.currentTaskStatus = data.status || this.currentTaskStatus
+        if (data.status === 'generating') {
+          this.currentStep = 2
+          this.progressText = `${this.$t('requirementAnalysis.statusGenerating')} ${data.progress || 0}%`
+        } else if (data.status === 'reviewing') {
+          this.currentStep = 3
+          this.progressText = `${this.$t('requirementAnalysis.statusReviewing')} ${data.progress || 0}%`
+        } else if (data.status === 'revising') {
+          this.currentStep = 3
+          this.progressText = `${this.$t('requirementAnalysis.statusRevising')} ${data.progress || 0}%`
+        }
+        return
+      }
+
+      if (data.type === 'content') {
+        this.currentStep = 2
+        this.progressText = this.$t('requirementAnalysis.statusGenerating')
+        this.streamedContent += data.content || ''
+        return
+      }
+
+      if (data.type === 'review_content') {
+        this.currentStep = 3
+        this.progressText = this.$t('requirementAnalysis.statusReviewing')
+        this.streamedReviewContent += data.content || ''
+        return
+      }
+
+      if (data.type === 'final_content') {
+        this.currentStep = 3
+        this.progressText = this.$t('requirementAnalysis.statusRevising')
+        this.finalTestCases += data.content || ''
+      }
+    },
+
+    applyTaskRuntimeState(task, { allowSuccessMessage = false } = {}) {
+      if (!task?.task_id) {
+        return
+      }
+
+      this.currentTaskId = task.task_id
+      this.currentTaskStatus = task.status || ''
+      this.persistTaskContext(task)
+
+      if (task.generated_test_cases && !this.streamedContent) {
+        this.streamedContent = task.generated_test_cases
+      }
+      if (task.review_feedback && !this.streamedReviewContent) {
+        this.streamedReviewContent = task.review_feedback
+      }
+      if (task.final_test_cases) {
+        this.finalTestCases = task.final_test_cases
+      }
+
+      if (task.status === 'completed') {
+        this.generationResult = task
+        this.showResults = true
+        this.isGenerating = false
+        this.currentStep = 4
+        this.progressText = this.$t('requirementAnalysis.statusCompleted')
+        if (allowSuccessMessage && !this.hasShownCompletionMessage) {
+          ElMessage.success(this.$t('requirementAnalysis.generateCompleteSuccess'))
+          this.hasShownCompletionMessage = true
+        }
+        return
+      }
+
+      if (task.status === 'failed') {
+        this.showResults = false
+        this.isGenerating = false
+        this.progressText = this.$t('requirementAnalysis.statusFailed')
+        const failureNoticeKey = `${task.task_id}:${task.error_message || ''}`
+        if (this.lastFailureNoticeKey !== failureNoticeKey) {
+          ElMessage.error(this.$t('requirementAnalysis.generateFailed') + ': ' + (task.error_message || this.$t('requirementAnalysis.unknownError')))
+          this.lastFailureNoticeKey = failureNoticeKey
+        }
+        return
+      }
+
+      if (task.status === 'cancelled') {
+        this.showResults = false
+        this.isGenerating = false
+        this.progressText = '已取消，可继续查看任务详情'
+        return
+      }
+
+      this.showResults = false
+      this.isGenerating = true
+      if (task.status === 'reviewing' || task.status === 'revising') {
+        this.currentStep = 3
+      } else {
+        this.currentStep = 2
+      }
     },
 
     goToProjectDetail() {
@@ -912,6 +1123,7 @@ export default {
       this.finalTestCases = ''  // 清空最终版用例
       this.streamedReviewContent = ''  // 清空评审内容
       this.hasShownCompletionMessage = false  // 重置完成消息标志位
+      this.lastFailureNoticeKey = ''  // 重置失败提示标志位
       this.showResults = false  // 隐藏上一次的结果
 
       try {
@@ -932,16 +1144,20 @@ export default {
         const response = await api.post('/requirement-analysis/testcase-generation/generate/', requestData)
 
         this.currentTaskId = response.data.task_id
+        this.currentTaskStatus = response.data.task?.status || 'pending'
         this.progressText = this.$t('requirementAnalysis.taskCreated')
+        this.replaceTaskIdQuery(this.currentTaskId)
+        this.persistTaskContext({
+          task_id: this.currentTaskId,
+          status: this.currentTaskStatus,
+          output_mode: outputMode,
+          project: projectId || null,
+          project_name: this.currentProjectLabel,
+          title
+        })
 
         ElMessage.success(this.$t('requirementAnalysis.generateSuccess'))
-
-        // 根据输出模式选择不同的进度获取方式
-        if (outputMode === 'stream') {
-          this.startStreamingProgress()
-        } else {
-          this.startPolling()
-        }
+        this.startTaskTracking(this.currentTaskId, outputMode)
 
       } catch (error) {
         console.error(this.$t('requirementAnalysis.createTaskFailed'), error)
@@ -1213,13 +1429,37 @@ export default {
     },
 
     cancelGeneration() {
-      if (this.pollInterval) {
-        clearInterval(this.pollInterval)
-        this.pollInterval = null
+      if (!this.currentTaskId) {
+        return
       }
-      this.isGenerating = false
-      this.currentTaskId = null
-      ElMessage.info(this.$t('requirementAnalysis.generationCancelled'))
+
+      api.post(`/requirement-analysis/testcase-generation/${this.currentTaskId}/cancel/`)
+        .then(async () => {
+          this.taskTracker?.stopTracking()
+          this.currentTaskStatus = 'cancelled'
+          this.isGenerating = false
+          this.progressText = '已取消，可继续查看任务详情'
+          this.persistTaskContext({
+            task_id: this.currentTaskId,
+            status: 'cancelled',
+            output_mode: this.globalOutputMode,
+            project: this.currentProjectId || null,
+            project_name: this.currentProjectLabel,
+            title: this.manualInput.title || this.documentTitle || '生成任务'
+          })
+
+          try {
+            const response = await api.get(`/requirement-analysis/testcase-generation/${this.currentTaskId}/progress/`)
+            this.applyTaskRuntimeState(response.data, { allowSuccessMessage: false })
+          } catch (error) {
+            // 取消成功但补拉状态失败时，仍保留当前任务入口
+          }
+
+          ElMessage.info(this.$t('requirementAnalysis.generationCancelled'))
+        })
+        .catch((error) => {
+          ElMessage.error(`取消生成失败: ${error.response?.data?.error || error.message}`)
+        })
     },
 
     // 下载测试用例为xlsx文件
@@ -1343,22 +1583,21 @@ export default {
 
     resetGeneration() {
       // 重置生成状态
+      this.taskTracker?.stopTracking()
       this.isGenerating = false;
       this.currentTaskId = null;
+      this.currentTaskStatus = '';
       this.progressText = this.$t('requirementAnalysis.preparing');
       this.currentStep = 0;
       this.showResults = false;
       this.generationResult = null;
+      this.replaceTaskIdQuery('');
+      this.clearPersistedTaskContext(this.getTaskContextProjectId());
 
       // 清空流式内容和最终版用例
       this.streamedContent = '';
       this.streamedReviewContent = '';
       this.finalTestCases = '';
-
-      if (this.pollInterval) {
-        clearInterval(this.pollInterval);
-        this.pollInterval = null;
-      }
 
       // 刷新页面以获取最新的配置
       window.location.reload();

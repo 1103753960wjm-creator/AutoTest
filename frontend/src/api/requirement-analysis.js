@@ -147,3 +147,22 @@ export function deletePromptConfig(id) {
     method: 'delete'
   })
 }
+
+// ==================== 自动 AI 评审记录 ====================
+
+// 获取自动 AI 评审记录列表
+export function getAutoReviewRecords(params) {
+  return request({
+    url: '/requirement-analysis/auto-reviews/',
+    method: 'get',
+    params
+  })
+}
+
+// 获取单条自动 AI 评审记录
+export function getAutoReviewRecordDetail(id) {
+  return request({
+    url: `/requirement-analysis/auto-reviews/${id}/`,
+    method: 'get'
+  })
+}

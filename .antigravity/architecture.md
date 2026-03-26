@@ -1,78 +1,79 @@
 # TestHub 架构规则
 
-本文定义当前仓库必须遵守的架构边界。目标不是做“理想化重构”，而是让改动能在现有项目里稳定落地。
+## 1. 文件职责
 
-## 1. 适用范围
-- 适用于 `e:\testhub_platform-main\testhub_platform-main` 当前仓库。
-- 以当前仓库真实结构为准，不为了“规范完整”强推大迁移。
-- 新增代码优先贴合现有目录和调用方式，再考虑抽象升级。
+本文件属于 B 层“项目规则”，用于定义当前仓库长期有效的架构边界和模块职责。
 
 ## 2. 项目全局结构
-- 根目录包含 `manage.py`、`backend`、`apps`、`frontend`、`media`、`logs`、`allure`、`docs`。
-- `backend` 是 Django 项目配置层，负责全局设置、URL 汇总、中间件、ASGI/WSGI、Celery 启动入口。
-- `apps` 是 Django 业务应用层，负责用户、项目、需求分析、测试执行、AI、通知、自动化等模块。
-- `frontend` 是 Vue 3 前端，负责页面、交互、状态管理、接口调用和可视化展示。
-- 这是前后端分离项目。前端负责页面和接口消费；后端负责业务、数据、执行器、调度、通知、媒体文件和 AI 服务接入。
 
-## 3. 工程配置边界
-- 后端运行配置统一从根目录 `.env` 与 `backend/settings.py` 读取，默认值只作为兜底，不再把真实环境写死在源码里。
-- 前端开发代理和构建配置统一收敛到 `frontend/vite.config.js`，新增运行变量优先进入 `frontend/.env.*`。
-- JWT、邮件、Redis、Channels、Celery、媒体目录、报告目录都属于配置层，不得散落在业务页面和视图细节中。
-- 新增 AI 提供商、模型或模式切换，应优先进入统一配置模型或服务层，不允许把 `provider / api_key / base_url` 判断散落到多个页面和 ViewSet 中。
+- `backend`：Django 项目入口、全局设置、中间件、Celery/ASGI/WSGI 配置
+- `apps`：按业务域拆分的 Django 应用
+- `frontend`：Vue 3 管理台
+- `docs`：规则、设计、说明和阶段文档
+- `media`：上传物、截图、报告等运行产物
+- `logs`：日志产物
+- `allure`：Allure 工具和配置
 
-## 4. 后端目录职责
-- `backend/settings.py`：全局配置、已安装应用、中间件、数据库、JWT、Channels、Celery、静态资源、邮件与跨域设置。
-- `backend/urls.py`：全局 URL 汇总、媒体和报告静态挂载。
-- `apps/<module>/models.py`：数据库模型与字段语义定义。
-- `apps/<module>/serializers.py`：请求校验、字段转换、响应序列化。
-- `apps/<module>/views.py` / `views_*.py`：DRF 入口层，只做收参、调度、返回。
-- `apps/<module>/urls.py`：模块路由注册。
-- `apps/<module>/tasks.py`：Celery 异步任务、状态推进、通知触发。
-- `apps/<module>/executors/`、`runners/`、`services/`、`utils/`：复杂业务逻辑、执行器、流程编排、外部服务封装。
-- `apps/<module>/management/commands/`：初始化、调度器、驱动安装等管理命令。
+## 3. 后端架构边界
 
-## 5. 后端强约束
-- ViewSet、APIView、函数视图不得堆积复杂业务逻辑。复杂流程必须下沉到 serializer、service、executor、runner 或 task。
-- `models.py` 只做数据定义和少量模型级辅助方法，不写控制器流程，不夹带接口逻辑。
-- 请求校验优先放在 serializer 或专门的服务层，而不是直接在 view 里散写大量字段判断。
-- 新增数据库访问优先沿用 Django ORM 和迁移体系，不混入另一套 ORM 或随意原生 SQL，除非当前模块已有明确历史原因。
-- 调度、执行器、通知、报告链路属于高风险区域，修改时必须保持状态更新、结果落库、日志或通知至少三者中的必要闭环。
+后端统一链路：
 
-## 6. 前端目录职责
-- `frontend/src/views`：页面和页面级组件，负责展示、事件触发、局部状态。
-- `frontend/src/api`：可复用的接口封装，适合跨页面共享调用。
-- `frontend/src/utils/api.js`：axios 实例、JWT 注入、刷新队列、统一错误处理。
-- `frontend/src/stores`：跨页面共享状态，如用户认证、全局应用状态。
-- `frontend/src/router/index.js`：路由表与守卫。
-- `frontend/src/locales`：国际化文案。
-- `frontend/src/assets`、`components`、`layout`：公共资源、组件与布局壳。
+`backend/urls.py -> apps/<module>/urls.py -> views -> serializers/services/models`
 
-## 7. 前端强约束
-- 页面组件不得直接拼后端主机地址；请求必须走 `frontend/src/utils/api.js` 或 `frontend/src/api/*`。
-- 页面内部可以管理本页状态，但跨页面共享状态必须进 Pinia。
-- token、refresh token、用户态和认证跳转只能在 `utils/api.js`、`stores/user.js`、`router/index.js` 既有链路上扩展，不要在页面里重复实现。
-- 新功能优先沿用现有 Vue 3 Composition API + Element Plus 风格；当前仓库以 JavaScript 为主，不强行为了“统一”把局部改成另一套范式。
-- 若一个功能已经走真实后端接口，就不要再补一套本地 JSON 假数据逻辑。
+职责约束：
 
-## 8. 前后端联动边界
-- 前端数据结构必须以真实后端 serializer / response 为准，不能只为了页面方便私自改字段名。
-- 后端接口字段若变更，必须同步检查 `frontend/src/api`、页面表单、表格、路由跳转、报告页和本地缓存。
-- 涉及执行结果、报告、媒体路径、状态流转、推送消息的字段变更，必须同时检查数据库模型、接口返回、文件目录和前端展示。
+- `backend/settings.py`、`backend/urls.py`、`backend/asgi.py`、`backend/celery.py` 负责全局配置与入口注册。
+- `apps/<module>/urls.py` 负责模块路由分发。
+- `apps/<module>/views.py` 或 `views/*` 负责接口入口、请求调度和响应组织。
+- `apps/<module>/serializers.py` 负责参数校验、对象序列化和字段约束。
+- `apps/<module>/models.py` 负责数据模型和数据关系定义。
+- `services.py`、`utils.py`、执行器、管理器等负责复杂业务流程、第三方调用和多步骤编排。
 
-## 9. 当前项目的真实业务边界
-- 业务基础模块：`users`、`projects`、`versions`、`testcases`、`testsuites`、`reviews`、`executions`、`reports`。
-- AI 相关模块：`requirement_analysis`、`assistant`、`api_testing` 中的 AI 服务配置、`ui_automation` 智能模式。
-- 自动化测试模块：`api_testing`、`ui_automation`、`app_automation`。
-- 平台能力模块：`core`（统一通知与管理命令）、`data_factory`（测试数据与工具）、`backend`（全局配置）。
+强约束：
 
-## 10. 新功能放置规则
-- 新的后端业务模块优先放到 `apps/<module>` 下成套新增 `models.py`、`serializers.py`、`views.py`、`urls.py`，复杂流程再放 `tasks.py`、`services/`、`executors/`。
-- 新的前端业务页面优先放到 `frontend/src/views/<module>`，跨页面复用接口放 `frontend/src/api/<module>`。
-- 若只是补充现有模块能力，优先在原模块内扩展，不另起一套平行目录。
+- 接口入口不得堆积复杂流程；跨模型、多步骤、副作用明显的逻辑应下沉到服务层、执行器或工具层。
+- 新增数据访问优先沿用 Django ORM 和当前 app 内模式，不随意引入并行 ORM 或散写原生 SQL。
+- 认证、通知、执行器、异步任务、报告生成属于高风险链路，修改时必须同时考虑状态、结果、日志和前端展示影响。
 
-## 11. 明确禁止
-- 把执行器、AI 调用或调度逻辑直接写进 Django 视图函数。
-- 在 Vue 页面里直接发裸 axios 请求或直接写死后端主机地址。
-- 同一个业务同时维护两套字段定义，只靠“页面猜字段”去兼容。
-- 为了单次需求引入新的前端状态管理、UI 框架、Python Web 框架或 ORM。
-- 修改 IP、端口、路径、密钥时散落多处硬编码，不回收到配置层。
+## 4. 前端架构边界
+
+前端统一链路：
+
+`View -> src/api/* -> src/utils/api.js -> Backend /api/*`
+
+职责约束：
+
+- `frontend/src/views`：页面和页面级交互逻辑
+- `frontend/src/api`：所有后端接口封装
+- `frontend/src/utils/api.js`：axios 实例、请求/响应拦截器、鉴权续期逻辑
+- `frontend/src/stores`：Pinia 全局状态
+- `frontend/src/router`：静态路由、路由守卫、深链接和 route meta
+- `frontend/src/layout`：平台壳层、全局头部、侧边导航、页面头部
+- `frontend/src/components`：可复用组件
+- `frontend/src/config`：导航等前端配置真源
+
+强约束：
+
+- 页面和组件不得直接散写裸 axios 请求。
+- token、登录态、用户信息、最近访问、全局搜索等跨页面状态必须沿用既有 router/store/utils 链路扩展。
+- 新功能优先沿用现有 Vue 3 SFC、Pinia、Element Plus 和平台壳组织方式。
+- 若一个功能已经走真实后端接口，不再平行维护一套本地假数据流程。
+
+## 5. 前后端联动边界
+
+- 前端字段命名、路由参数和页面展示应以真实后端接口为准，不为了页面方便私改后端语义。
+- 后端接口字段变更时，必须同步检查 `frontend/src/api/*`、相关页面、表单、表格、路由回跳和文档。
+- 新增 route meta 字段时，必须同步更新 `frontend/src/types/router-meta.d.ts`。
+
+## 6. AI 能力接入边界
+
+- 新增 AI 能力不得继续在普通页面、零散工具函数或无统一配置的脚本中直连模型。
+- 新增 AI 接入应优先复用 `apps.assistant`、`apps.requirement_analysis` 或已有 AI 服务封装层，并将模型配置、提示词配置、行为配置统一收敛到既有配置链路。
+- 若历史代码已存在散点调用，本轮新增改动不得继续扩散新的并行入口。
+
+## 7. 明确禁止
+
+- 在页面组件中直接拼接后端绝对地址或裸请求。
+- 在 Django 入口层塞入跨多个对象和副作用链路的大段业务逻辑。
+- 为局部需求引入与现有技术栈冲突的新框架、新状态管理或新请求通路。
+- 在业务模块中散写环境地址、密钥、路径和模型调用入口。

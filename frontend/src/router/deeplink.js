@@ -19,6 +19,7 @@ const SUPPORTED_DEEPLINK_PATTERNS = [
   /^\/ai-generation\/testcases\/[^/]+$/,
   /^\/ai-generation\/testcases\/[^/]+\/edit$/,
   /^\/ai-generation\/task-detail\/[^/]+$/,
+  /^\/ai-generation\/reviews\/ai-auto$/,
   /^\/ai-generation\/executions\/[^/]+$/
 ]
 

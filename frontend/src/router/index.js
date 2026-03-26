@@ -238,6 +238,20 @@ const routes = [
         })
       },
       {
+        path: 'reviews/ai-auto',
+        name: 'AutoReviewList',
+        component: () => import('@/views/reviews/AutoReviewList.vue'),
+        meta: createRouteMeta({
+          title: 'AI 自动评审',
+          module: 'test-design',
+          pageType: 'list',
+          icon: 'magic-stick',
+          hidden: true,
+          parentTitle: '评审列表',
+          activeMenu: '/ai-generation/reviews'
+        })
+      },
+      {
         path: 'reviews/create',
         name: 'CreateReview',
         component: () => import('@/views/reviews/ReviewForm.vue'),

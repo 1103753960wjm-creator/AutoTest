@@ -3,6 +3,9 @@
     <div class="page-header">
       <h1 class="page-title">{{ $t('reviewList.title') }}</h1>
       <div>
+        <el-button @click="goToAutoReviews">
+          查看 AI 自动评审
+        </el-button>
         <el-button type="primary" @click="createReview">
           <el-icon><Plus /></el-icon>
           {{ $t('reviewList.createReview') }}
@@ -250,6 +253,10 @@ const fetchUsers = async () => {
 
 const createReview = () => {
   router.push('/ai-generation/reviews/create')
+}
+
+const goToAutoReviews = () => {
+  router.push('/ai-generation/reviews/ai-auto')
 }
 
 const viewReview = (id) => {

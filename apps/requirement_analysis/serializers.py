@@ -12,6 +12,7 @@ from .models import (
     AIModelConfig,
     PromptConfig,
     TestCaseGenerationTask,
+    TaskAutoReviewRecord,
     GenerationConfig,
 )
 
@@ -147,6 +148,47 @@ def _build_task_failure_summary(obj):
         "stage": stage,
         "label": "任务最近一次执行失败",
         "detail": obj.error_message,
+    }
+
+
+def _get_latest_auto_review_record(obj):
+    prefetched_records = getattr(obj, "_prefetched_objects_cache", {}).get("auto_review_records")
+    if prefetched_records:
+        return prefetched_records[0]
+    return obj.auto_review_records.order_by("-created_at", "-id").first()
+
+
+def _build_auto_review_summary(obj):
+    record = _get_latest_auto_review_record(obj)
+    if not record:
+        return {
+            "has_record": False,
+            "review_id": None,
+            "status": "not_triggered",
+            "label": "未触发自动评审",
+            "detail": "当前生成任务尚未触发自动 AI 评审记录。",
+            "entry_path": f"/ai-generation/reviews/ai-auto?taskId={obj.task_id}",
+            "created_at": None,
+        }
+
+    summary_map = {
+        "reviewing": ("自动评审进行中", "当前任务的自动 AI 评审仍在执行，可进入统一入口继续查看。"),
+        "completed": ("已生成 AI 自动评审", "来自当前生成任务的自动评审记录，可进入统一 AI 评审入口查看。"),
+        "failed": ("自动评审失败", record.failure_message or "自动评审执行失败，可进入统一入口查看失败信息。"),
+        "cancelled": ("自动评审已取消", "自动评审在生成链执行过程中被取消，可进入统一入口查看保留内容。"),
+    }
+    label, detail = summary_map.get(
+        record.review_status,
+        ("自动评审状态未知", "当前自动评审记录已存在，但状态未匹配固定枚举。"),
+    )
+    return {
+        "has_record": True,
+        "review_id": record.id,
+        "status": record.review_status,
+        "label": label,
+        "detail": detail,
+        "entry_path": f"/ai-generation/reviews/ai-auto?taskId={obj.task_id}",
+        "created_at": record.created_at,
     }
 
 
@@ -556,6 +598,7 @@ class TestCaseGenerationTaskSerializer(serializers.ModelSerializer):
     prompt_source_summary = serializers.SerializerMethodField()
     failure_summary = serializers.SerializerMethodField()
     downstream_summary = serializers.SerializerMethodField()
+    auto_review_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = TestCaseGenerationTask
@@ -567,6 +610,9 @@ class TestCaseGenerationTaskSerializer(serializers.ModelSerializer):
             "status",
             "status_display",
             "progress",
+            "output_mode",
+            "stream_buffer",
+            "last_stream_update",
             "project",
             "project_name",
             "writer_model_config",
@@ -598,6 +644,7 @@ class TestCaseGenerationTaskSerializer(serializers.ModelSerializer):
             "prompt_source_summary",
             "failure_summary",
             "downstream_summary",
+            "auto_review_summary",
             "is_saved_to_records",
             "saved_at",
         ]
@@ -692,6 +739,9 @@ class TestCaseGenerationTaskSerializer(serializers.ModelSerializer):
         validated_data["task_id"] = f"TASK_{uuid.uuid4().hex[:8].upper()}"
         return super().create(validated_data)
 
+    def get_auto_review_summary(self, obj):
+        return _build_auto_review_summary(obj)
+
 
 class TestCaseGenerationRequestSerializer(serializers.Serializer):
     """新的测试用例生成请求序列化器"""
@@ -701,6 +751,38 @@ class TestCaseGenerationRequestSerializer(serializers.Serializer):
     project = serializers.IntegerField(required=False, allow_null=True, help_text="关联项目 ID")
     use_writer_model = serializers.BooleanField(default=True, help_text="是否使用编写模型")
     use_reviewer_model = serializers.BooleanField(default=True, help_text="是否使用评审模型")
+
+
+class TaskAutoReviewRecordSerializer(serializers.ModelSerializer):
+    """自动 AI 评审记录序列化器"""
+
+    project_name = serializers.CharField(source="project.name", read_only=True)
+    task_id = serializers.CharField(source="task.task_id", read_only=True)
+    task_title = serializers.CharField(source="task.title", read_only=True)
+
+    class Meta:
+        model = TaskAutoReviewRecord
+        fields = [
+            "id",
+            "task",
+            "task_id",
+            "task_title",
+            "project",
+            "project_name",
+            "review_source",
+            "source_stage",
+            "review_status",
+            "review_summary",
+            "review_content",
+            "reviewer_model_name",
+            "reviewer_prompt_name",
+            "result_identity_snapshot",
+            "failure_message",
+            "created_at",
+            "updated_at",
+            "completed_at",
+        ]
+        read_only_fields = fields
 
 
 class GenerationConfigSerializer(serializers.ModelSerializer):

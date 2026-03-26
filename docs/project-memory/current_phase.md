@@ -1,15 +1,16 @@
-# TestHub 会话记忆
+# TestHub 项目开发记忆
 
-更新时间：2026-03-21
+更新时间：2026-03-25
 
-## 1. 目的
+## 1. 文件职责
 
-本文件用于保存当前项目最近几轮高频对话形成的稳定记忆，供后续新对话快速接手。
+本文件属于 C 层“项目开发记忆”，用于记录当前项目推进过程中的阶段事实、冻结方案、当前验收口径和下一步主线。
 
 使用原则：
 
-- 新对话进入仓库后，优先阅读本文件。
-- 本文件只记录“已经确认的项目事实、冻结方案、已落地产物和稳定约束”。
+- 本文件只记录“已经确认的项目事实、冻结方案、已落地产物、当前验收口径和阶段限制”。
+- 正式规则以 `GEMINI.md` 和仓库内 `.antigravity/*.md` 为准。
+- 新对话快速进入上下文统一查看 `docs/project-memory/dialogue_bootstrap.md`，本文件不再承担启动捷径职责。
 - 若本文件与实际代码冲突，以实际代码为准，并及时回写本文件。
 
 ## 2. 当前项目真实基线
@@ -27,7 +28,7 @@
   - Allure 报告
   - Webhook / 邮件通知
 
-## 3. 当前对话中已经冻结的关键结论
+## 3. 当前阶段已冻结的关键结论
 
 ### 3.1 平台现状地图
 
@@ -399,6 +400,45 @@
   - `来源未记录`
   - `AI 来源待补齐`
 
+### 3.21 2.2 任务状态、真取消与自动评审入口收口
+
+2026-03-26 已完成一轮面向 2.2 主链路状态的高优先级收口，重点不是重做对象层，而是修复“任务状态、真取消、恢复入口和自动评审可追踪性”。
+
+当前冻结结论：
+
+- `RequirementAnalysisView -> TestCaseGenerationTask -> Generated Results -> TaskAutoReviewRecord -> TestCase` 是当前已成立的 2.2 主链
+- 取消生成采用“应用层协作式真取消”，不是前端假取消，也不是厂商侧远端硬中断
+- 所有最终结果写库前都必须再次执行取消检查，避免 `cancelled` 被后续结果写回污染
+- 任务恢复上下文按项目维度持久化，固定使用项目隔离的 `sessionStorage` key，避免跨项目恢复污染
+- `TaskDetail` 对所有任务状态可见，但操作能力必须同时受“任务状态 + 结果处理状态”双重门禁限制
+- 自动 AI 评审本轮不并入现有手工评审列表，而是升级为独立的 `TaskAutoReviewRecord`
+- `TaskAutoReviewRecord` 使用 `ForeignKey(task)`，不锁死一对一
+- 页面默认只消费“每任务最新一条自动评审记录”
+- 自动评审最新记录的排序规则固定为：`created_at DESC, id DESC`，其中 `id DESC` 是最终稳定兜底
+- `TaskAutoReviewRecord.source_stage` 本轮固定为 `generation_review`
+- `auto_review_summary.status` 固定使用以下枚举，不再依赖文案猜测：
+  - `not_triggered`
+  - `reviewing`
+  - `completed`
+  - `failed`
+  - `cancelled`
+- AutoReviewList 本轮默认只展示每任务最新一条自动评审记录，不展开历史记录列表；但每条记录必须可展开查看完整内容
+
+相关文件：
+
+- `docs/ai-generation-chain-spec.md`
+- `docs/ai-generation-cancel-spec.md`
+- `docs/ai-review-link-spec.md`
+- `apps/requirement_analysis/models.py`
+- `apps/requirement_analysis/serializers.py`
+- `apps/requirement_analysis/views.py`
+- `frontend/src/composables/useGenerationTaskTracking.js`
+- `frontend/src/views/requirement-analysis/RequirementAnalysisView.vue`
+- `frontend/src/views/requirement-analysis/TaskDetail.vue`
+- `frontend/src/views/requirement-analysis/GeneratedTestCaseList.vue`
+- `frontend/src/views/reviews/AutoReviewList.vue`
+- `frontend/src/views/reviews/ReviewList.vue`
+
 ## 4. 当前代码层已落地、但仍需继续推进的点
 
 以下内容已经有“基座”或“真源”，但尚未全站完成：
@@ -420,7 +460,7 @@
 - 任务详情页和生成结果批次页的结果数量口径必须统一，避免不同页面各自解析导致数量不一致
 - 重复采纳、批量采纳、保存到正式用例三条入口都必须走同一套幂等逻辑，不能只修一个入口
 
-## 6. 已知环境问题
+## 6. 当前验收与环境限制
 
 当前环境有以下验证限制：
 
@@ -436,28 +476,17 @@
 - 做后端改动时，至少做导入级或编译级校验
 - 若验证失败，要先区分是环境问题还是代码问题
 
-## 7. 与用户协作的固定偏好
+## 7. 当前阶段推进原则
 
-这是当前对话里已反复体现的偏好，后续严格保持：
+以下内容仍作为当前阶段推进口径继续有效：
 
-- 沟通统一使用中文
-- 规范、设计、任务、交付说明统一用中文
-- 每次完成功能或文档变更后，必须主动将变更信息同步至 `更新日志.md` (Changelog) 并一并提交
-- 优先做“规划 + 轻量落地”，避免一次性大重构
 - 对平台级任务，先冻结边界、真源和基线，再逐步替换旧页面
-- 若只是项目特有规则需要修正，就改；跨项目都成立的通用规则不要乱动
 - 2.x 阶段任务推进时，必须先明确“本轮边界”，防止对象层、生成链路、资产承接、自动化草稿中心和执行闭环混成一轮
+- 若阶段结论已经沉淀为长期规则，应同步回写仓库内 `.antigravity/*.md`，不要长期停留在本文件里
 
-## 8. 新对话接手建议
+## 8. 下一步主线
 
-新对话若继续本项目，建议按以下顺序读取：
-
-1. `AGENTS.md`
-2. 本文件 `MEMORY.md`
-3. 与当前任务最相关的 `docs/*.md`
-4. 实际前端 / 后端入口代码
-
-若后续继续推进平台化和测试设计收口，优先顺序建议为：
+若后续继续推进平台化和测试设计收口，当前建议顺序为：
 
 1. 继续接入统一状态组件
 2. 把导航真源接入 layout / 首页

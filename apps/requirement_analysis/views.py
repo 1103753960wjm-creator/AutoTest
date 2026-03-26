@@ -30,10 +30,12 @@ from django.utils.decorators import method_decorator
 from django.utils import timezone
 from asgiref.sync import sync_to_async
 from django.db import models
+from django.db.models import OuterRef, Subquery
 
 from .models import (
     RequirementDocument, RequirementAnalysis, BusinessRequirement,
     GeneratedTestCase, AnalysisTask, AIModelConfig, PromptConfig, TestCaseGenerationTask,
+    TaskAutoReviewRecord,
     GenerationConfig, AIModelService
 )
 from .serializers import (
@@ -42,7 +44,7 @@ from .serializers import (
     AnalysisTaskSerializer, DocumentUploadSerializer,
     TestCaseGenerationRequestSerializer, TestCaseReviewRequestSerializer,
     AIModelConfigSerializer, PromptConfigSerializer, TestCaseGenerationTaskSerializer,
-    GenerationConfigSerializer
+    GenerationConfigSerializer, TaskAutoReviewRecordSerializer
 )
 from .result_parser import parse_generated_results
 from .result_status import (
@@ -50,6 +52,7 @@ from .result_status import (
     RESULT_STATUS_ADOPTED,
     RESULT_STATUS_DISCARDED,
     attach_result_status,
+    build_result_key,
     get_result_status_summary,
     mark_result_status,
 )
@@ -63,6 +66,40 @@ from apps.versions.models import Version
 _parse_generated_results = parse_generated_results
 
 logger = logging.getLogger(__name__)
+
+
+class TaskCancelledError(Exception):
+    """任务在执行链中被协作式取消时抛出的异常"""
+
+
+def _refresh_task_status(task_id):
+    """刷新任务状态，避免使用线程中的陈旧对象"""
+    return TestCaseGenerationTask.objects.only("id", "status").get(task_id=task_id)
+
+
+def _ensure_task_not_cancelled(task_id, stage):
+    """在关键阶段进入前检查任务是否已取消"""
+    latest_task = _refresh_task_status(task_id)
+    if latest_task.status == "cancelled":
+        raise TaskCancelledError(f"任务 {task_id} 已在 {stage} 阶段前取消")
+    return latest_task
+
+
+def _build_review_result_identity_snapshot(parsed_results):
+    """构建自动评审记录关联的结果身份快照"""
+    snapshot = []
+    for fallback_index, item in enumerate(parsed_results or [], start=1):
+        case_index = item.get("index") or fallback_index
+        case_id = str(item.get("case_id") or item.get("caseId") or "").strip()
+        snapshot.append(
+            {
+                "result_key": build_result_key(case_id, case_index),
+                "case_id": case_id,
+                "case_index": case_index,
+                "title_excerpt": str(item.get("scenario") or "")[:120],
+            }
+        )
+    return snapshot
 
 
 class RequirementDocumentViewSet(viewsets.ModelViewSet):
@@ -479,7 +516,12 @@ class GeneratedTestCaseViewSet(viewsets.ModelViewSet):
     http_method_names = ['get', 'patch']  # 只允许GET和PATCH方法
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().select_related(
+            'requirement',
+            'requirement__analysis',
+            'requirement__analysis__document',
+            'requirement__analysis__document__project',
+        )
 
         # 按需求ID过滤
         requirement_id = self.request.query_params.get('requirement_id')
@@ -1297,7 +1339,13 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
     lookup_field = 'task_id'  # 使用task_id作为查找字段
 
     def get_queryset(self):
-        queryset = super().get_queryset()
+        queryset = super().get_queryset().select_related(
+            'project',
+            'writer_model_config',
+            'reviewer_model_config',
+            'writer_prompt_config',
+            'reviewer_prompt_config',
+        ).prefetch_related('auto_review_records')
 
         # 安全检查：确保request有query_params属性
         if not hasattr(self.request, 'query_params'):
@@ -1318,6 +1366,99 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(project_id=project_id)
 
         return queryset.order_by('-created_at')
+
+    def _build_cancel_checker(self, task_id, interval_seconds=1.0):
+        """构建协作式取消检查器，避免流式回调每个 chunk 查库"""
+        state = {"last_checked_at": 0.0}
+
+        def check(stage, force=False):
+            now = time.monotonic()
+            if force or now - state["last_checked_at"] >= interval_seconds:
+                state["last_checked_at"] = now
+                _ensure_task_not_cancelled(task_id, stage)
+
+        return check
+
+    def _get_latest_auto_review_record(self, task):
+        return task.auto_review_records.order_by('-created_at', '-id').first()
+
+    def _create_auto_review_record(self, task, parsed_results):
+        """为当前自动评审尝试创建一条独立记录"""
+        return TaskAutoReviewRecord.objects.create(
+            task=task,
+            project=task.project,
+            review_source='ai_auto',
+            source_stage='generation_review',
+            review_status='reviewing',
+            review_summary='自动评审进行中',
+            reviewer_model_name=task.reviewer_model_config.name if task.reviewer_model_config else '',
+            reviewer_prompt_name=task.reviewer_prompt_config.name if task.reviewer_prompt_config else '',
+            result_identity_snapshot=_build_review_result_identity_snapshot(parsed_results),
+        )
+
+    def _mark_auto_review_record_reviewing(self, record):
+        if not record:
+            return
+        record.review_status = 'reviewing'
+        record.review_summary = '自动评审进行中'
+        record.failure_message = ''
+        record.completed_at = None
+        record.save(update_fields=['review_status', 'review_summary', 'failure_message', 'completed_at', 'updated_at'])
+
+    def _mark_auto_review_record_completed(self, record, content):
+        if not record:
+            return
+        record.review_status = 'completed'
+        record.review_content = content or ''
+        record.review_summary = '已生成 AI 自动评审'
+        record.failure_message = ''
+        record.completed_at = timezone.now()
+        record.save(
+            update_fields=[
+                'review_status',
+                'review_content',
+                'review_summary',
+                'failure_message',
+                'completed_at',
+                'updated_at',
+            ]
+        )
+
+    def _mark_auto_review_record_failed(self, record, message, partial_content=''):
+        if not record:
+            return
+        record.review_status = 'failed'
+        record.review_summary = '自动评审失败'
+        record.review_content = partial_content or record.review_content
+        record.failure_message = str(message or '')
+        record.completed_at = timezone.now()
+        record.save(
+            update_fields=[
+                'review_status',
+                'review_summary',
+                'review_content',
+                'failure_message',
+                'completed_at',
+                'updated_at',
+            ]
+        )
+
+    def _mark_auto_review_record_cancelled(self, record, partial_content=''):
+        if not record:
+            return
+        record.review_status = 'cancelled'
+        record.review_summary = '自动评审已取消'
+        record.review_content = partial_content or record.review_content
+        record.completed_at = timezone.now()
+        record.save(
+            update_fields=[
+                'review_status',
+                'review_summary',
+                'review_content',
+                'completed_at',
+                'updated_at',
+            ]
+        )
 
     @action(detail=False, methods=['post'])
     def generate(self, request):
@@ -1412,6 +1553,12 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
                         def execute_task():
                             try:
+                                cancel_check = self._build_cancel_checker(task.task_id)
+                                async_cancel_check = sync_to_async(cancel_check, thread_sensitive=True)
+                                auto_review_record = None
+
+                                cancel_check('generation_start', force=True)
+
                                 # 更新任务状态
                                 task.status = 'generating'
                                 task.progress = 10
@@ -1443,6 +1590,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                         # 定义同步保存函数
                                         def save_stream_buffer(content):
                                             """同步保存流式内容到数据库"""
+                                            cancel_check('stream_buffer_write')
                                             task.stream_buffer = content
                                             task.stream_position = len(content)
                                             task.last_stream_update = timezone.now()
@@ -1454,6 +1602,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
                                         async def stream_callback(chunk):
                                             """流式回调：实时保存每个chunk到数据库"""
+                                            await async_cancel_check('generation_stream_callback')
                                             # 先追加到内存中的buffer
                                             task.stream_buffer += chunk
                                             task.stream_position = len(task.stream_buffer)
@@ -1478,13 +1627,20 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                         if task.stream_buffer:
                                             save_stream_buffer(task.stream_buffer)
 
+                                        cancel_check('generated_cases_write', force=True)
                                         task.generated_test_cases = generated_cases
                                         task.progress = 60
-                                        task.save()
+                                        task.save(update_fields=['generated_test_cases', 'progress', 'updated_at'])
 
                                         # 流式评审和改进（根据生成配置决定是否执行）
                                         if enable_auto_review and task.reviewer_model_config and task.reviewer_prompt_config:
                                             try:
+                                                cancel_check('review_start', force=True)
+                                                auto_review_record = self._create_auto_review_record(
+                                                    task,
+                                                    _parse_generated_results(generated_cases),
+                                                )
+                                                self._mark_auto_review_record_reviewing(auto_review_record)
                                                 task.status = 'reviewing'
                                                 task.progress = 70
                                                 task.save()
@@ -1496,6 +1652,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
                                                 def save_review_buffer(content):
                                                     """同步保存评审内容"""
+                                                    cancel_check('review_feedback_stream_write')
                                                     task.review_feedback = content
                                                     task.save(update_fields=['review_feedback'])
 
@@ -1503,6 +1660,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
                                                 async def review_stream_callback(chunk):
                                                     """流式评审回调"""
+                                                    await async_cancel_check('review_stream_callback')
                                                     review_buffer.append(chunk)
                                                     current_length = sum(len(c) for c in review_buffer)
 
@@ -1523,11 +1681,17 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                     )
                                                     # 保存最终评审内容
                                                     if review_buffer:
+                                                        cancel_check('review_feedback_write', force=True)
                                                         task.review_feedback = ''.join(review_buffer)
                                                         task.save(update_fields=['review_feedback'])
+                                                    self._mark_auto_review_record_completed(
+                                                        auto_review_record,
+                                                        task.review_feedback,
+                                                    )
                                                     logger.info(f"任务 {task.task_id} 流式评审完成")
 
                                                     # 根据评审意见改进测试用例（自动执行）
+                                                    cancel_check('revision_start', force=True)
                                                     logger.info(f"任务 {task.task_id} 开始根据评审意见改进测试用例")
                                                     task.status = 'revising'
                                                     task.progress = 85
@@ -1538,6 +1702,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                         # 定义同步保存函数
                                                         def save_final_buffer(content):
                                                             """同步保存最终用例内容"""
+                                                            cancel_check('final_cases_stream_write')
                                                             task.final_test_cases = content
                                                             task.save(update_fields=['final_test_cases'])
 
@@ -1547,6 +1712,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                         # 创建流式回调函数，实时更新final_test_cases
                                                         async def final_callback(chunk):
                                                             """流式回调：实时保存最终用例到数据库"""
+                                                            await async_cancel_check('revision_stream_callback')
                                                             # 实时追加到final_test_cases并保存
                                                             task.final_test_cases = (
                                                                                             task.final_test_cases or '') + chunk
@@ -1588,6 +1754,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                             # 重新编号使编号连续
                                                             renumbered_cases = AIModelService.renumber_test_cases(
                                                                 sorted_cases)
+                                                            cancel_check('final_cases_write', force=True)
                                                             task.final_test_cases = renumbered_cases
                                                             logger.info(
                                                                 f"任务 {task.task_id} 测试用例改进完成 (revised_cases长度: {len(revised_cases)}, 最终保存长度: {len(task.final_test_cases)})")
@@ -1602,6 +1769,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                         sorted_cases = AIModelService.sort_test_cases_by_id(
                                                             generated_cases)
                                                         # 重新编号使编号连续
+                                                        cancel_check('final_cases_write', force=True)
                                                         task.final_test_cases = AIModelService.renumber_test_cases(
                                                             sorted_cases)
                                                         task.save()
@@ -1609,25 +1777,36 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                 except Exception as inner_error:
                                                     logger.warning(
                                                         f"任务 {task.task_id} 流式评审过程异常: {inner_error}")
+                                                    self._mark_auto_review_record_failed(
+                                                        auto_review_record,
+                                                        inner_error,
+                                                        partial_content=''.join(review_buffer),
+                                                    )
+                                                    cancel_check('review_feedback_write', force=True)
                                                     task.review_feedback = f"评审过程出现异常: {str(inner_error)}\n\n建议：测试用例结构完整，可以使用。"
                                                     # 按用例编号排序后再保存
                                                     sorted_cases = AIModelService.sort_test_cases_by_id(generated_cases)
                                                     # 重新编号使编号连续
+                                                    cancel_check('final_cases_write', force=True)
                                                     task.final_test_cases = AIModelService.renumber_test_cases(
                                                         sorted_cases)
                                                     task.save()
 
                                             except Exception as review_error:
                                                 logger.error(f"流式评审任务 {task.task_id} 失败: {review_error}")
+                                                self._mark_auto_review_record_failed(auto_review_record, review_error)
                                                 # 按用例编号排序后再保存
                                                 sorted_cases = AIModelService.sort_test_cases_by_id(generated_cases)
+                                                cancel_check('final_cases_write', force=True)
                                                 task.final_test_cases = AIModelService.renumber_test_cases(sorted_cases)
+                                                cancel_check('review_feedback_write', force=True)
                                                 task.review_feedback = f"评审失败: {str(review_error)}\n\n建议：测试用例结构完整，可以使用。"
                                                 task.save()
                                         else:
                                             # 按用例编号排序后再保存
                                             sorted_cases = AIModelService.sort_test_cases_by_id(generated_cases)
                                             # 重新编号使编号连续
+                                            cancel_check('final_cases_write', force=True)
                                             task.final_test_cases = AIModelService.renumber_test_cases(sorted_cases)
                                             logger.info(f"任务 {task.task_id} 跳过评审，直接使用生成的测试用例")
                                             task.save()
@@ -1641,13 +1820,20 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                             AIModelService.generate_test_cases(task)
                                         )
 
+                                        cancel_check('generated_cases_write', force=True)
                                         task.generated_test_cases = generated_cases
                                         task.progress = 60
-                                        task.save()
+                                        task.save(update_fields=['generated_test_cases', 'progress', 'updated_at'])
 
                                         # 评审和改进测试用例（根据生成配置决定是否执行）
                                         if enable_auto_review and task.reviewer_model_config and task.reviewer_prompt_config:
                                             try:
+                                                cancel_check('review_start', force=True)
+                                                auto_review_record = self._create_auto_review_record(
+                                                    task,
+                                                    _parse_generated_results(generated_cases),
+                                                )
+                                                self._mark_auto_review_record_reviewing(auto_review_record)
                                                 task.status = 'reviewing'
                                                 task.progress = 70
                                                 task.save()
@@ -1659,10 +1845,16 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                     review_feedback = loop.run_until_complete(
                                                         AIModelService.review_test_cases(task, generated_cases)
                                                     )
+                                                    cancel_check('review_feedback_write', force=True)
                                                     task.review_feedback = review_feedback
+                                                    self._mark_auto_review_record_completed(
+                                                        auto_review_record,
+                                                        review_feedback,
+                                                    )
                                                     logger.info(f"任务 {task.task_id} 评审完成")
 
                                                     # 根据评审意见改进测试用例（自动执行）
+                                                    cancel_check('revision_start', force=True)
                                                     logger.info(f"任务 {task.task_id} 开始根据评审意见改进测试用例")
                                                     task.status = 'revising'
                                                     task.progress = 85
@@ -1673,6 +1865,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                         # 定义同步保存函数
                                                         def save_final_buffer_full(content):
                                                             """同步保存最终用例内容"""
+                                                            cancel_check('final_cases_stream_write')
                                                             task.final_test_cases = content
                                                             task.save(update_fields=['final_test_cases'])
 
@@ -1682,6 +1875,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                         # 创建流式回调函数，实时更新final_test_cases
                                                         async def final_callback_full(chunk):
                                                             """流式回调：实时保存最终用例到数据库"""
+                                                            await async_cancel_check('revision_stream_callback')
                                                             # 实时追加到final_test_cases并保存
                                                             task.final_test_cases = (
                                                                                             task.final_test_cases or '') + chunk
@@ -1723,6 +1917,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                             # 重新编号使编号连续
                                                             renumbered_cases = AIModelService.renumber_test_cases(
                                                                 sorted_cases)
+                                                            cancel_check('final_cases_write', force=True)
                                                             task.final_test_cases = renumbered_cases
                                                             logger.info(
                                                                 f"任务 {task.task_id} 测试用例改进完成 (revised_cases长度: {len(revised_cases)}, 最终保存长度: {len(task.final_test_cases)})")
@@ -1737,32 +1932,40 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                         sorted_cases = AIModelService.sort_test_cases_by_id(
                                                             generated_cases)
                                                         # 重新编号使编号连续
+                                                        cancel_check('final_cases_write', force=True)
                                                         task.final_test_cases = AIModelService.renumber_test_cases(
                                                             sorted_cases)
                                                         task.save()
 
                                                 except Exception as inner_error:
                                                     logger.warning(f"任务 {task.task_id} 评审过程异常: {inner_error}")
+                                                    self._mark_auto_review_record_failed(auto_review_record, inner_error)
+                                                    cancel_check('review_feedback_write', force=True)
                                                     task.review_feedback = f"评审过程出现异常: {str(inner_error)}\n\n建议：测试用例结构完整，可以使用。"
                                                     # 按用例编号排序后再保存
                                                     sorted_cases = AIModelService.sort_test_cases_by_id(generated_cases)
                                                     # 重新编号使编号连续
+                                                    cancel_check('final_cases_write', force=True)
                                                     task.final_test_cases = AIModelService.renumber_test_cases(
                                                         sorted_cases)
                                                     task.save()
 
                                             except Exception as review_error:
                                                 logger.error(f"评审任务 {task.task_id} 失败: {review_error}")
+                                                self._mark_auto_review_record_failed(auto_review_record, review_error)
                                                 # 评审失败时，仍然使用生成的测试用例作为最终结果
                                                 # 按用例编号排序后再保存
                                                 sorted_cases = AIModelService.sort_test_cases_by_id(generated_cases)
+                                                cancel_check('final_cases_write', force=True)
                                                 task.final_test_cases = AIModelService.renumber_test_cases(sorted_cases)
+                                                cancel_check('review_feedback_write', force=True)
                                                 task.review_feedback = f"评审失败: {str(review_error)}\n\n建议：测试用例结构完整，可以使用。"
                                                 task.save()
                                         else:
                                             # 按用例编号排序后再保存
                                             sorted_cases = AIModelService.sort_test_cases_by_id(generated_cases)
                                             # 重新编号使编号连续
+                                            cancel_check('final_cases_write', force=True)
                                             task.final_test_cases = AIModelService.renumber_test_cases(sorted_cases)
                                             logger.info(f"任务 {task.task_id} 跳过评审，直接使用生成的测试用例")
                                             task.save()
@@ -1771,6 +1974,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                     # 注意：不要直接调用task.save()，因为这会覆盖流式回调保存的final_test_cases
                                     # 从数据库重新获取最新的任务对象
                                     task.refresh_from_db()
+                                    cancel_check('completed_write', force=True)
 
                                     task.status = 'completed'
                                     task.progress = 100
@@ -1787,11 +1991,36 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                     finally:
                                         loop.close()
 
+                            except TaskCancelledError as cancel_error:
+                                logger.info(f"任务 {task.task_id} 协作式取消生效: {cancel_error}")
+                                task.refresh_from_db()
+                                if task.status != 'cancelled':
+                                    task.status = 'cancelled'
+                                    task.save(update_fields=['status', 'updated_at'])
+                                if auto_review_record:
+                                    self._mark_auto_review_record_cancelled(
+                                        auto_review_record,
+                                        partial_content=task.review_feedback or '',
+                                    )
                             except Exception as e:
                                 logger.error(f"生成任务执行失败: {e}")
+                                task.refresh_from_db()
+                                if task.status == 'cancelled':
+                                    if auto_review_record:
+                                        self._mark_auto_review_record_cancelled(
+                                            auto_review_record,
+                                            partial_content=task.review_feedback or '',
+                                        )
+                                    return
                                 task.status = 'failed'
                                 task.error_message = str(e)
-                                task.save()
+                                task.save(update_fields=['status', 'error_message', 'updated_at'])
+                                if auto_review_record:
+                                    self._mark_auto_review_record_failed(
+                                        auto_review_record,
+                                        e,
+                                        partial_content=task.review_feedback or '',
+                                    )
 
                         # 在新线程中执行任务
                         thread = threading.Thread(target=execute_task)
@@ -2163,7 +2392,14 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                 )
 
             task.status = 'cancelled'
-            task.save()
+            task.save(update_fields=['status', 'updated_at'])
+
+            latest_record = self._get_latest_auto_review_record(task)
+            if latest_record and latest_record.review_status == 'reviewing':
+                self._mark_auto_review_record_cancelled(
+                    latest_record,
+                    partial_content=task.review_feedback or '',
+                )
 
             return Response({
                 'message': '任务已取消',
@@ -3242,6 +3478,34 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                 {'error': f'获取统计信息失败: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class TaskAutoReviewRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    """自动 AI 评审记录统一入口视图集"""
+    serializer_class = TaskAutoReviewRecordSerializer
+
+    def get_queryset(self):
+        queryset = TaskAutoReviewRecord.objects.select_related('task', 'project').order_by('-created_at', '-id')
+
+        project_id = self.request.query_params.get('project')
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+
+        task_id = self.request.query_params.get('task_id')
+        if task_id:
+            queryset = queryset.filter(task__task_id=task_id)
+
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            queryset = queryset.filter(review_status=status_param)
+
+        if self.action == 'list':
+            latest_record_ids = TaskAutoReviewRecord.objects.filter(
+                task_id=OuterRef('task_id')
+            ).order_by('-created_at', '-id').values('id')[:1]
+            queryset = queryset.filter(id=Subquery(latest_record_ids))
+
+        return queryset
 
 
 class ConfigStatusViewSet(viewsets.ViewSet):

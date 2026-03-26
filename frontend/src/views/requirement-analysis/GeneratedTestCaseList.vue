@@ -42,8 +42,10 @@
             <option value="pending">{{ $t('generatedTestCases.statusPending') }}</option>
             <option value="generating">{{ $t('generatedTestCases.statusGenerating') }}</option>
             <option value="reviewing">{{ $t('generatedTestCases.statusReviewing') }}</option>
+            <option value="revising">改写中</option>
             <option value="completed">{{ $t('generatedTestCases.statusCompleted') }}</option>
             <option value="failed">{{ $t('generatedTestCases.statusFailed') }}</option>
+            <option value="cancelled">已取消</option>
           </select>
         </div>
 
@@ -157,7 +159,13 @@
                 <button
                   class="view-detail-btn"
                   @click="viewTaskDetail(task)">
-                  {{ $t('generatedTestCases.viewDetail') }}
+                  {{ ['pending', 'generating', 'reviewing', 'revising'].includes(task.status) ? '查看任务' : $t('generatedTestCases.viewDetail') }}
+                </button>
+                <button
+                  v-if="task.auto_review_summary?.has_record"
+                  class="view-detail-btn"
+                  @click="goToAutoReviews(task)">
+                  查看 AI 自动评审
                 </button>
                 <button
                   v-if="canMutateTaskResults(task)"
@@ -171,6 +179,9 @@
                   @click="batchDiscardTask(task)">
                   {{ getBatchDiscardLabel(task) }}
                 </button>
+              </div>
+              <div class="task-review-hint">
+                {{ task.auto_review_summary?.label || '未触发自动评审' }}
               </div>
             </div>
           </div>
@@ -697,8 +708,10 @@ export default {
         'pending': this.$t('generatedTestCases.statusPending'),
         'generating': this.$t('generatedTestCases.statusGenerating'),
         'reviewing': this.$t('generatedTestCases.statusReviewing'),
+        'revising': '改写中',
         'completed': this.$t('generatedTestCases.statusCompleted'),
-        'failed': this.$t('generatedTestCases.statusFailed')
+        'failed': this.$t('generatedTestCases.statusFailed'),
+        'cancelled': '已取消'
       }
       return statusMap[status] || status
     },
@@ -787,23 +800,30 @@ export default {
     },
 
     viewTaskDetail(task) {
-      if (['pending', 'generating', 'reviewing'].includes(task.status)) {
-        ElMessage.info(this.$t('generatedTestCases.generatingWait'))
-        return
-      }
-      
-      if (task.status === 'completed') {
-        this.$router.push({
-          name: 'TaskDetail',
-          params: { taskId: task.task_id },
-          query: {
-            from: 'list',
-            fromPath: this.$route.fullPath,
-            fromTitle: this.$route.meta?.title || 'AI 生成用例',
-            fromModule: this.$route.meta?.module || 'test-design'
-          }
-        })
-      }
+      this.$router.push({
+        name: 'TaskDetail',
+        params: { taskId: task.task_id },
+        query: {
+          from: 'list',
+          fromPath: this.$route.fullPath,
+          fromTitle: this.$route.meta?.title || 'AI 生成用例',
+          fromModule: this.$route.meta?.module || 'test-design'
+        }
+      })
+    },
+
+    goToAutoReviews(task) {
+      this.$router.push({
+        path: '/ai-generation/reviews/ai-auto',
+        query: {
+          taskId: task.task_id,
+          project: String(task.project || ''),
+          from: 'list',
+          fromPath: this.$route.fullPath,
+          fromTitle: this.$route.meta?.title || 'AI 生成用例',
+          fromModule: this.$route.meta?.module || 'test-design'
+        }
+      })
     },
 
     async batchAdoptTask(task) {
