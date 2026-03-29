@@ -92,3 +92,36 @@ def get_project_versions(request, project_id):
     versions = Version.objects.filter(projects__id=project_id).order_by('-created_at')
     serializer = VersionSerializer(versions, many=True)
     return Response(serializer.data)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def version_batch_delete(request):
+    """批量删除版本"""
+    ids = request.data.get('ids', [])
+    
+    if not ids:
+        return Response({'error': '未提供版本 ID 列表'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if not isinstance(ids, list):
+        return Response({'error': 'IDs 必须是列表形式'}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = request.user
+    # 只允许删除用户有权访问的项目所属的版本
+    accessible_projects = Project.objects.filter(
+        models.Q(owner=user) | models.Q(members=user)
+    ).distinct()
+    
+    versions_to_delete = Version.objects.filter(id__in=ids, projects__in=accessible_projects).distinct()
+    
+    requested_count = len(ids)
+    actual_count = versions_to_delete.count()
+    skipped_count = requested_count - actual_count
+    
+    versions_to_delete.delete()
+    
+    return Response({
+        'message': f'成功删除 {actual_count} 个版本。',
+        'deleted_count': actual_count,
+        'requested_count': requested_count,
+        'skipped_count': skipped_count
+    })

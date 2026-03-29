@@ -139,3 +139,40 @@ class ProjectEnvironmentListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         project_id = self.kwargs['project_id']
         serializer.save(project_id=project_id)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def project_batch_delete(request):
+    """批量删除项目"""
+    ids = request.data.get('ids', [])
+    confirm = request.data.get('confirm', False)
+    
+    if not ids:
+        return Response({'error': '未提供项目 ID 列表'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    if not isinstance(ids, list):
+        return Response({'error': 'IDs 必须是列表形式'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not confirm:
+        return Response({
+            'error': '删除项目会级联删除其下的所有测试资产（用例、版本、执行记录等），请确认后再执行。',
+            'needs_confirm': True
+        }, status=status.HTTP_400_BAD_REQUEST)
+
+    user = request.user
+    # 只允许删除用户自己拥有且在列表中的项目
+    projects_to_delete = Project.objects.filter(id__in=ids, owner=user)
+    
+    requested_count = len(ids)
+    actual_count = projects_to_delete.count()
+    skipped_count = requested_count - actual_count
+    
+    # 执行级联删除
+    projects_to_delete.delete()
+    
+    return Response({
+        'message': f'成功删除 {actual_count} 个项目。',
+        'deleted_count': actual_count,
+        'requested_count': requested_count,
+        'skipped_count': skipped_count
+    })

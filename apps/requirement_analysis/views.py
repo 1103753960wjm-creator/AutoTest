@@ -29,7 +29,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from asgiref.sync import sync_to_async
-from django.db import models
+from django.db import models, transaction
 from django.db.models import OuterRef, Subquery
 
 from .models import (
@@ -59,7 +59,7 @@ from .result_status import (
 from .services import RequirementAnalysisService, DocumentProcessor
 from apps.projects.models import Project
 from apps.testcases.models import TestCase
-from apps.testcases.ai_source_dedup import get_or_create_ai_testcase
+from apps.testcases.ai_source_dedup import build_ai_testcase_lookup, get_or_create_ai_testcase
 from apps.versions.models import Version
 
 
@@ -2443,8 +2443,17 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
             # 解析并导入测试用例到测试用例管理系统
             adopted_count = 0
             deduplicated_count = 0
+            project = self._resolve_task_target_project(task, request, request.data.get('project_id'))
             parsed_results = _parse_generated_results(task.final_test_cases or task.generated_test_cases)
-            generated_results, _ = self._annotate_generated_results(task, request, parsed_results)
+            testcase_lookup = build_ai_testcase_lookup(project, task.task_id)
+            generated_results, _ = self._annotate_generated_results(
+                task,
+                request,
+                parsed_results,
+                project=project,
+                save=False,
+                testcase_lookup=testcase_lookup,
+            )
             test_cases = [item for item in generated_results if item.get('result_status') == RESULT_STATUS_PENDING]
 
             if not test_cases:
@@ -2571,8 +2580,17 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+            project = self._resolve_task_target_project(task, request, request.data.get('project_id'))
             parsed_results = _parse_generated_results(task.final_test_cases or task.generated_test_cases)
-            generated_results, _ = self._annotate_generated_results(task, request, parsed_results)
+            testcase_lookup = build_ai_testcase_lookup(project, task.task_id)
+            generated_results, _ = self._annotate_generated_results(
+                task,
+                request,
+                parsed_results,
+                project=project,
+                save=False,
+                testcase_lookup=testcase_lookup,
+            )
             test_cases = [item for item in generated_results if item.get('result_status') == RESULT_STATUS_PENDING]
 
             if not test_cases:
@@ -2586,42 +2604,47 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
             # 导入到testcases应用（使用与单条采纳相同的逻辑）
             try:
-                project = self._resolve_task_target_project(task, request, request.data.get('project_id'))
+                default_version_ids = self._resolve_default_version_ids(project)
                 adopted_count = 0
                 deduplicated_count = 0
-                for index, test_case in enumerate(test_cases, start=1):
-                    testcase, created, _, _ = self._create_or_get_ai_testcase(
-                        project=project,
-                        task=task,
-                        source_label='由 AI 生成任务批量采纳',
-                        testcase_payload={
-                            'title': test_case.get('scenario', '测试用例'),
-                            'description': test_case.get('scenario', ''),
-                            'preconditions': test_case.get('precondition', ''),
-                            'steps': test_case.get('steps', ''),
-                            'expected_result': test_case.get('expected', ''),
-                            'priority': self._map_priority(test_case.get('priority', '中')),
-                            'test_type': 'functional',
-                            'status': 'draft',
-                            'case_id': test_case.get('caseId') or test_case.get('case_id') or '',
-                            'case_index': test_case.get('index') or index,
-                        },
-                    )
-                    mark_result_status(
-                        task,
-                        case_id=test_case.get('caseId') or test_case.get('case_id') or '',
-                        case_index=test_case.get('index') or index,
-                        status=RESULT_STATUS_ADOPTED,
-                        adopted_testcase_id=testcase.id,
-                        parsed_results=parsed_results,
-                        save=True,
-                    )
-                    if created:
-                        adopted_count += 1
-                    else:
-                        deduplicated_count += 1
+                with transaction.atomic():
+                    for index, test_case in enumerate(test_cases, start=1):
+                        testcase, created, _, _ = self._create_or_get_ai_testcase(
+                            project=project,
+                            task=task,
+                            source_label='由 AI 生成任务批量采纳',
+                            testcase_payload={
+                                'title': test_case.get('scenario', '测试用例'),
+                                'description': test_case.get('scenario', ''),
+                                'preconditions': test_case.get('precondition', ''),
+                                'steps': test_case.get('steps', ''),
+                                'expected_result': test_case.get('expected', ''),
+                                'priority': self._map_priority(test_case.get('priority', '中')),
+                                'test_type': 'functional',
+                                'status': 'draft',
+                                'case_id': test_case.get('caseId') or test_case.get('case_id') or '',
+                                'case_index': test_case.get('index') or index,
+                            },
+                            default_version_ids=default_version_ids,
+                            testcase_lookup=testcase_lookup,
+                        )
+                        mark_result_status(
+                            task,
+                            case_id=test_case.get('caseId') or test_case.get('case_id') or '',
+                            case_index=test_case.get('index') or index,
+                            status=RESULT_STATUS_ADOPTED,
+                            adopted_testcase_id=testcase.id,
+                            parsed_results=parsed_results,
+                            save=False,
+                        )
+                        if created:
+                            adopted_count += 1
+                        else:
+                            deduplicated_count += 1
 
-                handled_count = adopted_count + deduplicated_count
+                    handled_count = adopted_count + deduplicated_count
+                    if handled_count:
+                        self._save_task_result_status_snapshot(task)
                 processing_status_summary = get_result_status_summary(task, parsed_results=parsed_results)
                 return Response({
                     'message': f'成功处理 {handled_count} 条测试用例到项目 "{project.name}"',
@@ -2674,51 +2697,65 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                 adopted_count = 0
                 deduplicated_count = 0
                 parsed_results = _parse_generated_results(task.final_test_cases or task.generated_test_cases)
-                generated_results, _ = self._annotate_generated_results(task, request, parsed_results)
+                testcase_lookup = build_ai_testcase_lookup(project, task.task_id)
+                generated_results, _ = self._annotate_generated_results(
+                    task,
+                    request,
+                    parsed_results,
+                    project=project,
+                    save=False,
+                    testcase_lookup=testcase_lookup,
+                )
                 pending_indexes = {
                     item.get('index')
                     for item in generated_results
                     if item.get('result_status') == RESULT_STATUS_PENDING
                 }
+                default_version_ids = self._resolve_default_version_ids(project)
 
-                for case_data in test_cases_data:
-                    case_index = self._resolve_result_case_index(case_data.get('case_index'), task)
-                    if case_index not in pending_indexes:
-                        continue
+                with transaction.atomic():
+                    for case_data in test_cases_data:
+                        case_index = self._resolve_result_case_index(case_data.get('case_index'), task)
+                        if case_index not in pending_indexes:
+                            continue
 
-                    testcase, created, _, _ = self._create_or_get_ai_testcase(
-                        project=project,
-                        task=task,
-                        source_label='由 AI 生成任务选择性采纳',
-                        testcase_payload={
-                            'title': case_data.get('title', '测试用例'),
-                            'description': case_data.get('description', ''),
-                            'preconditions': case_data.get('preconditions', ''),
-                            'steps': case_data.get('steps', ''),
-                            'expected_result': case_data.get('expected_result', ''),
-                            'priority': case_data.get('priority', 'medium'),
-                            'test_type': case_data.get('test_type', 'functional'),
-                            'status': case_data.get('status', 'draft'),
-                            'tags': case_data.get('tags') if isinstance(case_data.get('tags'), list) else [],
-                            'case_id': case_data.get('case_id') or case_data.get('caseId') or '',
-                            'case_index': case_index,
-                        },
-                    )
-                    mark_result_status(
-                        task,
-                        case_id=case_data.get('case_id') or case_data.get('caseId') or '',
-                        case_index=case_index,
-                        status=RESULT_STATUS_ADOPTED,
-                        adopted_testcase_id=testcase.id,
-                        parsed_results=parsed_results,
-                        save=True,
-                    )
-                    if created:
-                        adopted_count += 1
-                    else:
-                        deduplicated_count += 1
+                        testcase, created, _, _ = self._create_or_get_ai_testcase(
+                            project=project,
+                            task=task,
+                            source_label='由 AI 生成任务选择性采纳',
+                            testcase_payload={
+                                'title': case_data.get('title', '测试用例'),
+                                'description': case_data.get('description', ''),
+                                'preconditions': case_data.get('preconditions', ''),
+                                'steps': case_data.get('steps', ''),
+                                'expected_result': case_data.get('expected_result', ''),
+                                'priority': case_data.get('priority', 'medium'),
+                                'test_type': case_data.get('test_type', 'functional'),
+                                'status': case_data.get('status', 'draft'),
+                                'tags': case_data.get('tags') if isinstance(case_data.get('tags'), list) else [],
+                                'case_id': case_data.get('case_id') or case_data.get('caseId') or '',
+                                'case_index': case_index,
+                            },
+                            default_version_ids=default_version_ids,
+                            testcase_lookup=testcase_lookup,
+                        )
+                        mark_result_status(
+                            task,
+                            case_id=case_data.get('case_id') or case_data.get('caseId') or '',
+                            case_index=case_index,
+                            status=RESULT_STATUS_ADOPTED,
+                            adopted_testcase_id=testcase.id,
+                            parsed_results=parsed_results,
+                            save=False,
+                        )
+                        if created:
+                            adopted_count += 1
+                        else:
+                            deduplicated_count += 1
 
-                handled_count = adopted_count + deduplicated_count
+                    handled_count = adopted_count + deduplicated_count
+                    if handled_count:
+                        self._save_task_result_status_snapshot(task)
                 if handled_count == 0:
                     return Response(
                         {
@@ -3284,10 +3321,13 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
         return []
 
-    def _apply_default_versions(self, testcase, project):
-        default_version_ids = self._resolve_default_version_ids(project)
+    def _apply_default_versions(self, testcase, project, default_version_ids=None):
+        default_version_ids = list(default_version_ids) if default_version_ids is not None else self._resolve_default_version_ids(project)
         if default_version_ids and not testcase.versions.exists():
             testcase.versions.set(default_version_ids)
+
+    def _save_task_result_status_snapshot(self, task):
+        task.save(update_fields=['result_status_snapshot', 'is_saved_to_records', 'saved_at', 'updated_at'])
 
     def _get_processing_status_summary(self, task):
         return get_result_status_summary(task)
@@ -3348,7 +3388,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
             }
         ]
 
-    def _create_or_get_ai_testcase(self, *, project, task, testcase_payload, source_label):
+    def _create_or_get_ai_testcase(self, *, project, task, testcase_payload, source_label, default_version_ids=None, testcase_lookup=None):
         payload = dict(testcase_payload)
         payload['tags'] = self._build_ai_case_tags(
             task,
@@ -3374,12 +3414,23 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                 status=normalized_payload.get('status', 'draft'),
                 tags=normalized_payload.get('tags', []),
             ),
-            apply_default_versions=self._apply_default_versions,
+            apply_default_versions=lambda testcase_obj, project_obj: self._apply_default_versions(
+                testcase_obj,
+                project_obj,
+                default_version_ids=default_version_ids,
+            ),
+            testcase_lookup=testcase_lookup,
         )
 
-    def _annotate_generated_results(self, task, request, generated_results):
-        project = self._resolve_task_target_project(task, request, create_default=False)
-        return attach_result_status(task, generated_results, project=project, save=True)
+    def _annotate_generated_results(self, task, request, generated_results, project=None, save=True, testcase_lookup=None):
+        target_project = project or self._resolve_task_target_project(task, request, create_default=False)
+        return attach_result_status(
+            task,
+            generated_results,
+            project=target_project,
+            save=save,
+            testcase_lookup=testcase_lookup,
+        )
 
     def _resolve_result_case_index(self, value, task):
         parsed_results = _parse_generated_results(task.final_test_cases or task.generated_test_cases)

@@ -267,7 +267,7 @@ const total = ref(0)
 const searchText = ref('')
 const statusFilter = ref('')
 const hasLoaded = ref(false)
-const requestState = ref(UI_PAGE_STATE.READY)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
 const requestErrorMessage = ref('')
 const lastLoadedAt = ref('')
 

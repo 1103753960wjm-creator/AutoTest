@@ -37,14 +37,28 @@
       </div>
       
       <div class="table-container">
-        <el-table 
-          :data="testcases" 
-          v-loading="loading" 
-          style="width: 100%"
-          height="100%"
-          @selection-change="handleSelectionChange">
-          <el-table-column type="selection" width="55" />
-          <el-table-column type="index" :label="$t('testcase.serialNumber')" width="80" :index="getSerialNumber" />
+        <UnifiedListTable
+          v-model:currentPage="currentPage"
+          v-model:pageSize="pageSize"
+          :page-sizes="[15, 25, 35, 50, 100]"
+          :total="total"
+          :data="testcases"
+          :loading="loading"
+          row-key="id"
+          selection-mode="multi"
+          :actions="{
+            view: true,
+            edit: true,
+            delete: true
+          }"
+          :delete-name="(row) => row?.title || ''"
+          @selection-change="handleSelectionChange"
+          @view="handleView"
+          @edit="editTestCase"
+          @delete="deleteTestCaseConfirmed"
+          @row-dblclick="editTestCase"
+          @page-change="fetchTestCases"
+        >
           <el-table-column prop="title" :label="$t('testcase.caseTitle')" min-width="250">
             <template #default="{ row }">
               <el-link @click="goToTestCase(row.id)" type="primary">
@@ -104,25 +118,7 @@
               {{ formatDate(row.created_at) }}
             </template>
           </el-table-column>
-          <el-table-column :label="$t('project.actions')" width="150" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" @click="editTestCase(row)">{{ $t('common.edit') }}</el-button>
-              <el-button size="small" type="danger" @click="deleteTestCase(row)">{{ $t('common.delete') }}</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-      
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[15, 25, 35, 50, 100]"
-          :total="total"
-          layout="total, sizes, prev, pager, next"
-          @current-change="handlePageChange"
-          @size-change="handleSizeChange"
-        />
+        </UnifiedListTable>
       </div>
     </div>
   </div>
@@ -139,6 +135,7 @@ import dayjs from 'dayjs'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 import * as XLSX from 'xlsx'
 import { buildDeeplinkLocation } from '@/router/deeplink'
+import { UnifiedListTable } from '@/components/platform-shared'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -150,7 +147,7 @@ const currentPage = ref(1)
 const pageSize = ref(15)
 const total = ref(0)
 const searchText = ref('')
-const projectFilter = ref('')
+const projectFilter = ref(null)
 const priorityFilter = ref('')
 const selectedTestCases = ref([])
 const isDeleting = ref(false)
@@ -225,13 +222,8 @@ const handleFilter = () => {
   fetchTestCases()
 }
 
-const handlePageChange = () => {
-  fetchTestCases()
-}
-
-const handleSizeChange = () => {
-  currentPage.value = 1
-  fetchTestCases()
+const handleView = (row) => {
+  if (row?.id) goToTestCase(row.id)
 }
 
 const goToTestCase = (id) => {
@@ -268,20 +260,16 @@ const editTestCase = (testcase) => {
 
 const deleteTestCase = async (testcase) => {
   try {
-    await ElMessageBox.confirm(t('testcase.deleteConfirm'), t('common.warning'), {
-      confirmButtonText: t('common.confirm'),
-      cancelButtonText: t('common.cancel'),
-      type: 'warning'
-    })
-    
     await api.delete(`/testcases/${testcase.id}/`)
     ElMessage.success(t('testcase.deleteSuccess'))
     fetchTestCases()
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(t('testcase.deleteFailed'))
-    }
+    ElMessage.error(t('testcase.deleteFailed'))
   }
+}
+
+const deleteTestCaseConfirmed = async (testcase) => {
+  await deleteTestCase(testcase)
 }
 
 // 处理选择变化
@@ -289,10 +277,6 @@ const handleSelectionChange = (selection) => {
   selectedTestCases.value = selection
 }
 
-// 获取序号
-const getSerialNumber = (index) => {
-  return (currentPage.value - 1) * pageSize.value + index + 1
-}
 
 // 批量删除
 const batchDeleteTestCases = async () => {
@@ -313,30 +297,11 @@ const batchDeleteTestCases = async () => {
     )
 
     isDeleting.value = true
-    let successCount = 0
-    let failCount = 0
-
-    // 逐个删除选中的测试用例
-    for (const testcase of selectedTestCases.value) {
-      try {
-        await api.delete(`/testcases/${testcase.id}/`)
-        successCount++
-      } catch (error) {
-        console.error(`Delete test case ${testcase.id} failed:`, error)
-        failCount++
-      }
-    }
-
-    // 显示删除结果
-    if (successCount > 0) {
-      if (failCount > 0) {
-        ElMessage.success(t('testcase.batchDeletePartialSuccess', { successCount, failCount }))
-      } else {
-        ElMessage.success(t('testcase.batchDeleteSuccess', { successCount }))
-      }
-    } else {
-      ElMessage.error(t('testcase.batchDeleteFailed'))
-    }
+    const ids = selectedTestCases.value.map(tc => tc.id)
+    
+    const response = await api.post('/testcases/batch-delete/', { ids })
+    
+    ElMessage.success(response.data.message || t('testcase.batchDeleteSuccess', { successCount: ids.length }))
 
     // 清空选择并重新加载列表
     selectedTestCases.value = []

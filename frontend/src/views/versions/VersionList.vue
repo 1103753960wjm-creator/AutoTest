@@ -6,10 +6,10 @@
         <el-button
           v-if="selectedVersions.length > 0"
           type="danger"
+          :disabled="isDeleting"
           @click="batchDeleteVersions"
-          :disabled="isDeleting">
-          <el-icon><Delete /></el-icon>
-          {{ $t('version.batchDelete') }} ({{ selectedVersions.length }})
+        >
+          批量删除 ({{ selectedVersions.length }})
         </el-button>
         <el-button type="primary" @click="createVersion">
           <el-icon><Plus /></el-icon>
@@ -52,14 +52,28 @@
         </el-row>
       </div>
       
-      <el-table
+      <UnifiedListTable
+        v-model:currentPage="currentPage"
+        v-model:pageSize="pageSize"
+        :total="total"
         :data="versions"
-        v-loading="loading"
-        style="width: 100%"
-        @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="55" />
-        <el-table-column type="index" :label="$t('version.serialNumber')" width="80" :index="getSerialNumber" />
-        <el-table-column prop="name" :label="$t('version.versionName')" min-width="100">
+        :loading="loading"
+        row-key="id"
+        selection-mode="multi"
+        :actions="{
+          view: false,
+          edit: true,
+          delete: true
+        }"
+        :delete-name="(row) => row?.name || ''"
+        @selection-change="handleSelectionChange"
+        @edit="editVersion"
+        @delete="deleteVersionConfirmed"
+        @row-dblclick="editVersion"
+        @page-change="fetchVersions"
+        @sort-change="handleSortChange"
+      >
+        <el-table-column prop="name" :label="$t('version.versionName')" min-width="120" sortable="custom">
           <template #default="{ row }">
             <div class="version-name">
               <span>{{ row.name }}</span>
@@ -95,28 +109,12 @@
           </template>
         </el-table-column>
         <el-table-column prop="created_by.username" :label="$t('version.creator')" width="120" />
-        <el-table-column prop="created_at" :label="$t('version.createdAt')" width="180">
+        <el-table-column prop="created_at" :label="$t('version.createdAt')" width="180" sortable="custom">
           <template #default="{ row }">
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column :label="$t('project.actions')" width="150" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" @click="editVersion(row)">{{ $t('common.edit') }}</el-button>
-            <el-button size="small" type="danger" @click="deleteVersion(row)">{{ $t('common.delete') }}</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="currentPage"
-          :page-size="pageSize"
-          :total="total"
-          layout="total, prev, pager, next"
-          @current-change="handlePageChange"
-        />
-      </div>
+      </UnifiedListTable>
     </div>
     
     <!-- 版本表单对话框 -->
@@ -173,9 +171,10 @@
 import { ref, reactive, onMounted, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Delete } from '@element-plus/icons-vue'
+import { Plus, Search } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
+import { UnifiedListTable } from '@/components/platform-shared'
 
 const { t } = useI18n()
 const loading = ref(false)
@@ -187,6 +186,7 @@ const total = ref(0)
 const searchText = ref('')
 const projectFilter = ref('')
 const baselineFilter = ref('')
+const sortOrdering = ref('')
 const selectedVersions = ref([])
 const isDeleting = ref(false)
 
@@ -213,10 +213,15 @@ const fetchVersions = async () => {
   try {
     const params = {
       page: currentPage.value,
+      page_size: pageSize.value,
       search: searchText.value,
       projects: projectFilter.value,
-      is_baseline: baselineFilter.value
+      is_baseline: baselineFilter.value,
+      ordering: sortOrdering.value
     }
+    Object.keys(params).forEach((key) => {
+      if (params[key] === '' || params[key] === null || params[key] === undefined) delete params[key]
+    })
     const response = await api.get('/versions/', { params })
     versions.value = response.data.results || []
     total.value = response.data.count || 0
@@ -246,7 +251,17 @@ const handleFilter = () => {
   fetchVersions()
 }
 
-const handlePageChange = () => {
+const handleSortChange = ({ prop, order }) => {
+  if (!prop || !order) {
+    sortOrdering.value = ''
+  } else if (order === 'ascending') {
+    sortOrdering.value = prop
+  } else if (order === 'descending') {
+    sortOrdering.value = `-${prop}`
+  } else {
+    sortOrdering.value = ''
+  }
+  currentPage.value = 1
   fetchVersions()
 }
 
@@ -298,82 +313,48 @@ const saveVersion = async () => {
   }
 }
 
-const deleteVersion = async (version) => {
+const deleteVersionConfirmed = async (version) => {
   try {
-    await ElMessageBox.confirm(t('version.deleteConfirm'), t('common.warning'), {
-      confirmButtonText: t('common.confirm'),
-      cancelButtonText: t('common.cancel'),
-      type: 'warning'
-    })
-
     await api.delete(`/versions/${version.id}/`)
     ElMessage.success(t('version.deleteSuccess'))
     fetchVersions()
   } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(t('version.deleteFailed'))
-    }
+    ElMessage.error(t('version.deleteFailed'))
   }
 }
 
-// 处理选择变化
 const handleSelectionChange = (selection) => {
-  selectedVersions.value = selection
+  selectedVersions.value = selection || []
 }
 
-// 获取序号
-const getSerialNumber = (index) => {
-  return (currentPage.value - 1) * pageSize.value + index + 1
-}
-
-// 批量删除
 const batchDeleteVersions = async () => {
   if (selectedVersions.value.length === 0) {
-    ElMessage.warning(t('version.selectVersionsFirst'))
+    ElMessage.warning('请先选择要删除的版本')
     return
   }
 
   try {
     await ElMessageBox.confirm(
-      t('version.batchDeleteConfirm', { count: selectedVersions.value.length }),
-      t('common.warning'),
+      `确认删除已选择的 ${selectedVersions.value.length} 条记录？此操作不可恢复。`,
+      '删除确认',
       {
-        confirmButtonText: t('common.confirm'),
-        cancelButtonText: t('common.cancel'),
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
         type: 'warning'
       }
     )
 
     isDeleting.value = true
-    let successCount = 0
-    let failCount = 0
-
-    // 逐个删除选中的版本
-    for (const version of selectedVersions.value) {
-      try {
-        await api.delete(`/versions/${version.id}/`)
-        successCount++
-      } catch (error) {
-        console.error(`删除版本 ${version.id} 失败:`, error)
-        failCount++
-      }
-    }
-
-    // 显示删除结果
-    if (successCount > 0) {
-      ElMessage.success(t('version.batchDeleteSuccess', { successCount }) + (failCount > 0 ? `，${failCount} ${t('common.error')}` : ''))
-    } else {
-      ElMessage.error(t('version.batchDeleteFailed'))
-    }
-
-    // 清空选择并重新加载列表
+    const response = await api.post('/versions/batch-delete/', {
+      ids: selectedVersions.value.map(v => v.id)
+    })
+    
+    ElMessage.success(response.data.message || t('version.deleteSuccess'))
     selectedVersions.value = []
     fetchVersions()
-
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('批量删除失败:', error)
-      ElMessage.error(t('version.batchDeleteFailed') + ': ' + (error.message || t('common.error')))
+      ElMessage.error(error.response?.data?.error || t('version.deleteFailed'))
     }
   } finally {
     isDeleting.value = false

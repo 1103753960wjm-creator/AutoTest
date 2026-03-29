@@ -3,6 +3,7 @@ from . import views, project_list_views
 
 urlpatterns = [
     path('', views.ProjectListCreateView.as_view(), name='project-list'),
+    path('batch-delete/', views.project_batch_delete, name='project-batch-delete'),
     path('all/', views.get_all_projects, name='all-projects'),
     path('<int:pk>/', views.ProjectDetailView.as_view(), name='project-detail'),
     path('<int:project_id>/members/', views.get_project_members, name='get-project-members'),

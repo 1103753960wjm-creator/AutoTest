@@ -191,3 +191,32 @@ body {
     border-radius: 4px;
   }
 }
+
+/* --- 全局表格统一样式 --- */
+:root {
+  --table-action-btn-font-size: 13px;
+  --table-action-col-min-width: 150px;
+}
+
+.el-table {
+  --el-table-header-bg-color: #f8f9fa;
+}
+
+.el-table th.el-table__cell {
+  background-color: var(--el-table-header-bg-color) !important;
+  color: #333;
+  font-weight: 600;
+}
+
+.table-actions {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  
+  .el-button {
+    margin-left: 0 !important;
+    font-size: var(--table-action-btn-font-size, 13px);
+  }
+}

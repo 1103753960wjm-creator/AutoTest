@@ -53,7 +53,7 @@
           <button
             v-if="selectedTasks.length > 0"
             class="batch-delete-btn"
-            @click="batchDeleteTasks"
+            @click="deleteSingleTaskBySelected"
             :disabled="isDeleting">
             <span v-if="isDeleting">{{ $t('generatedTestCases.deleting') }}</span>
             <span v-else>{{ $t('generatedTestCases.batchDelete', { count: selectedTasks.length }) }}</span>
@@ -117,7 +117,7 @@
           <div class="header-cell count-cell">{{ $t('generatedTestCases.caseCount') }}</div>
           <div class="header-cell count-cell">处理状态</div>
           <div class="header-cell time-cell">{{ $t('generatedTestCases.generationTime') }}</div>
-          <div class="header-cell action-cell">{{ $t('generatedTestCases.actions') }}</div>
+          <div class="header-cell action-cell">操作</div>
         </div>
         
         <div class="table-body">
@@ -140,45 +140,61 @@
             </div>
             <div class="body-cell project-cell">{{ task.project_name || '未关联项目' }}</div>
             <div class="body-cell status-cell">
-              <span class="status-tag" :class="task.status">
+              <el-tag
+                class="status-tag"
+                size="small"
+                :type="getStatusTagType(task.status)"
+                effect="light">
                 {{ getStatusText(task.status) }}
-              </span>
+              </el-tag>
             </div>
             <div class="body-cell count-cell">
               <span class="count-badge">{{ task.result_count || getTestCaseCount(task) }}</span>
             </div>
             <div class="body-cell count-cell">
-              <span class="save-status-text" :title="getProcessingSummary(task).detail">
-                {{ getProcessingSummary(task).label }}
-              </span>
+              <el-tooltip
+                :content="getProcessingSummary(task).detail"
+                placement="top"
+                :show-after="250">
+                <el-tag
+                  class="processing-tag"
+                  size="small"
+                  :type="getProcessingTagType(getProcessingSummary(task))"
+                  effect="plain">
+                  {{ getProcessingSummary(task).label }}
+                </el-tag>
+              </el-tooltip>
             </div>
             <div class="body-cell time-cell">{{ formatDateTime(task.created_at) }}</div>
             <div class="body-cell action-cell">
-              <div class="action-buttons">
-                <span v-if="task.is_saved_to_records" class="save-status-hint">已进入正式测试资产</span>
-                <button
-                  class="view-detail-btn"
-                  @click="viewTaskDetail(task)">
-                  {{ ['pending', 'generating', 'reviewing', 'revising'].includes(task.status) ? '查看任务' : $t('generatedTestCases.viewDetail') }}
-                </button>
-                <button
-                  v-if="task.auto_review_summary?.has_record"
-                  class="view-detail-btn"
-                  @click="goToAutoReviews(task)">
-                  查看 AI 自动评审
-                </button>
-                <button
+              <div class="action-buttons action-buttons--inline">
+                <el-button size="small" type="primary" plain @click="viewTaskDetail(task)">
+                  详情
+                </el-button>
+                <el-button
                   v-if="canMutateTaskResults(task)"
-                  class="adopt-btn"
-                  @click="batchAdoptTask(task)">
-                  {{ getBatchAdoptLabel(task) }}
-                </button>
-                <button
-                  v-if="canMutateTaskResults(task)"
-                  class="discard-btn"
-                  @click="batchDiscardTask(task)">
-                  {{ getBatchDiscardLabel(task) }}
-                </button>
+                  size="small"
+                  @click="openEditTask(task)">
+                  编辑
+                </el-button>
+                <el-button size="small" type="danger" plain @click="deleteSingleTask(task)" :disabled="isDeleting">
+                  删除
+                </el-button>
+              </div>
+              <div class="action-buttons action-buttons--dropdown">
+                <el-dropdown trigger="click">
+                  <el-button size="small">
+                    更多
+                    <el-icon style="margin-left: 6px"><ArrowDown /></el-icon>
+                  </el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item @click="viewTaskDetail(task)">详情</el-dropdown-item>
+                      <el-dropdown-item v-if="canMutateTaskResults(task)" @click="openEditTask(task)">编辑</el-dropdown-item>
+                      <el-dropdown-item divided @click="deleteSingleTask(task)">删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
               </div>
               <div class="task-review-hint">
                 {{ task.auto_review_summary?.label || '未触发自动评审' }}
@@ -431,9 +447,11 @@
 <script>
 import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
+import { ArrowDown } from '@element-plus/icons-vue'
 
 export default {
   name: 'GeneratedTestCaseList',
+  components: { ArrowDown },
   data() {
     return {
       isLoading: false,
@@ -460,8 +478,8 @@ export default {
         version_id: null // 改为单选
       },
       currentAdoptingTask: null,
-      // 选择相关数据
-      selectedTasks: [], // 已选中的任务ID列表
+      // 选择相关数据（统一为单选）
+      selectedTasks: [], // 已选中的任务ID列表（多选）
       isDeleting: false, // 是否正在删除
       // 分页相关数据
       pagination: {
@@ -529,6 +547,27 @@ export default {
   },
   
   methods: {
+    getStatusTagType(status) {
+      const map = {
+        pending: 'warning',
+        generating: 'info',
+        reviewing: 'info',
+        revising: 'info',
+        completed: 'success',
+        failed: 'danger',
+        cancelled: ''
+      }
+      return map[status] ?? ''
+    },
+
+    getProcessingTagType(summary) {
+      const status = summary?.status || 'pending'
+      if (status === 'adopted') return 'success'
+      if (status === 'discarded') return 'info'
+      if (status === 'pending') return 'warning'
+      return ''
+    },
+
     async loadTasks() {
       this.isLoading = true
       try {
@@ -589,18 +628,42 @@ export default {
         this.selectedTasks.push(taskId)
       }
     },
+    // 切换全选
+    toggleSelectAll() {
+      if (this.isAllSelected) {
+        this.selectedTasks = []
+      } else {
+        this.selectedTasks = this.tasks.map((task) => task.task_id)
+      }
+    },
 
     // 判断任务是否被选中
     isTaskSelected(taskId) {
       return this.selectedTasks.includes(taskId)
     },
 
-    // 切换全选
-    toggleSelectAll() {
-      if (this.isAllSelected) {
+    openEditTask(task) {
+      // 当前列表对象没有明确“编辑任务”入口，先复用详情页作为编辑入口（后续可替换为真正编辑页/弹窗）
+      this.viewTaskDetail(task)
+    },
+
+    async deleteSingleTask(task) {
+      const taskId = task?.task_id
+      if (!taskId) return
+      if (!confirm(`确认删除【${task.title || taskId}】？此操作不可恢复。`)) {
+        return
+      }
+      this.isDeleting = true
+      try {
+        await api.delete(`/requirement-analysis/testcase-generation/${taskId}/`)
+        ElMessage.success('删除成功')
         this.selectedTasks = []
-      } else {
-        this.selectedTasks = this.tasks.map(task => task.task_id)
+        this.loadTasks()
+      } catch (error) {
+        console.error(`删除任务 ${taskId} 失败:`, error)
+        ElMessage.error('删除失败')
+      } finally {
+        this.isDeleting = false
       }
     },
 
@@ -648,6 +711,16 @@ export default {
       } finally {
         this.isDeleting = false
       }
+    },
+
+    async deleteSingleTaskBySelected() {
+      const selectedId = this.selectedTasks[0]
+      const task = this.tasks.find((item) => item.task_id === selectedId)
+      if (!task) {
+        ElMessage.warning('请先选择一条记录')
+        return
+      }
+      await this.deleteSingleTask(task)
     },
 
     updateStats() {
@@ -1357,7 +1430,7 @@ export default {
 }
 
 .testcases-table {
-  border: 1px solid #ddd;
+  border: 1px solid rgba(148, 163, 184, 0.3);
   border-radius: 8px;
   overflow-x: auto;
   overflow-y: hidden;
@@ -1366,15 +1439,19 @@ export default {
 .table-header {
   display: grid;
   grid-template-columns: 50px 60px 180px 280px 160px 100px 100px 180px 200px;
-  background: #f8f9fa;
+  background: #f8fafc;
   font-weight: bold;
   color: #2c3e50;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.25);
 }
 
 .table-body .table-row {
   display: grid;
   grid-template-columns: 50px 60px 180px 280px 160px 100px 100px 180px 200px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
   transition: background 0.2s ease;
 }
 
@@ -1395,7 +1472,7 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid #eee;
+  border-right: 1px solid rgba(148, 163, 184, 0.18);
   word-wrap: break-word;
   word-break: break-word;
 }
@@ -1404,7 +1481,7 @@ export default {
   padding: 12px;
   display: flex;
   align-items: center;
-  border-right: 1px solid #eee;
+  border-right: 1px solid rgba(148, 163, 184, 0.14);
   word-wrap: break-word;
   word-break: break-word;
 }
@@ -1414,10 +1491,8 @@ export default {
   border-right: none;
 }
 
-.save-status-text {
-  font-size: 13px;
-  line-height: 1.6;
-  color: #475569;
+.processing-tag {
+  max-width: 100%;
 }
 
 .checkbox-cell {
@@ -1501,22 +1576,37 @@ export default {
 
 .action-buttons {
   display: flex;
-  gap: 5px;
-  flex-wrap: nowrap;
+  gap: 8px;
+  flex-wrap: wrap;
   align-items: center;
-  margin: 0 auto;
+}
+
+.action-buttons--dropdown {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .action-buttons--inline {
+    display: none;
+  }
+
+  .action-buttons--dropdown {
+    display: inline-flex;
+  }
 }
 
 .count-badge {
-  background: #3498db;
-  color: white;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: bold;
-  min-width: 30px;
+  background: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 28px;
   text-align: center;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .requirement-name {
@@ -1532,116 +1622,6 @@ export default {
   color: #666;
   font-size: 0.8rem;
   margin-left: 5px;
-}
-
-.priority-tag,
-.status-tag {
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: bold;
-}
-
-.priority-tag.p0 {
-  background: #ffebee;
-  color: #d32f2f;
-}
-
-.priority-tag.p1 {
-  background: #fff3e0;
-  color: #f57c00;
-}
-
-.priority-tag.p2 {
-  background: #e3f2fd;
-  color: #1976d2;
-}
-
-.priority-tag.p3 {
-  background: #e8f5e8;
-  color: #388e3c;
-}
-
-.status-tag.pending {
-  background: #fff3cd;
-  color: #856404;
-}
-
-.status-tag.generating {
-  background: #e3f2fd;
-  color: #1976d2;
-}
-
-.status-tag.reviewing {
-  background: #e3f2fd;
-  color: #1976d2;
-}
-
-.status-tag.completed {
-  background: #d4edda;
-  color: #155724;
-}
-
-.status-tag.failed {
-  background: #f8d7da;
-  color: #721c24;
-}
-
-.view-detail-btn {
-  background: #3498db;
-  color: white;
-  border: none;
-  padding: 6px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: background 0.3s ease;
-  margin-right: 3px;
-  white-space: nowrap;
-}
-
-.view-detail-btn:hover {
-  background: #2980b9;
-}
-
-.adopt-btn {
-  background: #27ae60;
-  color: white;
-  border: none;
-  padding: 6px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: background 0.3s ease;
-  margin-right: 3px;
-  white-space: nowrap;
-}
-
-.adopt-btn:hover {
-  background: #229954;
-}
-
-.discard-btn {
-  background: #e74c3c;
-  color: white;
-  border: none;
-  padding: 6px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.8rem;
-  transition: background 0.3s ease;
-  white-space: nowrap;
-}
-
-.discard-btn:hover {
-  background: #c0392b;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 5px;
-  flex-wrap: nowrap;
-  align-items: center;
 }
 
 .adopted-label {
@@ -1971,18 +1951,8 @@ export default {
   }
 
   .action-buttons {
-    flex-direction: row;
-    gap: 2px;
-    align-items: center;
-    flex-wrap: nowrap;
-  }
-
-  .view-detail-btn,
-  .adopt-btn,
-  .discard-btn {
-    margin-right: 0;
-    font-size: 0.65rem;
-    padding: 2px 4px;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 }
 
@@ -2016,13 +1986,6 @@ export default {
     flex-direction: column;
     gap: 2px;
     align-items: stretch;
-  }
-  
-  .view-detail-btn,
-  .adopt-btn,
-  .discard-btn {
-    font-size: 0.65rem;
-    padding: 2px 4px;
   }
   
   .form-row {

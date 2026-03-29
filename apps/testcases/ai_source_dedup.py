@@ -77,10 +77,105 @@ def _is_same_content(identity, testcase):
     )
 
 
-def find_existing_ai_testcase(project, identity):
+def _build_identity_content_key(identity):
+    return (
+        normalize_text_for_identity(identity.get('title')),
+        normalize_text_for_identity(identity.get('preconditions')),
+        normalize_text_for_identity(identity.get('steps')),
+        normalize_text_for_identity(identity.get('expected_result')),
+    )
+
+
+def _build_testcase_identity(testcase):
+    return build_ai_result_identity(
+        {
+            'title': testcase.title,
+            'preconditions': testcase.preconditions,
+            'steps': testcase.steps,
+            'expected_result': testcase.expected_result,
+            'test_type': testcase.test_type,
+            'tags': getattr(testcase, 'tags', []),
+        }
+    )
+
+
+def register_ai_testcase_lookup(testcase_lookup, testcase, identity=None):
+    if not isinstance(testcase_lookup, dict):
+        return testcase_lookup
+
+    normalized_identity = identity or _build_testcase_identity(testcase)
+    lookup_task_id = str(testcase_lookup.get('task_id') or '').strip()
+    identity_task_id = str(normalized_identity.get('task_id') or '').strip()
+    if lookup_task_id and identity_task_id and lookup_task_id != identity_task_id:
+        return testcase_lookup
+
+    by_case_id = testcase_lookup.setdefault('by_case_id', {})
+    by_case_index = testcase_lookup.setdefault('by_case_index', {})
+    by_content = testcase_lookup.setdefault('by_content', {})
+
+    case_id = str(normalized_identity.get('case_id') or '').strip()
+    case_index = _to_int(normalized_identity.get('case_index'))
+    content_key = _build_identity_content_key(normalized_identity)
+
+    if case_id:
+        by_case_id.setdefault(case_id, testcase)
+    if case_index is not None:
+        by_case_index.setdefault(case_index, testcase)
+    if any(content_key):
+        by_content.setdefault(content_key, testcase)
+
+    return testcase_lookup
+
+
+def build_ai_testcase_lookup(project, task_id):
+    normalized_task_id = str(task_id or '').strip()
+    testcase_lookup = {
+        'task_id': normalized_task_id,
+        'by_case_id': {},
+        'by_case_index': {},
+        'by_content': {},
+    }
+
+    if not project or not normalized_task_id:
+        return testcase_lookup
+
+    queryset = TestCase.objects.filter(project=project).order_by('created_at', 'id')
+    for testcase in queryset:
+        ai_source = extract_ai_generation_source(getattr(testcase, 'tags', []))
+        if not ai_source:
+            continue
+        if str(ai_source.get('task_id') or '').strip() != normalized_task_id:
+            continue
+        register_ai_testcase_lookup(testcase_lookup, testcase)
+
+    return testcase_lookup
+
+
+def find_existing_ai_testcase(project, identity, testcase_lookup=None):
     task_id = identity.get('task_id')
     if not project or not task_id:
         return None
+
+    normalized_task_id = str(task_id or '').strip()
+    if isinstance(testcase_lookup, dict) and str(testcase_lookup.get('task_id') or '').strip() == normalized_task_id:
+        case_id = str(identity.get('case_id') or '').strip()
+        case_index = _to_int(identity.get('case_index'))
+        content_key = _build_identity_content_key(identity)
+
+        if case_id:
+            testcase = testcase_lookup.get('by_case_id', {}).get(case_id)
+            if testcase:
+                return testcase
+
+        if case_index is not None:
+            testcase = testcase_lookup.get('by_case_index', {}).get(case_index)
+            if testcase:
+                return testcase
+
+        if any(content_key):
+            testcase = testcase_lookup.get('by_content', {}).get(content_key)
+            if testcase:
+                return testcase
 
     queryset = TestCase.objects.filter(project=project).order_by('created_at', 'id')
 
@@ -119,7 +214,7 @@ def find_existing_ai_testcase(project, identity):
     return None
 
 
-def get_or_create_ai_testcase(*, project, testcase_payload, create_callback, apply_default_versions=None):
+def get_or_create_ai_testcase(*, project, testcase_payload, create_callback, apply_default_versions=None, testcase_lookup=None):
     payload = copy.deepcopy(testcase_payload or {})
     identity = build_ai_result_identity(payload)
 
@@ -131,13 +226,15 @@ def get_or_create_ai_testcase(*, project, testcase_payload, create_callback, app
     )
     identity = build_ai_result_identity(payload)
 
-    testcase = find_existing_ai_testcase(project, identity)
+    testcase = find_existing_ai_testcase(project, identity, testcase_lookup=testcase_lookup)
     if testcase:
         if apply_default_versions and not testcase.versions.exists():
             apply_default_versions(testcase, project)
+        register_ai_testcase_lookup(testcase_lookup, testcase, identity=identity)
         return testcase, False, payload, identity
 
     testcase = create_callback(payload)
     if apply_default_versions:
         apply_default_versions(testcase, project)
+    register_ai_testcase_lookup(testcase_lookup, testcase, identity=identity)
     return testcase, True, payload, identity

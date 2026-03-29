@@ -149,24 +149,27 @@
             <input
               type="checkbox"
               :checked="isAllSelected"
-              :disabled="isResultReadonly || selectableCases.length === 0"
+              :disabled="isResultReadonly || selectableCases.length === 0 || isBatchAdopting"
               @change="toggleSelectAll">
             {{ $t('taskDetail.selectAll') }}
           </label>
           <span class="selected-count" v-if="selectedCases.length > 0">
             {{ $t('taskDetail.selectedCount', { count: selectedCases.length }) }}
           </span>
+          <span v-if="isBatchAdopting" class="batch-adopting-hint">
+            {{ $t('taskDetail.batchAdoptProcessing', { count: batchAdoptingCount }) }}
+          </span>
         </div>
         <div class="batch-buttons">
           <button
             class="batch-adopt-btn"
-            :disabled="isResultReadonly || selectedCases.length === 0"
+            :disabled="isResultReadonly || selectedCases.length === 0 || isBatchAdopting"
             @click="batchAdopt">
-            {{ $t('taskDetail.batchAdopt', { count: selectedCases.length }) }}
+            {{ isBatchAdopting ? $t('taskDetail.batchAdopting', { count: batchAdoptingCount }) : $t('taskDetail.batchAdopt', { count: selectedCases.length }) }}
           </button>
           <button
             class="batch-discard-btn"
-            :disabled="isResultReadonly || selectedCases.length === 0"
+            :disabled="isResultReadonly || selectedCases.length === 0 || isBatchAdopting"
             @click="batchDiscard">
             {{ $t('taskDetail.batchDiscard', { count: selectedCases.length }) }}
           </button>
@@ -195,7 +198,7 @@
               <input 
                 type="checkbox" 
                 :value="testCase"
-                :disabled="isCaseReadonly(testCase)"
+                :disabled="isCaseReadonly(testCase) || isBatchAdopting"
                 v-model="selectedCases"
                 @change="updateSelectAll">
             </div>
@@ -224,8 +227,8 @@
                   @click="goToAdoptedAsset(testCase)">
                   查看资产
                 </button>
-                <button v-if="canMutateSingleCase(testCase)" class="adopt-btn" @click="adoptSingleCase(testCase, index)">{{ $t('taskDetail.adopt') }}</button>
-                <button v-if="canMutateSingleCase(testCase)" class="discard-btn" @click="discardSingleCase(testCase, index)">{{ $t('taskDetail.discard') }}</button>
+                <button v-if="canMutateSingleCase(testCase)" class="adopt-btn" :disabled="isBatchAdopting" @click="adoptSingleCase(testCase, index)">{{ $t('taskDetail.adopt') }}</button>
+                <button v-if="canMutateSingleCase(testCase)" class="discard-btn" :disabled="isBatchAdopting" @click="discardSingleCase(testCase, index)">{{ $t('taskDetail.discard') }}</button>
               </div>
             </div>
           </div>
@@ -380,6 +383,8 @@ export default {
       currentPage: 1,
       pageSize: 10,
       isExporting: false,
+      isBatchAdopting: false,
+      batchAdoptingCount: 0,
       // 编辑相关状态
       isEditing: false,
       isSaving: false,
@@ -792,6 +797,9 @@ export default {
     },
 
     toggleSelectAll() {
+      if (this.isBatchAdopting) {
+        return
+      }
       if (this.processingSummary.pending_count === 0) {
         return
       }
@@ -827,6 +835,10 @@ export default {
     },
 
     async batchAdopt() {
+      if (this.isBatchAdopting) {
+        ElMessage.info(this.$t('taskDetail.batchAdoptProcessing', { count: this.batchAdoptingCount || this.selectedCases.length }))
+        return
+      }
       if (!this.taskStatusAllowsResultMutation) {
         ElMessage.warning('当前任务状态不允许继续处理生成结果。')
         return
@@ -855,6 +867,10 @@ export default {
         return
       }
 
+      this.isBatchAdopting = true
+      this.batchAdoptingCount = pendingCases.length
+      ElMessage.info(this.$t('taskDetail.batchAdoptSubmitting', { count: pendingCases.length }))
+
       try {
         const casesData = pendingCases.map((testCase, index) => ({
           title: testCase.scenario || `Test Case ${index + 1}`,
@@ -876,11 +892,11 @@ export default {
           ]
         }))
 
-        await api.post(`/requirement-analysis/testcase-generation/${this.taskId}/batch-adopt-selected/`, {
+        const response = await api.post(`/requirement-analysis/testcase-generation/${this.taskId}/batch-adopt-selected/`, {
           test_cases: casesData
         })
 
-        ElMessage.success(this.$t('taskDetail.adoptSuccess', { count: pendingCases.length }))
+        ElMessage.success(this.$t('taskDetail.adoptSuccess', { count: response.data?.handled_count || pendingCases.length }))
         await this.loadTaskDetail()
 
       } catch (error) {
@@ -888,11 +904,18 @@ export default {
         if (error.response?.status === 400) {
           await this.loadTaskDetail()
         }
-        ElMessage.error(this.$t('taskDetail.batchAdoptFailed') + ': ' + (error.response?.data?.message || error.message))
+        ElMessage.error(this.$t('taskDetail.batchAdoptFailed') + ': ' + (error.response?.data?.message || error.response?.data?.error || error.message))
+      } finally {
+        this.isBatchAdopting = false
+        this.batchAdoptingCount = 0
       }
     },
 
     async batchDiscard() {
+      if (this.isBatchAdopting) {
+        ElMessage.info(this.$t('taskDetail.batchAdoptProcessing', { count: this.batchAdoptingCount || this.selectedCases.length }))
+        return
+      }
       if (!this.taskStatusAllowsResultMutation) {
         ElMessage.warning('当前任务状态不允许继续处理生成结果。')
         return
@@ -1094,6 +1117,10 @@ export default {
     },
 
     async adoptSingleCase(testCase, index) {
+      if (this.isBatchAdopting) {
+        ElMessage.info(this.$t('taskDetail.batchAdoptProcessing', { count: this.batchAdoptingCount || this.selectedCases.length }))
+        return
+      }
       if (!this.taskStatusAllowsResultMutation) {
         ElMessage.warning('当前任务状态不允许继续处理生成结果。')
         return
@@ -1167,6 +1194,10 @@ export default {
     },
 
     async discardSingleCase(testCase, index) {
+      if (this.isBatchAdopting) {
+        ElMessage.info(this.$t('taskDetail.batchAdoptProcessing', { count: this.batchAdoptingCount || this.selectedCases.length }))
+        return
+      }
       if (!this.taskStatusAllowsResultMutation) {
         ElMessage.warning('当前任务状态不允许继续处理生成结果。')
         return
@@ -1624,6 +1655,11 @@ export default {
 .selected-count {
   color: #3498db;
   font-weight: bold;
+}
+
+.batch-adopting-hint {
+  color: #e67e22;
+  font-size: 0.9rem;
 }
 
 .batch-buttons {

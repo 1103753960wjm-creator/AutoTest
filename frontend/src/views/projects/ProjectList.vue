@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="list-page">
     <div class="list-page__panel">
       <FilterBar>
@@ -67,8 +67,29 @@
           </div>
         </div>
 
-        <el-table :data="projects" v-loading="loading" style="width: 100%">
-          <el-table-column prop="name" :label="$t('project.projectName')" min-width="200">
+        <UnifiedListTable
+          v-model:currentPage="currentPage"
+          v-model:pageSize="pageSize"
+          :total="total"
+          :data="projects"
+          :loading="loading"
+          row-key="id"
+          selection-mode="multi"
+          @selection-change="handleSelectionChange"
+          :actions="{
+            view: true,
+            edit: true,
+            delete: true
+          }"
+          :delete-name="(row) => row?.name || ''"
+          @row-dblclick="handleRowDblClick"
+          @view="handleView"
+          @edit="editProject"
+          @delete="deleteProjectConfirmed"
+          @page-change="fetchProjects"
+          @sort-change="handleSortChange"
+        >
+          <el-table-column prop="name" :label="$t('project.projectName')" min-width="200" sortable="custom">
             <template #default="{ row }">
               <el-link @click="goToProject(row.id)" type="primary">
                 {{ row.name }}
@@ -76,7 +97,7 @@
             </template>
           </el-table-column>
           <el-table-column prop="description" :label="$t('project.description')" min-width="300" show-overflow-tooltip />
-          <el-table-column prop="status" :label="$t('project.status')" width="100">
+          <el-table-column prop="status" :label="$t('project.status')" width="120" sortable="custom">
             <template #default="{ row }">
               <el-tag :type="getStatusType(row.status)">{{ getStatusText(row.status) }}</el-tag>
             </template>
@@ -102,28 +123,12 @@
             </template>
           </el-table-column>
           <el-table-column prop="owner.username" :label="$t('project.owner')" width="120" />
-          <el-table-column prop="created_at" :label="$t('project.createdAt')" width="180">
+          <el-table-column prop="created_at" :label="$t('project.createdAt')" width="180" sortable="custom">
             <template #default="{ row }">
               {{ formatDate(row.created_at) }}
             </template>
           </el-table-column>
-          <el-table-column :label="$t('project.actions')" width="150" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" @click="editProject(row)">{{ $t('common.edit') }}</el-button>
-              <el-button size="small" type="danger" @click="deleteProject(row)">{{ $t('common.delete') }}</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div class="list-page__pagination">
-          <el-pagination
-            v-model:current-page="currentPage"
-            :page-size="pageSize"
-            :total="total"
-            layout="total, prev, pager, next"
-            @current-change="handlePageChange"
-          />
-        </div>
+        </UnifiedListTable>
       </template>
     </div>
     
@@ -176,7 +181,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
-import { FilterBar } from '@/components/platform-shared'
+import { FilterBar, UnifiedListTable } from '@/components/platform-shared'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
@@ -199,9 +204,23 @@ const total = ref(0)
 const searchText = ref('')
 const statusFilter = ref('')
 const hasLoaded = ref(false)
-const requestState = ref(UI_PAGE_STATE.READY)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
 const requestErrorMessage = ref('')
 const lastLoadedAt = ref('')
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (projects.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
 
 const form = reactive({
   id: null,
@@ -222,7 +241,10 @@ const rules = {
 
 const hasActiveFilter = computed(() => Boolean(searchText.value.trim() || statusFilter.value))
 
+const selectedProjects = ref([])
+const isDeleting = ref(false)
 
+const sourceProjectName = computed(() => String(route.query.projectName || ''))
 
 usePlatformPageHeader(() => ({
   statusTags: hasActiveFilter.value
@@ -243,14 +265,21 @@ usePlatformPageHeader(() => ({
     }
   ],
   actions: [
+    selectedProjects.value.length > 0
+      ? {
+          key: 'delete-selected',
+          label: `${t('project.batchDelete', '批量删除')} (${selectedProjects.value.length})`,
+          type: 'danger',
+          onClick: batchDeleteProjects
+        }
+      : null,
     {
       key: 'create-project',
       label: t('project.newProject'),
       type: 'primary',
-      icon: Plus,
       onClick: handleCreateProject
     }
-  ]
+  ].filter(Boolean)
 }))
 
 const fetchProjects = async () => {
@@ -260,9 +289,14 @@ const fetchProjects = async () => {
   try {
     const params = {
       page: currentPage.value,
+      page_size: pageSize.value,
       search: searchText.value,
-      status: statusFilter.value
+      status: statusFilter.value,
+      ordering: sortOrdering.value
     }
+    Object.keys(params).forEach((key) => {
+      if (params[key] === '' || params[key] === null || params[key] === undefined) delete params[key]
+    })
     const response = await api.get('/projects/', { params })
     projects.value = response.data.results
     total.value = response.data.count
@@ -296,8 +330,28 @@ const resetFilters = () => {
   fetchProjects()
 }
 
-const handlePageChange = () => {
+const sortOrdering = ref('')
+
+const handleSortChange = ({ prop, order }) => {
+  if (!prop || !order) {
+    sortOrdering.value = ''
+  } else if (order === 'ascending') {
+    sortOrdering.value = prop
+  } else if (order === 'descending') {
+    sortOrdering.value = `-${prop}`
+  } else {
+    sortOrdering.value = ''
+  }
+  currentPage.value = 1
   fetchProjects()
+}
+
+const handleRowDblClick = (row) => {
+  if (row?.id) editProject(row)
+}
+
+const handleView = (row) => {
+  if (row?.id) goToProject(row.id)
 }
 
 const goToProject = (id) => {
@@ -372,21 +426,50 @@ const handleSubmit = async () => {
   })
 }
 
-const deleteProject = async (project) => {
+const deleteProjectConfirmed = async (project) => {
   try {
-    await ElMessageBox.confirm(t('project.deleteConfirm'), t('common.warning'), {
-      confirmButtonText: t('common.confirm'),
-      cancelButtonText: t('common.cancel'),
-      type: 'warning'
-    })
-
     await api.delete(`/projects/${project.id}/`)
     ElMessage.success(t('project.deleteSuccess'))
     fetchProjects()
   } catch (error) {
+    ElMessage.error(t('project.deleteFailed'))
+  }
+}
+
+const handleSelectionChange = (selection) => {
+  selectedProjects.value = selection
+}
+
+const batchDeleteProjects = async () => {
+  if (selectedProjects.value.length === 0) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedProjects.value.length} 个项目吗？这将级联删除其下所有的测试资产与任务包络，并且不可恢复。`,
+      t('common.warning'),
+      {
+        confirmButtonText: t('common.confirm'),
+        cancelButtonText: t('common.cancel'),
+        type: 'warning'
+      }
+    )
+
+    isDeleting.value = true
+    const ids = selectedProjects.value.map(p => p.id)
+    const response = await api.post('/projects/batch-delete/', { ids, confirm: true })
+    
+    ElMessage.success(response.data.message || '批量删除成功')
+    selectedProjects.value = []
+    currentPage.value = 1
+    fetchProjects()
+
+  } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(t('project.deleteFailed'))
+      console.error('Batch delete failed:', error)
+      ElMessage.error('批量删除失败: ' + (error.response?.data?.error || error.message || t('common.error')))
     }
+  } finally {
+    isDeleting.value = false
   }
 }
 
@@ -461,11 +544,6 @@ onMounted(() => {
   display: grid;
   grid-template-columns: minmax(260px, 1.4fr) minmax(180px, 220px);
   gap: 16px;
-}
-
-.list-page__pagination {
-  display: flex;
-  justify-content: center;
 }
 
 @media screen and (max-width: 1920px) {

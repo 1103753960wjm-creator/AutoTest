@@ -1,6 +1,6 @@
 # TestHub 项目开发记忆
 
-更新时间：2026-03-25
+更新时间：2026-03-29
 
 ## 1. 文件职责
 
@@ -438,6 +438,32 @@
 - `frontend/src/views/requirement-analysis/GeneratedTestCaseList.vue`
 - `frontend/src/views/reviews/AutoReviewList.vue`
 - `frontend/src/views/reviews/ReviewList.vue`
+
+### 3.22 测试设计模块现代化与批量删除接口标准化
+
+2026-03-29 已完成“测试设计”子导航下所有核心模块的标准化，重点是“UI 视觉统一 + 交互行为对齐 + 批量接口补齐”。
+
+#### 当前冻结结论：
+
+- **UI 风格统一**: `UnifiedListTable` 正式确立为后续所有列表页的基座。强制启用 `border`、统一表头背景色 (`#f5f7fa`) 及文本链接型按钮样式。
+- **标准化交互行为**:
+  - 第一列固定为序号列。
+  - 第二列固定为多选框列（全量支持批量操作）。
+  - **行双击行为**: 统一为“触发编辑”。
+- **后端批量接口基线**:
+  - 项目管理新增 `POST /api/projects/batch-delete/`。
+  - 版本管理新增 `POST /api/versions/batch-delete/`。
+  - 接口规范统一：支持 `confirm` 二次确认标志位，用于级联删除控制。
+- **字段扩展规范**:
+  - 允许在现代化改造过程中按需扩展列表可见字段（如版本管理已新增 `created_by` 和 `testcases_count`）。
+
+#### 相关文件：
+
+- `apps/projects/views.py` / `apps/versions/views.py` (新增关键 API)
+- `frontend/src/views/projects/ProjectList.vue`
+- `frontend/src/views/versions/VersionList.vue`
+- `frontend/src/views/testcases/TestCaseList.vue`
+- `frontend/src/components/platform-shared/UnifiedListTable.vue`
 
 ## 4. 当前代码层已落地、但仍需继续推进的点
 

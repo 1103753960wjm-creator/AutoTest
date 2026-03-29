@@ -521,6 +521,7 @@ export default {
     selectAll: 'Select All',
     selectedCount: '{count} test cases selected',
     batchAdopt: '✅ Batch Adopt ({count})',
+    batchAdopting: '⏳ Adopting ({count})',
     batchDiscard: '❌ Batch Discard ({count})',
 
     // Table Headers
@@ -587,6 +588,8 @@ export default {
     confirmDiscardTitle: 'Confirm Discard',
     confirmAdoptSingle: 'Are you sure to adopt test case "{scenario}"?',
     confirmDiscardSingle: 'Are you sure to discard test case "{scenario}"? This cannot be undone.',
+    batchAdoptProcessing: 'Adopting {count} test cases. Please do not click again. The page will refresh automatically when done.',
+    batchAdoptSubmitting: 'The adopt request for {count} test cases has been submitted. Please wait.',
     adoptSuccess: 'Successfully adopted {count} test cases!',
     discardSuccess: 'Successfully discarded {count} test cases',
     allDiscardedSuccess: 'All test cases discarded, task deleted',

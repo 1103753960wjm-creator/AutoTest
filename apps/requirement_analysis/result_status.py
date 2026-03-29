@@ -255,7 +255,7 @@ def _build_ai_identity(task, result, fallback_index):
     )
 
 
-def sync_result_status_from_existing_adoptions(task, project=None, parsed_results=None, save=False):
+def sync_result_status_from_existing_adoptions(task, project=None, parsed_results=None, save=False, testcase_lookup=None):
     parsed_results = parsed_results if parsed_results is not None else parse_generated_results(
         task.final_test_cases or task.generated_test_cases
     )
@@ -277,7 +277,11 @@ def sync_result_status_from_existing_adoptions(task, project=None, parsed_result
 
         testcase = None
         if target_project:
-            testcase = find_existing_ai_testcase(target_project, _build_ai_identity(task, result, fallback_index))
+            testcase = find_existing_ai_testcase(
+                target_project,
+                _build_ai_identity(task, result, fallback_index),
+                testcase_lookup=testcase_lookup,
+            )
 
         if testcase:
             item["status"] = RESULT_STATUS_ADOPTED
@@ -335,7 +339,7 @@ def mark_result_status(task, case_id="", case_index=None, status=RESULT_STATUS_P
     return snapshot, summary
 
 
-def attach_result_status(task, results, project=None, save=False):
+def attach_result_status(task, results, project=None, save=False, testcase_lookup=None):
     parsed_results = results if results is not None else parse_generated_results(
         task.final_test_cases or task.generated_test_cases
     )
@@ -344,6 +348,7 @@ def attach_result_status(task, results, project=None, save=False):
         project=project,
         parsed_results=parsed_results,
         save=save,
+        testcase_lookup=testcase_lookup,
     )
     lookup = _build_snapshot_lookup(snapshot)
     enriched_results = []

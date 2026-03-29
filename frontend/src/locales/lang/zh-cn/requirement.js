@@ -521,6 +521,7 @@ export default {
     selectAll: '全选',
     selectedCount: '已选择 {count} 条用例',
     batchAdopt: '✅ 一键采纳 ({count})',
+    batchAdopting: '⏳ 采纳中 ({count})',
     batchDiscard: '❌ 一键弃用 ({count})',
 
     // 表格头部
@@ -587,6 +588,8 @@ export default {
     confirmDiscardTitle: '确认弃用',
     confirmAdoptSingle: '确定要采纳测试用例"{scenario}"吗？',
     confirmDiscardSingle: '确定要弃用测试用例"{scenario}"吗？此操作不可恢复。',
+    batchAdoptProcessing: '正在采纳 {count} 条测试用例，请勿重复点击，完成后将自动刷新。',
+    batchAdoptSubmitting: '已提交采纳请求，正在处理 {count} 条测试用例，请稍候。',
     adoptSuccess: '成功采纳 {count} 条测试用例！',
     discardSuccess: '成功弃用 {count} 条测试用例',
     allDiscardedSuccess: '所有测试用例已弃用，任务已删除',

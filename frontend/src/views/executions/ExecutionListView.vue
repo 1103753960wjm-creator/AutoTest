@@ -38,17 +38,20 @@
       </el-form>
     </div>
 
-    <el-table
+    <UnifiedListTable
+      v-model:currentPage="currentPage"
+      v-model:pageSize="pageSize"
+      :total="total"
+      :page-sizes="[10, 20, 50, 100]"
       :data="testPlans"
-      style="width: 100%"
-      v-loading="loading"
-      @selection-change="handleSelectionChange">
-      <el-table-column type="selection" width="55" />
-      <el-table-column
-        type="index"
-        :label="$t('execution.serialNumber')"
-        width="80"
-        :index="getSerialNumber" />
+      :loading="loading"
+      row-key="id"
+      selection-mode="multi"
+      :actions="{ view: false, edit: false, delete: false }"
+      @selection-change="handleSelectionChange"
+      @row-dblclick="handleRowDblClick"
+      @page-change="fetchTestPlans"
+    >
       <el-table-column prop="name" :label="$t('execution.planName')" min-width="200">
         <template #default="scope">
           <el-link type="primary" @click="viewPlan(scope.row.id)">
@@ -78,36 +81,23 @@
           {{ formatDate(scope.row.created_at) }}
         </template>
       </el-table-column>
-      <el-table-column :label="$t('execution.actions')" width="200" fixed="right">
-        <template #default="scope">
-          <el-button size="small" type="primary" @click="viewPlan(scope.row.id)">
-            {{ $t('execution.viewExecution') }}
-          </el-button>
-          <el-button size="small" type="warning" @click="editPlan(scope.row)">
-            {{ $t('common.edit') }}
-          </el-button>
-          <el-button
-            size="small"
-            :type="scope.row.is_active ? 'danger' : 'success'"
-            @click="togglePlanStatus(scope.row)">
-            {{ scope.row.is_active ? $t('execution.closePlan') : $t('execution.activatePlan') }}
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <div class="pagination">
-      <el-pagination
-        v-model:current-page="currentPage"
-        v-model:page-size="pageSize"
-        :page-sizes="[10, 20, 50, 100]"
-        :small="false"
-        :total="total"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="handleSizeChange"
-        @current-change="handleCurrentChange"
-      />
-    </div>
+      <template #actions="{ row }">
+        <el-button size="small" type="primary" plain @click.stop="viewPlan(row.id)">
+          详情
+        </el-button>
+        <el-button size="small" @click.stop="editPlan(row)">
+          编辑
+        </el-button>
+        <el-button
+          size="small"
+          type="danger"
+          plain
+          @click.stop="deletePlanSingle(row)"
+        >
+          删除
+        </el-button>
+      </template>
+    </UnifiedListTable>
 
     <!-- 创建测试计划对话框 -->
     <el-dialog :title="$t('execution.createPlanDialog')" v-model="isCreatePlanDialogOpen" width="600px" :close-on-click-modal="false">
@@ -222,6 +212,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Delete } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { buildDeeplinkLocation } from '@/router/deeplink'
+import { UnifiedListTable } from '@/components/platform-shared'
 
 const { t } = useI18n()
 
@@ -579,9 +570,32 @@ const handleSelectionChange = (selection) => {
   selectedPlans.value = selection
 }
 
-// 获取序号
-const getSerialNumber = (index) => {
-  return (currentPage.value - 1) * pageSize.value + index + 1
+const handleRowDblClick = (row) => {
+  if (row?.id) viewPlan(row.id)
+}
+
+const deletePlanSingle = async (plan) => {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除【${plan?.name || plan?.id || ''}】？此操作不可恢复。`,
+      '删除确认',
+      {
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch (error) {
+    return
+  }
+
+  try {
+    await api.delete(`/executions/plans/${plan.id}/`)
+    ElMessage.success('删除成功')
+    fetchTestPlans()
+  } catch (error) {
+    ElMessage.error('删除失败')
+  }
 }
 
 // 批量删除
