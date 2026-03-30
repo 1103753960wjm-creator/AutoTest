@@ -189,16 +189,20 @@ export default {
     // Table Headers
     serialNumber: '序号',
     taskId: '任务ID',
+    sourceProject: '来源项目',
     relatedRequirement: '关联需求',
     requirement: '关联需求',
     status: '状态',
     caseCount: '用例条数',
+    processingStatus: '处理状态',
+    aiReviewStatus: 'AI评审状态',
     generatedTime: '生成时间',
     generationTime: '生成时间',
     actions: '操作',
 
     // Actions
     viewDetail: '查看详情',
+    edit: '编辑',
     adoptAll: '全部采纳',
     exportExcel: '导出Excel',
     delete: '删除',
@@ -213,6 +217,8 @@ export default {
     emptyHint: '还没有AI生成用例任务，去',
     aiGeneration: 'AI用例生成',
     createTask: '页面创建一个任务吧！',
+    unlinkedProject: '未关联项目',
+    notTriggeredAutoReview: '未触发AI自动评审',
 
     // Loading
     loadingTasks: '🔄 正在加载任务列表...',

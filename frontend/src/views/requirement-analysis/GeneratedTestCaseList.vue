@@ -53,7 +53,7 @@
           <button
             v-if="selectedTasks.length > 0"
             class="batch-delete-btn"
-            @click="deleteSingleTaskBySelected"
+            @click="batchDeleteTasks"
             :disabled="isDeleting">
             <span v-if="isDeleting">{{ $t('generatedTestCases.deleting') }}</span>
             <span v-else>{{ $t('generatedTestCases.batchDelete', { count: selectedTasks.length }) }}</span>
@@ -101,6 +101,142 @@
       </div>
 
       <div v-else class="testcases-table">
+        <UnifiedListTable
+          v-model:currentPage="pagination.currentPage"
+          v-model:pageSize="pagination.pageSize"
+          :page-sizes="pagination.pageSizeOptions"
+          :total="pagination.total"
+          :data="tasks"
+          :loading="isLoading"
+          row-key="task_id"
+          selection-mode="multi"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="200"
+          @selection-change="handleSelectionChange"
+          @page-change="loadTasks"
+          @row-dblclick="openEditTask"
+        >
+          <el-table-column
+            prop="task_id"
+            :label="$t('generatedTestCases.taskId')"
+            min-width="180"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            :label="$t('generatedTestCases.sourceProject')"
+            min-width="160"
+            show-overflow-tooltip
+          >
+            <template #default="{ row }">
+              {{ row.project_name || $t('generatedTestCases.unlinkedProject') }}
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="title"
+            :label="$t('generatedTestCases.requirement')"
+            min-width="240"
+            show-overflow-tooltip
+          />
+          <el-table-column
+            :label="$t('generatedTestCases.status')"
+            width="110"
+            align="center"
+          >
+            <template #default="{ row }">
+              <el-tag
+                class="status-tag"
+                size="small"
+                :type="getStatusTagType(row.status)"
+                effect="light">
+                {{ getStatusText(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column
+            :label="$t('generatedTestCases.caseCount')"
+            width="100"
+            align="center"
+          >
+            <template #default="{ row }">
+              <span class="count-badge">{{ row.result_count || getTestCaseCount(row) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column
+            :label="$t('generatedTestCases.processingStatus')"
+            min-width="160"
+            align="center"
+          >
+            <template #default="{ row }">
+              <el-tooltip
+                :content="getProcessingSummary(row).detail"
+                placement="top"
+                :show-after="250">
+                <el-tag
+                  class="processing-tag"
+                  size="small"
+                  :type="getProcessingTagType(getProcessingSummary(row))"
+                  effect="plain">
+                  {{ getProcessingSummary(row).label }}
+                </el-tag>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column
+            :label="$t('generatedTestCases.aiReviewStatus')"
+            min-width="180"
+            align="center"
+          >
+            <template #default="{ row }">
+              <el-tooltip
+                :content="getAutoReviewSummary(row).detail"
+                placement="top"
+                :show-after="250">
+                <el-tag
+                  size="small"
+                  :type="getAutoReviewTagType(getAutoReviewSummary(row))"
+                  effect="plain">
+                  {{ getAutoReviewSummary(row).label }}
+                </el-tag>
+              </el-tooltip>
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="created_at"
+            :label="$t('generatedTestCases.generationTime')"
+            width="180"
+            align="center"
+          >
+            <template #default="{ row }">
+              {{ formatDateTime(row.created_at) }}
+            </template>
+          </el-table-column>
+          <template #actions="{ row }">
+            <div class="action-buttons">
+              <el-button size="small" type="primary" link @click.stop="viewTaskDetail(row)">
+                {{ $t('generatedTestCases.viewDetail') }}
+              </el-button>
+              <el-button
+                v-if="canMutateTaskResults(row)"
+                size="small"
+                type="primary"
+                link
+                @click.stop="openEditTask(row)">
+                {{ $t('generatedTestCases.edit') }}
+              </el-button>
+              <el-button
+                size="small"
+                type="danger"
+                link
+                :disabled="isDeleting"
+                @click.stop="deleteSingleTask(row)">
+                {{ $t('generatedTestCases.delete') }}
+              </el-button>
+            </div>
+          </template>
+        </UnifiedListTable>
+      </div>
+
+      <div v-if="false" class="testcases-table">
         <div class="table-header">
           <div class="header-cell checkbox-cell">
             <input
@@ -206,7 +342,7 @@
     </div>
 
     <!-- 分页组件 -->
-    <div v-if="tasks.length > 0" class="pagination-section">
+    <div v-if="false && tasks.length > 0" class="pagination-section">
       <div class="pagination-info">
         {{ paginationInfo }}
       </div>
@@ -448,10 +584,11 @@
 import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
+import { UnifiedListTable } from '@/components/platform-shared'
 
 export default {
   name: 'GeneratedTestCaseList',
-  components: { ArrowDown },
+  components: { ArrowDown, UnifiedListTable },
   data() {
     return {
       isLoading: false,
@@ -713,6 +850,10 @@ export default {
       }
     },
 
+    handleSelectionChange(selection) {
+      this.selectedTasks = selection.map((task) => task.task_id)
+    },
+
     async deleteSingleTaskBySelected() {
       const selectedId = this.selectedTasks[0]
       const task = this.tasks.find((item) => item.task_id === selectedId)
@@ -800,6 +941,23 @@ export default {
         discarded_count: 0,
         pending_count: task?.result_count || this.getTestCaseCount(task)
       }
+    },
+
+    getAutoReviewSummary(task) {
+      return task?.auto_review_summary || {
+        status: 'not_triggered',
+        label: this.$t('generatedTestCases.notTriggeredAutoReview'),
+        detail: this.$t('generatedTestCases.notTriggeredAutoReview')
+      }
+    },
+
+    getAutoReviewTagType(summary) {
+      const status = summary?.status || 'not_triggered'
+      if (status === 'completed') return 'success'
+      if (status === 'reviewing') return 'warning'
+      if (status === 'failed') return 'danger'
+      if (status === 'cancelled') return 'info'
+      return 'info'
     },
 
     canMutateTaskResults(task) {
@@ -1430,10 +1588,11 @@ export default {
 }
 
 .testcases-table {
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: hidden;
+}
+
+.testcases-table :deep(.unified-list-table__pagination) {
+  padding: 0 16px 16px;
 }
 
 .table-header {

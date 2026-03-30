@@ -189,16 +189,20 @@ export default {
     // Table Headers
     serialNumber: 'No.',
     taskId: 'Task ID',
+    sourceProject: 'Source Project',
     relatedRequirement: 'Requirement',
     requirement: 'Requirement',
     status: 'Status',
     caseCount: 'Cases',
+    processingStatus: 'Processing Status',
+    aiReviewStatus: 'AI Review Status',
     generatedTime: 'Time',
     generationTime: 'Time',
     actions: 'Actions',
 
     // Actions
     viewDetail: 'View',
+    edit: 'Edit',
     adoptAll: 'Adopt All',
     exportExcel: 'Export',
     delete: 'Delete',
@@ -213,6 +217,8 @@ export default {
     emptyHint: 'No AI generation tasks yet. Go to',
     aiGeneration: 'AI Generation',
     createTask: 'page to create one!',
+    unlinkedProject: 'Unlinked Project',
+    notTriggeredAutoReview: 'AI auto review not triggered',
 
     // Loading
     loadingTasks: '🔄 Loading task list...',
