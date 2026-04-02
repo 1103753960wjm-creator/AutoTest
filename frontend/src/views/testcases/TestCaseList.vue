@@ -35,91 +35,117 @@
           </el-col>
         </el-row>
       </div>
-      
-      <div class="table-container">
-        <UnifiedListTable
-          v-model:currentPage="currentPage"
-          v-model:pageSize="pageSize"
-          :page-sizes="[15, 25, 35, 50, 100]"
-          :total="total"
-          :data="testcases"
-          :loading="loading"
-          row-key="id"
-          selection-mode="multi"
-          :actions="{
-            view: true,
-            edit: true,
-            delete: true
-          }"
-          :delete-name="(row) => row?.title || ''"
-          @selection-change="handleSelectionChange"
-          @view="handleView"
-          @edit="editTestCase"
-          @delete="deleteTestCaseConfirmed"
-          @row-dblclick="editTestCase"
-          @page-change="fetchTestCases"
-        >
-          <el-table-column prop="title" :label="$t('testcase.caseTitle')" min-width="250">
-            <template #default="{ row }">
-              <el-link @click="goToTestCase(row.id)" type="primary">
-                {{ row.title }}
-              </el-link>
-            </template>
-          </el-table-column>
-          <el-table-column prop="project.name" :label="$t('testcase.relatedProject')" width="150">
-            <template #default="{ row }">
-              {{ row.project?.name || '-' }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="versions" :label="$t('testcase.relatedVersions')" width="200">
-            <template #default="{ row }">
-              <div v-if="row.versions && row.versions.length > 0" class="version-tags">
-                <el-tag 
-                  v-for="version in row.versions.slice(0, 2)" 
-                  :key="version.id" 
-                  size="small" 
-                  :type="version.is_baseline ? 'warning' : 'info'"
-                  class="version-tag"
-                >
-                  {{ version.name }}
-                </el-tag>
-                <el-tooltip v-if="row.versions.length > 2" :content="getVersionsTooltip(row.versions)">
-                  <el-tag size="small" type="info" class="version-tag">
-                    +{{ row.versions.length - 2 }}
+      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+      <StateForbidden
+        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+        compact
+        :primary-action-text="$t('common.uiState.actions.goHome')"
+        @primary-action="router.push('/home')"
+      />
+      <StateError
+        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || $t('common.uiState.error.description')"
+        @primary-action="fetchTestCases"
+      />
+      <StateSearchEmpty
+        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+        compact
+        :primary-action-text="$t('common.uiState.actions.clearFilters')"
+        @primary-action="resetFilters"
+      />
+      <StateEmpty
+        v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+        compact
+        :primary-action-text="$t('testcase.newCase')"
+        @primary-action="() => router.push('/ai-generation/testcases/create')"
+      />
+      <template v-else>
+        <div class="table-container">
+          <UnifiedListTable
+            v-model:currentPage="currentPage"
+            v-model:pageSize="pageSize"
+            :page-sizes="[15, 25, 35, 50, 100]"
+            :total="total"
+            :data="testcases"
+            :loading="loading"
+            row-key="id"
+            selection-mode="multi"
+            :actions="{
+              view: true,
+              edit: true,
+              delete: true
+            }"
+            :delete-name="(row) => row?.title || ''"
+            @selection-change="handleSelectionChange"
+            @view="handleView"
+            @edit="editTestCase"
+            @delete="deleteTestCaseConfirmed"
+            @row-dblclick="editTestCase"
+            @page-change="fetchTestCases"
+          >
+            <el-table-column prop="title" :label="$t('testcase.caseTitle')" min-width="250">
+              <template #default="{ row }">
+                <el-link @click="goToTestCase(row.id)" type="primary">
+                  {{ row.title }}
+                </el-link>
+              </template>
+            </el-table-column>
+            <el-table-column prop="project.name" :label="$t('testcase.relatedProject')" width="150">
+              <template #default="{ row }">
+                {{ row.project?.name || '-' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="versions" :label="$t('testcase.relatedVersions')" width="200">
+              <template #default="{ row }">
+                <div v-if="row.versions && row.versions.length > 0" class="version-tags">
+                  <el-tag
+                    v-for="version in row.versions.slice(0, 2)"
+                    :key="version.id"
+                    size="small"
+                    :type="version.is_baseline ? 'warning' : 'info'"
+                    class="version-tag"
+                  >
+                    {{ version.name }}
                   </el-tag>
-                </el-tooltip>
-              </div>
-              <span v-else class="no-version">{{ $t('testcase.noVersion') }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="priority" :label="$t('testcase.priority')" width="100">
-            <template #default="{ row }">
-              <el-tag :class="`priority-tag ${row.priority}`">{{ getPriorityText(row.priority) }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="来源摘要" min-width="160" show-overflow-tooltip>
-            <template #default="{ row }">
-              {{ row.source_summary?.label || '来源未记录' }}
-            </template>
-          </el-table-column>
-          <el-table-column label="自动化状态" min-width="180" show-overflow-tooltip>
-            <template #default="{ row }">
-              {{ row.automation_summary?.label || '待接自动化草稿' }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="test_type" :label="$t('testcase.testType')" width="120">
-            <template #default="{ row }">
-              {{ getTypeText(row.test_type) }}
-            </template>
-          </el-table-column>
-          <el-table-column prop="author.username" :label="$t('testcase.author')" width="120" />
-          <el-table-column prop="created_at" :label="$t('testcase.createdAt')" width="180">
-            <template #default="{ row }">
-              {{ formatDate(row.created_at) }}
-            </template>
-          </el-table-column>
-        </UnifiedListTable>
-      </div>
+                  <el-tooltip v-if="row.versions.length > 2" :content="getVersionsTooltip(row.versions)">
+                    <el-tag size="small" type="info" class="version-tag">
+                      +{{ row.versions.length - 2 }}
+                    </el-tag>
+                  </el-tooltip>
+                </div>
+                <span v-else class="no-version">{{ $t('testcase.noVersion') }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="priority" :label="$t('testcase.priority')" width="100">
+              <template #default="{ row }">
+                <el-tag :class="`priority-tag ${row.priority}`">{{ getPriorityText(row.priority) }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="来源摘要" min-width="160" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.source_summary?.label || '来源未记录' }}
+              </template>
+            </el-table-column>
+            <el-table-column label="自动化状态" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.automation_summary?.label || '待接自动化草稿' }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="test_type" :label="$t('testcase.testType')" width="120">
+              <template #default="{ row }">
+                {{ getTypeText(row.test_type) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="author.username" :label="$t('testcase.author')" width="120" />
+            <el-table-column prop="created_at" :label="$t('testcase.createdAt')" width="180">
+              <template #default="{ row }">
+                {{ formatDate(row.created_at) }}
+              </template>
+            </el-table-column>
+          </UnifiedListTable>
+        </div>
+      </template>
     </div>
   </div>
 </template>
@@ -136,6 +162,7 @@ import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 import * as XLSX from 'xlsx'
 import { buildDeeplinkLocation } from '@/router/deeplink'
 import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -152,6 +179,29 @@ const priorityFilter = ref('')
 const selectedTestCases = ref([])
 const isDeleting = ref(false)
 const sourceProjectName = computed(() => String(route.query.projectName || ''))
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
+
+const hasActiveFilter = computed(() => (
+  Boolean(searchText.value) ||
+  projectFilter.value !== null ||
+  Boolean(priorityFilter.value)
+))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (testcases.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
 
 const listMetaItems = computed(() => ([
   { label: '当前列表', value: `${total.value}` },
@@ -194,6 +244,9 @@ usePlatformPageHeader(() => ({
 
 const fetchTestCases = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: currentPage.value,
@@ -205,10 +258,25 @@ const fetchTestCases = async () => {
     const response = await api.get('/testcases/', { params })
     testcases.value = response.data.results || []
     total.value = response.data.count || 0
+    const maxPage = Math.max(1, Math.ceil(total.value / pageSize.value || 1))
+    if (currentPage.value > maxPage) {
+      currentPage.value = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(t('testcase.fetchListFailed'))
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await fetchTestCases()
   }
 }
 
@@ -218,6 +286,14 @@ const handleSearch = () => {
 }
 
 const handleFilter = () => {
+  currentPage.value = 1
+  fetchTestCases()
+}
+
+const resetFilters = () => {
+  searchText.value = ''
+  projectFilter.value = null
+  priorityFilter.value = ''
   currentPage.value = 1
   fetchTestCases()
 }
@@ -559,6 +635,17 @@ onMounted(() => {
   flex: 1;
   overflow: hidden;
   padding: 0 20px;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
   
   :deep(.el-table) {
     height: 100% !important;

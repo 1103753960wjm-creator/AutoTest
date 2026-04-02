@@ -14,7 +14,40 @@
     </div>
 
     <div class="content">
-      <el-table :data="reports" v-loading="loading" style="width: 100%">
+      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+      <StateForbidden
+        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+        compact
+        :primary-action-text="$t('common.uiState.actions.goHome')"
+        @primary-action="router.push('/home')"
+      />
+      <StateError
+        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || $t('common.uiState.error.description')"
+        @primary-action="loadReports"
+      />
+      <StateSearchEmpty
+        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+        compact
+        :primary-action-text="$t('common.uiState.actions.clearFilters')"
+        @primary-action="clearProjectFilter"
+      />
+      <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+
+      <div v-else class="table-container">
+      <UnifiedListTable
+        v-model:currentPage="pagination.currentPage"
+        v-model:pageSize="pagination.pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="total"
+        :data="reports"
+        :loading="loading"
+        row-key="id"
+        selection-mode="none"
+        :actions="{ view: false, edit: false, delete: false }"
+        :action-column-width="200"
+        @page-change="loadReports">
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column prop="test_suite_name" :label="$t('uiAutomation.report.testSuite')" min-width="200" />
         <el-table-column prop="status" :label="$t('uiAutomation.common.status')" width="120">
@@ -65,8 +98,7 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column :label="$t('uiAutomation.common.operation')" width="200" fixed="right">
-          <template #default="{ row }">
+        <template #actions="{ row }">
             <el-button link type="primary" size="small" @click="viewReportDetail(row)">
               <el-icon><Document /></el-icon>
               {{ $t('uiAutomation.report.viewDetail') }}
@@ -75,24 +107,12 @@
               <el-icon><Delete /></el-icon>
               {{ $t('uiAutomation.common.delete') }}
             </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="pagination.currentPage"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          :total="total"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
+        </template>
+      </UnifiedListTable>
       </div>
     </div>
 
-    <!-- 报告详情对话框 -->
+    <!-- 鎶ュ憡璇︽儏瀵硅瘽妗?-->
     <el-dialog
       v-model="showDetailDialog"
       :title="$t('uiAutomation.report.reportDetail')"
@@ -207,7 +227,7 @@
       </template>
     </el-dialog>
 
-    <!-- 用例详情对话框 -->
+    <!-- 鐢ㄤ緥璇︽儏瀵硅瘽妗?-->
     <el-dialog
       v-model="showCaseDetailDialog"
       :title="`${$t('uiAutomation.report.caseDetail')} - ${currentCase?.test_case_name || ''}`"
@@ -215,7 +235,7 @@
       :close-on-click-modal="false"
     >
       <div v-if="currentCase" class="case-detail">
-        <!-- 用例执行成功 - 只显示执行日志 -->
+        <!-- 鐢ㄤ緥鎵ц鎴愬姛 - 鍙樉绀烘墽琛屾棩蹇?-->
         <div v-if="currentCase.status === 'passed'">
           <h4>{{ $t('uiAutomation.report.executionLogs') }}</h4>
           <div class="log-container">
@@ -235,10 +255,10 @@
           </div>
         </div>
 
-        <!-- 用例执行失败 - 显示执行日志、失败截图、错误信息三个tab -->
+        <!-- 鐢ㄤ緥鎵ц澶辫触 - 鏄剧ず鎵ц鏃ュ織銆佸け璐ユ埅鍥俱€侀敊璇俊鎭笁涓猼ab -->
         <div v-else>
           <el-tabs v-model="activeTab" type="border-card">
-            <!-- 执行日志 Tab -->
+            <!-- 鎵ц鏃ュ織 Tab -->
             <el-tab-pane :label="$t('uiAutomation.report.executionLogs')" name="logs">
               <div class="log-container">
                 <div v-for="(step, index) in currentCase.steps" :key="index" class="log-item">
@@ -257,7 +277,7 @@
               </div>
             </el-tab-pane>
 
-            <!-- 失败截图 Tab -->
+            <!-- 澶辫触鎴浘 Tab -->
             <el-tab-pane :label="$t('uiAutomation.report.failedScreenshots')" name="screenshots">
               <div v-if="currentCase.screenshots && currentCase.screenshots.length > 0" class="screenshot-container">
                 <div v-for="(screenshot, index) in currentCase.screenshots" :key="index" class="screenshot-item">
@@ -269,7 +289,7 @@
               <el-empty v-else :description="$t('uiAutomation.report.noScreenshots')" />
             </el-tab-pane>
 
-            <!-- 错误信息 Tab -->
+            <!-- 閿欒淇℃伅 Tab -->
             <el-tab-pane :label="$t('uiAutomation.report.errorInfo')" name="error">
               <div class="errors-container">
                 <div v-if="currentCase.error" class="error-item">
@@ -291,7 +311,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Document, Delete, WarningFilled } from '@element-plus/icons-vue'
@@ -300,29 +321,51 @@ import {
   getTestExecutions,
   deleteTestExecution
 } from '@/api/ui_automation'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const reports = ref([])
 const projects = ref([])
 const selectedProject = ref('')
 const loading = ref(false)
 const total = ref(0)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 const pagination = reactive({
   currentPage: 1,
   pageSize: 20
 })
 
-// 详情对话框
+const hasActiveFilter = computed(() => Boolean(selectedProject.value))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (reports.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
+
+// 璇︽儏瀵硅瘽妗?const showDetailDialog = ref(false)
 const showDetailDialog = ref(false)
 const currentReport = ref(null)
 
-// 用例详情对话框
+// 鐢ㄤ緥璇︽儏瀵硅瘽妗?const showCaseDetailDialog = ref(false)
 const showCaseDetailDialog = ref(false)
 const currentCase = ref(null)
 const activeTab = ref('logs')
 
-// 加载项目列表
+// 鍔犺浇椤圭洰鍒楄〃
 const loadProjects = async () => {
   try {
     const response = await getUiProjects({ page_size: 100 })
@@ -333,9 +376,12 @@ const loadProjects = async () => {
   }
 }
 
-// 加载报告列表
+// 鍔犺浇鎶ュ憡鍒楄〃
 const loadReports = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: pagination.currentPage,
@@ -355,43 +401,54 @@ const loadReports = async () => {
       reports.value = response.data
       total.value = response.data.length
     }
+    const maxPage = Math.max(1, Math.ceil((total.value || 0) / pagination.pageSize || 1))
+    if (pagination.currentPage > maxPage) {
+      pagination.currentPage = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     console.error('Failed to load test reports:', error)
     ElMessage.error(t('uiAutomation.report.messages.loadFailed'))
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await loadReports()
   }
 }
 
-// 项目切换
+// 椤圭洰鍒囨崲
 const onProjectChange = async () => {
   pagination.currentPage = 1
   await loadReports()
 }
 
-// 刷新报告
+// 鍒锋柊鎶ュ憡
 const refreshReports = async () => {
   await loadReports()
   ElMessage.success(t('uiAutomation.report.messages.refreshed'))
 }
 
-// 分页处理
-const handleSizeChange = async () => {
+const clearProjectFilter = async () => {
+  selectedProject.value = ''
   pagination.currentPage = 1
   await loadReports()
 }
 
-const handleCurrentChange = async () => {
-  await loadReports()
-}
-
-// 查看报告详情
+// 鏌ョ湅鎶ュ憡璇︽儏
 const viewReportDetail = (report) => {
   currentReport.value = report
   showDetailDialog.value = true
 }
 
-// 获取用例执行列表
+// 鑾峰彇鐢ㄤ緥鎵ц鍒楄〃
 const getCaseExecutionList = (report) => {
   if (!report || !report.result_data || !report.result_data.test_cases) {
     return []
@@ -399,14 +456,14 @@ const getCaseExecutionList = (report) => {
   return report.result_data.test_cases
 }
 
-// 查看用例详情
+// 鏌ョ湅鐢ㄤ緥璇︽儏
 const viewCaseDetail = (caseData) => {
   currentCase.value = caseData
   activeTab.value = 'logs'
   showCaseDetailDialog.value = true
 }
 
-// 获取操作类型文本
+// 鑾峰彇鎿嶄綔绫诲瀷鏂囨湰
 const getActionText = (actionType) => {
   const actionMap = {
     'click': t('uiAutomation.actionTypes.click'),
@@ -422,7 +479,7 @@ const getActionText = (actionType) => {
   return actionMap[actionType] || actionType
 }
 
-// 删除报告
+// 鍒犻櫎鎶ュ憡
 const deleteReport = async (report) => {
   try {
     await ElMessageBox.confirm(
@@ -446,7 +503,7 @@ const deleteReport = async (report) => {
   }
 }
 
-// 辅助方法
+// 杈呭姪鏂规硶
 const getStatusType = (status) => {
   const typeMap = {
     'PENDING': 'info',
@@ -554,12 +611,19 @@ onMounted(async () => {
 }
 
 .pagination-container {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
+  display: none;
 }
 
-// 报告详情样式
+.table-container {
+  overflow: hidden;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+// 鎶ュ憡璇︽儏鏍峰紡
 .report-detail {
   .statistics-section {
     margin-top: 30px;
@@ -644,7 +708,6 @@ onMounted(async () => {
   }
 }
 
-// 统一的错误信息样式
 .errors-container {
   padding: 10px;
   height: 100%;
@@ -697,7 +760,7 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-// 用例详情样式
+// 鐢ㄤ緥璇︽儏鏍峰紡
 .case-detail {
   h4 {
     margin: 0 0 20px 0;

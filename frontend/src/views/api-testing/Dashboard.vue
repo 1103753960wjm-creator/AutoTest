@@ -122,7 +122,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   Collection,
-  DataAnalysis,
   Delete,
   Edit,
   Folder,
@@ -261,15 +260,6 @@ const quickActions = computed(() => ([
     accent: 'orange',
     onClick: goToEnvironments
   },
-  {
-    key: 'reports',
-    title: '测试报告',
-    description: '进入报告页查看结果归档，为后续风险源预留接口。',
-    badge: '报告',
-    icon: DataAnalysis,
-    accent: 'blue',
-    onClick: goToReports
-  }
 ]))
 
 const riskReminders = computed(() => {
@@ -345,7 +335,7 @@ usePlatformPageHeader(() => ({
     }
   ],
   updateText: lastLoadedAt.value ? `最近刷新 ${formatHeaderTime(lastLoadedAt.value)}` : '',
-  helperText: '风险提醒区当前只保留稳定落位，后续再接统一执行中心和报告源。',
+  helperText: '测试报告、定时任务和通知日志后续将向执行中心收口，本轮不再作为当前模块正式入口。',
   metaItems: [
     { label: '概览范围', value: '项目 / 接口 / 套件 / 请求历史' },
     { label: '最近动态', value: `${operationLogs.value.length} 条` }
@@ -359,11 +349,11 @@ usePlatformPageHeader(() => ({
       onClick: goToProjects
     },
     {
-      key: 'reports',
-      label: '测试报告',
+      key: 'history',
+      label: '请求历史',
       plain: true,
-      icon: DataAnalysis,
-      onClick: goToReports
+      icon: Timer,
+      onClick: goToHistory
     }
   ]
 }))
@@ -416,10 +406,6 @@ const goToHistory = () => {
 
 const goToEnvironments = () => {
   router.push('/api-testing/environments')
-}
-
-const goToReports = () => {
-  router.push('/api-testing/reports')
 }
 
 const getOperationIcon = (type) => {

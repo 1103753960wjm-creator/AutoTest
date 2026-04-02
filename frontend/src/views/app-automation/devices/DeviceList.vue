@@ -1,6 +1,5 @@
 <template>
   <div class="device-management">
-    <!-- 页面标题和操作按钮 -->
     <div class="device-header">
       <h3>设备管理</h3>
       <div class="device-actions">
@@ -22,136 +21,142 @@
       </div>
     </div>
 
-    <!-- 设备列表 -->
-    <el-table
-      v-loading="loading"
-      :data="devices"
-      style="width: 100%; margin-top: 20px"
-      :empty-text="emptyText"
-    >
-      <el-table-column prop="name" label="设备名称" min-width="150">
-        <template #default="{ row }">
-          <span>{{ row.name || row.device_id }}</span>
-        </template>
-      </el-table-column>
+    <div class="table-section">
+      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+      <StateForbidden
+        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+        compact
+        primary-action-text="返回首页"
+        @primary-action="router.push('/home')"
+      />
+      <StateError
+        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || '加载设备列表失败，请稍后重试。'"
+        @primary-action="loadDevices"
+      />
+      <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+      <div v-else class="table-container">
+        <UnifiedListTable
+          v-model:currentPage="currentPage"
+          v-model:pageSize="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50, 100]"
+          :data="devices"
+          :loading="loading"
+          row-key="id"
+          selection-mode="none"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="280"
+          @page-change="loadDevices"
+        >
+          <el-table-column prop="name" label="设备名称" min-width="150" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span>{{ row.name || row.device_id }}</span>
+            </template>
+          </el-table-column>
 
-      <el-table-column prop="device_id" label="设备序列号" min-width="180" />
+          <el-table-column prop="device_id" label="设备序列号" min-width="180" show-overflow-tooltip />
 
-      <el-table-column prop="status" label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="getStatusType(row.status)" size="small">
-            {{ getStatusText(row.status) }}
-          </el-tag>
-        </template>
-      </el-table-column>
+          <el-table-column prop="status" label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="getStatusType(row.status)" size="small">
+                {{ getStatusText(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
 
-      <el-table-column prop="locked_by" label="锁定用户" width="120">
-        <template #default="{ row }">
-          <span v-if="row.locked_by_name">
-            {{ row.locked_by_name }}
-          </span>
-          <span v-else>-</span>
-        </template>
-      </el-table-column>
+          <el-table-column prop="locked_by" label="锁定用户" width="120">
+            <template #default="{ row }">
+              <span v-if="row.locked_by_name">{{ row.locked_by_name }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
 
-      <el-table-column prop="locked_at" label="锁定时间" width="180">
-        <template #default="{ row }">
-          <span v-if="row.locked_at">
-            {{ formatDate(row.locked_at) }}
-          </span>
-          <span v-else>-</span>
-        </template>
-      </el-table-column>
+          <el-table-column prop="locked_at" label="锁定时间" width="180">
+            <template #default="{ row }">
+              <span v-if="row.locked_at">{{ formatDate(row.locked_at) }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
 
-      <el-table-column prop="android_version" label="Android版本" width="120" />
+          <el-table-column prop="android_version" label="Android版本" width="120" />
 
-      <el-table-column prop="connection_type" label="连接类型" width="120">
-        <template #default="{ row }">
-          <el-tag
-            :type="getConnectionType(row.connection_type) === 'local' ? 'primary' : 'warning'"
-            size="small"
-          >
-            {{ getConnectionTypeName(row.connection_type) }}
-          </el-tag>
-        </template>
-      </el-table-column>
+          <el-table-column prop="connection_type" label="连接类型" width="120">
+            <template #default="{ row }">
+              <el-tag
+                :type="getConnectionType(row.connection_type) === 'local' ? 'primary' : 'warning'"
+                size="small"
+              >
+                {{ getConnectionTypeName(row.connection_type) }}
+              </el-tag>
+            </template>
+          </el-table-column>
 
-      <el-table-column prop="ip_address" label="IP地址" width="150">
-        <template #default="{ row }">
-          <span v-if="row.ip_address">
-            {{ row.ip_address }}
-          </span>
-          <span v-else>-</span>
-        </template>
-      </el-table-column>
+          <el-table-column prop="ip_address" label="IP地址" width="150">
+            <template #default="{ row }">
+              <span v-if="row.ip_address">{{ row.ip_address }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
 
-      <el-table-column prop="usage_count" label="使用次数" width="100" />
+          <el-table-column prop="usage_count" label="使用次数" width="100" />
 
-      <el-table-column prop="updated_at" label="更新时间" width="180">
-        <template #default="{ row }">
-          {{ formatDate(row.updated_at) }}
-        </template>
-      </el-table-column>
+          <el-table-column prop="updated_at" label="更新时间" width="180">
+            <template #default="{ row }">
+              {{ formatDate(row.updated_at) }}
+            </template>
+          </el-table-column>
 
-      <el-table-column label="操作" width="250" fixed="right">
-        <template #default="{ row }">
-          <el-button
-            v-if="row.status === 'available' || row.status === 'online'"
-            link
-            size="small"
-            type="primary"
-            @click="lockDevice(row)"
-          >
-            锁定
-          </el-button>
-          <el-button
-            v-if="row.status === 'locked'"
-            link
-            size="small"
-            type="success"
-            @click="unlockDevice(row)"
-          >
-            解锁
-          </el-button>
-          <el-button
-            v-if="isRemoteDevice(row.connection_type) && row.status === 'offline'"
-            link
-            size="small"
-            type="warning"
-            :loading="reconnectingDevices[row.id]"
-            @click="reconnectDevice(row)"
-          >
-            重连
-          </el-button>
-          <el-button
-            link
-            size="small"
-            @click="viewDeviceInfo(row)"
-          >
-            详情
-          </el-button>
-          <el-button
-            v-if="isRemoteDevice(row.connection_type) && (row.status === 'online' || row.status === 'available')"
-            link
-            size="small"
-            type="warning"
-            @click="disconnectDevice(row)"
-          >
-            断开
-          </el-button>
-          <el-button
-            link
-            size="small"
-            type="danger"
-            @click="handleDeleteDevice(row)"
-          >
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+          <template #actions="{ row }">
+            <el-button
+              v-if="row.status === 'available' || row.status === 'online'"
+              link
+              size="small"
+              type="primary"
+              @click="lockDevice(row)"
+            >
+              锁定
+            </el-button>
+            <el-button
+              v-if="row.status === 'locked'"
+              link
+              size="small"
+              type="success"
+              @click="unlockDevice(row)"
+            >
+              解锁
+            </el-button>
+            <el-button
+              v-if="isRemoteDevice(row.connection_type) && row.status === 'offline'"
+              link
+              size="small"
+              type="warning"
+              :loading="reconnectingDevices[row.id]"
+              @click="reconnectDevice(row)"
+            >
+              重连
+            </el-button>
+            <el-button link size="small" @click="viewDeviceInfo(row)">
+              详情
+            </el-button>
+            <el-button
+              v-if="isRemoteDevice(row.connection_type) && (row.status === 'online' || row.status === 'available')"
+              link
+              size="small"
+              type="warning"
+              @click="disconnectDevice(row)"
+            >
+              断开
+            </el-button>
+            <el-button link size="small" type="danger" @click="handleDeleteDevice(row)">
+              删除
+            </el-button>
+          </template>
+        </UnifiedListTable>
+      </div>
+    </div>
 
-    <!-- 添加远程设备对话框 -->
     <el-dialog
       v-model="addRemoteDialogVisible"
       title="添加远程设备"
@@ -208,7 +213,6 @@
       </template>
     </el-dialog>
 
-    <!-- 设备详情对话框 -->
     <el-dialog
       v-model="deviceInfoDialogVisible"
       title="设备详情"
@@ -270,9 +274,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus } from '@element-plus/icons-vue'
+import { UnifiedListTable } from '@/components/platform-shared'
+import {
+  StateEmpty,
+  StateError,
+  StateForbidden,
+  StateLoading,
+  UI_PAGE_STATE
+} from '@/components/ui-states'
 import {
   getDeviceList,
   discoverDevices,
@@ -284,10 +297,9 @@ import {
 } from '@/api/app-automation'
 import { getDeviceStatusType, getDeviceStatusText, formatDateTime } from '@/utils/app-automation-helpers'
 
-// Refs
-const remoteDeviceFormRef = ref(null)
+const router = useRouter()
 
-// 响应式数据
+const remoteDeviceFormRef = ref(null)
 const devices = ref([])
 const loading = ref(false)
 const refreshing = ref(false)
@@ -296,8 +308,13 @@ const reconnectingDevices = ref({})
 const addRemoteDialogVisible = ref(false)
 const deviceInfoDialogVisible = ref(false)
 const selectedDevice = ref(null)
-const emptyText = ref('暂无设备，请点击刷新设备或添加远程设备')
 const refreshTimer = ref(null)
+const currentPage = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
+const hasLoaded = ref(false)
+const requestState = ref(UI_PAGE_STATE.READY)
+const requestErrorMessage = ref('')
 
 const remoteDeviceForm = ref({
   ip_address: '',
@@ -318,17 +335,63 @@ const remoteDeviceRules = {
   ]
 }
 
-// 方法
-const getDevices = async () => {
+const pageState = computed(() => {
+  if (loading.value && !hasLoaded.value) {
+    return UI_PAGE_STATE.LOADING
+  }
+  if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    return UI_PAGE_STATE.FORBIDDEN
+  }
+  if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    return UI_PAGE_STATE.REQUEST_ERROR
+  }
+  if (devices.value.length === 0) {
+    return UI_PAGE_STATE.EMPTY
+  }
+  return UI_PAGE_STATE.READY
+})
+
+const resolveRequestState = (error) => {
+  if (error?.response?.status === 403) {
+    return UI_PAGE_STATE.FORBIDDEN
+  }
+  return UI_PAGE_STATE.REQUEST_ERROR
+}
+
+const normalizeListPayload = (data) => {
+  const payload = data?.success !== undefined ? data.data : data
+  return {
+    results: Array.isArray(payload?.results) ? payload.results : Array.isArray(payload) ? payload : [],
+    count: Number(payload?.count || 0)
+  }
+}
+
+const loadDevices = async () => {
   loading.value = true
   try {
-    const res = await getDeviceList({ page: 1, page_size: 1000 })
-    devices.value = res.data.results || []
-    if (devices.value.length === 0) {
-      emptyText.value = '暂无设备，请点击刷新设备或添加远程设备'
+    const res = await getDeviceList({
+      page: currentPage.value,
+      page_size: pageSize.value
+    })
+    const payload = normalizeListPayload(res.data)
+    devices.value = payload.results
+    total.value = payload.count || devices.value.length || 0
+    requestState.value = UI_PAGE_STATE.READY
+    requestErrorMessage.value = ''
+    hasLoaded.value = true
+
+    const maxPage = Math.max(1, Math.ceil((total.value || 0) / pageSize.value))
+    if (total.value > 0 && currentPage.value > maxPage) {
+      currentPage.value = maxPage
+      await loadDevices()
     }
   } catch (error) {
     console.error('获取设备列表失败:', error)
+    devices.value = []
+    total.value = 0
+    hasLoaded.value = true
+    requestState.value = resolveRequestState(error)
+    requestErrorMessage.value = error?.response?.data?.detail || error?.message || '获取设备列表失败'
     ElMessage.error('获取设备列表失败: ' + (error.message || '未知错误'))
   } finally {
     loading.value = false
@@ -340,8 +403,9 @@ const refreshDevices = async () => {
   try {
     const res = await discoverDevices()
     if (res.data.success) {
-      devices.value = res.data.devices || []
       ElMessage.success(res.data.message || '设备列表已刷新')
+      currentPage.value = 1
+      await loadDevices()
     } else {
       ElMessage.error(res.data.message || '刷新设备列表失败')
     }
@@ -359,28 +423,27 @@ const showAddRemoteDialog = () => {
     ip_address: '',
     port: 5555
   }
-  if (remoteDeviceFormRef.value) {
-    remoteDeviceFormRef.value.clearValidate()
-  }
+  remoteDeviceFormRef.value?.clearValidate?.()
 }
 
 const connectRemoteDevice = async () => {
   if (!remoteDeviceFormRef.value) return
-  
+
   remoteDeviceFormRef.value.validate(async (valid) => {
     if (!valid) return
-    
+
     connecting.value = true
     try {
       const res = await connectDevice({
         ip_address: remoteDeviceForm.value.ip_address,
         port: remoteDeviceForm.value.port
       })
-      
+
       if (res.data.success) {
         ElMessage.success(res.data.message || '远程设备连接成功')
         addRemoteDialogVisible.value = false
-        await getDevices()
+        currentPage.value = 1
+        await loadDevices()
       } else {
         ElMessage.error(res.data.message || '连接远程设备失败')
       }
@@ -400,7 +463,7 @@ const reconnectDevice = async (device) => {
   }
 
   reconnectingDevices.value[device.id] = true
-  
+
   try {
     const res = await connectDevice({
       ip_address: device.ip_address,
@@ -409,7 +472,7 @@ const reconnectDevice = async (device) => {
 
     if (res.data.success) {
       ElMessage.success('设备重连成功')
-      await getDevices()
+      await loadDevices()
     } else {
       ElMessage.error(res.data.message || '设备重连失败，请检查设备网络连接')
     }
@@ -437,7 +500,7 @@ const disconnectDevice = async (device) => {
 
     if (res.data.success) {
       ElMessage.success('设备已断开')
-      await getDevices()
+      await loadDevices()
     } else {
       ElMessage.error(res.data.message || '断开设备失败')
     }
@@ -470,7 +533,7 @@ const lockDevice = async (device) => {
 
     if (res.data.success) {
       ElMessage.success('设备已锁定')
-      await getDevices()
+      await loadDevices()
     } else {
       ElMessage.error(res.data.message || '锁定设备失败')
     }
@@ -498,7 +561,7 @@ const unlockDevice = async (device) => {
 
     if (res.data.success) {
       ElMessage.success('设备已解锁')
-      await getDevices()
+      await loadDevices()
     } else {
       ElMessage.error(res.data.message || '解锁设备失败')
     }
@@ -524,10 +587,9 @@ const handleDeleteDevice = async (device) => {
     )
 
     const res = await deleteDevice(device.id)
-
     if (res.status === 204 || res.status === 200) {
       ElMessage.success('设备已删除')
-      await getDevices()
+      await loadDevices()
     } else {
       ElMessage.error(res.data?.message || '删除设备失败')
     }
@@ -544,7 +606,6 @@ const getStatusType = getDeviceStatusType
 const getStatusText = getDeviceStatusText
 
 const getConnectionType = (type) => {
-  // emulator, remote_emulator, remote, usb 等
   if (type === 'emulator' || type === 'usb') {
     return 'local'
   }
@@ -553,10 +614,10 @@ const getConnectionType = (type) => {
 
 const getConnectionTypeName = (type) => {
   const typeMap = {
-    'emulator': '本地模拟器',
-    'remote_emulator': '远程模拟器',
-    'remote': '远程设备',
-    'usb': 'USB连接'
+    emulator: '本地模拟器',
+    remote_emulator: '远程模拟器',
+    remote: '远程设备',
+    usb: 'USB连接'
   }
   return typeMap[type] || type
 }
@@ -565,13 +626,10 @@ const isRemoteDevice = (type) => {
   return type === 'remote_emulator' || type === 'remote'
 }
 
-// 生命周期
 onMounted(() => {
-  getDevices()
-
-  // 30秒自动刷新设备列表
+  loadDevices()
   refreshTimer.value = setInterval(() => {
-    getDevices()
+    loadDevices()
   }, 30000)
 })
 
@@ -603,6 +661,17 @@ onBeforeUnmount(() => {
 .device-actions {
   display: flex;
   gap: 10px;
+}
+
+.table-section {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.table-container {
+  min-height: 260px;
 }
 
 .dialog-footer {

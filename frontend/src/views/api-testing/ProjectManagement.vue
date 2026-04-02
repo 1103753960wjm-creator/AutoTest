@@ -1,63 +1,135 @@
 <template>
   <div class="project-management">
-    <div class="header">
-      <h2>{{ $t('apiTesting.project.title') }}</h2>
-      <el-button type="primary" @click="showCreateDialog = true">
-        <el-icon><Plus /></el-icon>
-        {{ $t('apiTesting.project.createProject') }}
-      </el-button>
-    </div>
+    <ListShell class="project-management-shell">
+      <template #actions>
+        <el-button type="primary" @click="showCreateDialog = true">
+          <el-icon><Plus /></el-icon>
+          {{ $t('apiTesting.project.createProject') }}
+        </el-button>
+      </template>
 
+      <div class="filters">
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <el-input
+              v-model="searchText"
+              :placeholder="$t('apiTesting.project.inputProjectName')"
+              clearable
+              @clear="handleFilterChange"
+              @keyup.enter="handleFilterChange"
+            >
+              <template #prefix>
+                <el-icon><Search /></el-icon>
+              </template>
+            </el-input>
+          </el-col>
+          <el-col :span="5">
+            <el-select
+              v-model="statusFilter"
+              clearable
+              :placeholder="$t('apiTesting.project.selectStatus')"
+              @change="handleFilterChange"
+            >
+              <el-option :label="$t('apiTesting.project.status.notStarted')" value="NOT_STARTED" />
+              <el-option :label="$t('apiTesting.project.status.inProgress')" value="IN_PROGRESS" />
+              <el-option :label="$t('apiTesting.project.status.completed')" value="COMPLETED" />
+            </el-select>
+          </el-col>
+          <el-col :span="5">
+            <el-select
+              v-model="projectTypeFilter"
+              clearable
+              :placeholder="$t('apiTesting.project.projectType')"
+              @change="handleFilterChange"
+            >
+              <el-option label="HTTP" value="HTTP" />
+              <el-option label="WebSocket" value="WEBSOCKET" />
+            </el-select>
+          </el-col>
+          <el-col :span="6" class="filters__actions">
+            <el-button type="primary" @click="handleFilterChange">
+              {{ $t('apiTesting.common.search') }}
+            </el-button>
+            <el-button @click="resetFilters">
+              {{ $t('apiTesting.common.reset') }}
+            </el-button>
+          </el-col>
+        </el-row>
+      </div>
 
-    <!-- 项目列表 -->
-    <el-table :data="projects" v-loading="loading" style="width: 100%">
-      <el-table-column prop="name" :label="$t('apiTesting.project.projectName')" min-width="200" />
-      <el-table-column prop="project_type" :label="$t('apiTesting.project.projectType')" width="120">
-        <template #default="scope">
-          <el-tag :type="scope.row.project_type === 'HTTP' ? 'primary' : 'success'">
-            {{ scope.row.project_type }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="status" :label="$t('apiTesting.project.projectStatus')" width="120">
-        <template #default="scope">
-          <el-tag
-            :type="getStatusType(scope.row.status)"
+      <div class="table-section">
+        <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+        <StateForbidden
+          v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+          compact
+          :primary-action-text="$t('common.uiState.actions.goHome')"
+          @primary-action="router.push('/home')"
+        />
+        <StateError
+          v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+          compact
+          :description="requestErrorMessage || $t('common.uiState.error.description')"
+          @primary-action="loadProjects"
+        />
+        <StateSearchEmpty
+          v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+          compact
+          :primary-action-text="$t('common.uiState.actions.clearFilters')"
+          @primary-action="resetFilters"
+        />
+        <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+        <div v-else class="table-container">
+          <UnifiedListTable
+            v-model:currentPage="currentPage"
+            v-model:pageSize="pageSize"
+            :total="total"
+            :data="projects"
+            :loading="loading"
+            row-key="id"
+            selection-mode="none"
+            :actions="{ view: false, edit: false, delete: false }"
+            :action-column-width="220"
+            @page-change="loadProjects"
           >
-            {{ getStatusText(scope.row.status) }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="owner.username" :label="$t('apiTesting.project.owner')" width="150" />
-      <el-table-column prop="start_date" :label="$t('apiTesting.project.startDate')" width="120" />
-      <el-table-column prop="end_date" :label="$t('apiTesting.project.endDate')" width="120" />
-      <el-table-column prop="created_at" :label="$t('apiTesting.project.createdAt')" width="180">
-        <template #default="scope">
-          {{ formatDate(scope.row.created_at) }}
-        </template>
-      </el-table-column>
-      <el-table-column :label="$t('apiTesting.common.operation')" width="200">
-        <template #default="scope">
-          <el-button link type="primary" @click="editProject(scope.row)">{{ $t('apiTesting.common.edit') }}</el-button>
-          <el-button link type="primary" @click="viewProject(scope.row)">{{ $t('apiTesting.common.view') }}</el-button>
-          <el-button link type="danger" @click="deleteProject(scope.row)">{{ $t('apiTesting.common.delete') }}</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+            <el-table-column prop="name" :label="$t('apiTesting.project.projectName')" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="project_type" :label="$t('apiTesting.project.projectType')" width="120">
+              <template #default="{ row }">
+                <el-tag :type="row.project_type === 'HTTP' ? 'primary' : 'success'">
+                  {{ row.project_type }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" :label="$t('apiTesting.project.projectStatus')" width="120">
+              <template #default="{ row }">
+                <el-tag :type="getStatusType(row.status)">
+                  {{ getStatusText(row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="owner.username" :label="$t('apiTesting.project.owner')" width="150" />
+            <el-table-column prop="start_date" :label="$t('apiTesting.project.startDate')" width="120" />
+            <el-table-column prop="end_date" :label="$t('apiTesting.project.endDate')" width="120" />
+            <el-table-column prop="created_at" :label="$t('apiTesting.project.createdAt')" width="180">
+              <template #default="{ row }">
+                {{ formatDate(row.created_at) }}
+              </template>
+            </el-table-column>
+            <template #actions="{ row }">
+              <el-button link type="primary" @click="editProject(row)">
+                {{ $t('apiTesting.common.edit') }}
+              </el-button>
+              <el-button link type="primary" @click="viewProject(row)">
+                {{ $t('apiTesting.common.view') }}
+              </el-button>
+              <el-button link type="danger" @click="deleteProject(row)">
+                {{ $t('apiTesting.common.delete') }}
+              </el-button>
+            </template>
+          </UnifiedListTable>
+        </div>
+      </div>
+    </ListShell>
 
-    <!-- 分页 -->
-    <el-pagination
-      v-model:current-page="currentPage"
-      v-model:page-size="pageSize"
-      :page-sizes="[10, 20, 50, 100]"
-      :total="total"
-      layout="total, sizes, prev, pager, next, jumper"
-      @size-change="handleSizeChange"
-      @current-change="handleCurrentChange"
-      class="pagination"
-    />
-
-    <!-- 新建/编辑项目对话框 -->
     <el-dialog
       v-model="showCreateDialog"
       :title="editingProject ? $t('apiTesting.project.editProject') : $t('apiTesting.project.createProject')"
@@ -147,13 +219,12 @@
 
       <template #footer>
         <el-button @click="showCreateDialog = false">{{ $t('apiTesting.common.cancel') }}</el-button>
-        <el-button type="primary" @click="submitForm" :loading="submitting">
+        <el-button type="primary" :loading="submitting" @click="submitForm">
           {{ editingProject ? $t('apiTesting.common.update') : $t('apiTesting.common.create') }}
         </el-button>
       </template>
     </el-dialog>
 
-    <!-- 查看项目详情对话框 -->
     <el-dialog
       v-model="showViewDialog"
       :title="$t('apiTesting.project.viewProject')"
@@ -179,7 +250,7 @@
               v-for="member in viewedProject.members"
               :key="member.id"
               size="small"
-              style="margin-right: 5px; margin-bottom: 5px;"
+              class="member-tag"
             >
               {{ member.username }}
             </el-tag>
@@ -202,19 +273,33 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { ElMessage, ElMessageBox, ElDescriptions, ElDescriptionsItem } from 'element-plus'
+import { useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import { Plus } from '@element-plus/icons-vue'
-import api from '@/utils/api'
+import { Plus, Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import api from '@/utils/api'
+import { getApiProjects, getUsers } from '@/api/api-testing'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { ListShell } from '@/components/page-shells'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
+const router = useRouter()
 const { t } = useI18n()
+
 const loading = ref(false)
 const projects = ref([])
 const users = ref([])
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const searchText = ref('')
+const statusFilter = ref('')
+const projectTypeFilter = ref('')
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
+
 const showCreateDialog = ref(false)
 const showViewDialog = ref(false)
 const editingProject = ref(null)
@@ -231,6 +316,24 @@ const form = reactive({
   member_ids: [],
   start_date: '',
   end_date: ''
+})
+
+const hasActiveFilter = computed(() => {
+  return Boolean(searchText.value.trim() || statusFilter.value || projectTypeFilter.value)
+})
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (projects.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
 })
 
 const rules = computed(() => ({
@@ -250,40 +353,70 @@ const rules = computed(() => ({
 
 const getStatusType = (status) => {
   const typeMap = {
-    'NOT_STARTED': 'info',
-    'IN_PROGRESS': 'warning',
-    'COMPLETED': 'success'
+    NOT_STARTED: 'info',
+    IN_PROGRESS: 'warning',
+    COMPLETED: 'success'
   }
   return typeMap[status] || 'info'
 }
 
 const getStatusText = (status) => {
   const statusKey = {
-    'NOT_STARTED': 'notStarted',
-    'IN_PROGRESS': 'inProgress',
-    'COMPLETED': 'completed'
+    NOT_STARTED: 'notStarted',
+    IN_PROGRESS: 'inProgress',
+    COMPLETED: 'completed'
   }[status]
   return statusKey ? t(`apiTesting.project.status.${statusKey}`) : status
 }
 
 const formatDate = (dateString) => {
-  return dayjs(dateString).format('YYYY-MM-DD HH:mm')
+  return dateString ? dayjs(dateString).format('YYYY-MM-DD HH:mm') : '-'
+}
+
+const resolveRequestState = (error) => {
+  if (error?.response?.status === 403) {
+    return UI_PAGE_STATE.FORBIDDEN
+  }
+  return UI_PAGE_STATE.REQUEST_ERROR
 }
 
 const loadProjects = async () => {
   loading.value = true
   try {
-    const response = await api.get('/api-testing/projects/', {
-      params: {
-        page: currentPage.value,
-        page_size: pageSize.value
-      }
-    })
-    projects.value = response.data.results
-    total.value = response.data.count
+    const params = {
+      page: currentPage.value,
+      page_size: pageSize.value
+    }
+    if (searchText.value.trim()) {
+      params.search = searchText.value.trim()
+    }
+    if (statusFilter.value) {
+      params.status = statusFilter.value
+    }
+    if (projectTypeFilter.value) {
+      params.project_type = projectTypeFilter.value
+    }
+
+    const response = await getApiProjects(params)
+    projects.value = response.data.results || []
+    total.value = response.data.count || 0
+    requestState.value = UI_PAGE_STATE.READY
+    requestErrorMessage.value = ''
+    hasLoaded.value = true
+
+    const maxPage = Math.max(1, Math.ceil((total.value || 0) / pageSize.value))
+    if (total.value > 0 && currentPage.value > maxPage) {
+      currentPage.value = maxPage
+      await loadProjects()
+    }
   } catch (error) {
     ElMessage.error(t('apiTesting.messages.error.loadProjects'))
     console.error(error)
+    projects.value = []
+    total.value = 0
+    hasLoaded.value = true
+    requestState.value = resolveRequestState(error)
+    requestErrorMessage.value = error?.response?.data?.detail || t('apiTesting.messages.error.loadProjects')
   } finally {
     loading.value = false
   }
@@ -291,21 +424,24 @@ const loadProjects = async () => {
 
 const loadUsers = async () => {
   try {
-    const response = await api.get('/api-testing/users/')
-    users.value = response.data.results || response.data
+    const response = await getUsers()
+    users.value = response.data.results || response.data || []
   } catch (error) {
     ElMessage.error(t('apiTesting.messages.error.loadUsers'))
     console.error(error)
   }
 }
 
-const handleSizeChange = (size) => {
-  pageSize.value = size
+const handleFilterChange = () => {
+  currentPage.value = 1
   loadProjects()
 }
 
-const handleCurrentChange = (page) => {
-  currentPage.value = page
+const resetFilters = () => {
+  searchText.value = ''
+  statusFilter.value = ''
+  projectTypeFilter.value = ''
+  currentPage.value = 1
   loadProjects()
 }
 
@@ -315,17 +451,16 @@ const editProject = (project) => {
   form.description = project.description
   form.project_type = project.project_type
   form.status = project.status
-  form.owner = project.owner.id
-  form.member_ids = project.members.map(m => m.id)
+  form.owner = project.owner?.id || null
+  form.member_ids = (project.members || []).map((member) => member.id)
   form.start_date = project.start_date
   form.end_date = project.end_date
   showCreateDialog.value = true
 }
 
 const viewProject = (project) => {
-  // 显示项目详情弹框
-  showViewDialog.value = true
   viewedProject.value = project
+  showViewDialog.value = true
 }
 
 const deleteProject = async (project) => {
@@ -353,10 +488,10 @@ const deleteProject = async (project) => {
 
 const submitForm = async () => {
   if (!formRef.value) return
-  
+
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
-  
+
   submitting.value = true
   try {
     const data = { ...form }
@@ -366,13 +501,14 @@ const submitForm = async () => {
     if (data.end_date) {
       data.end_date = dayjs(data.end_date).format('YYYY-MM-DD')
     }
-    
+
     if (editingProject.value) {
       await api.put(`/api-testing/projects/${editingProject.value.id}/`, data)
       ElMessage.success(t('apiTesting.messages.success.projectUpdated'))
     } else {
       await api.post('/api-testing/projects/', data)
       ElMessage.success(t('apiTesting.messages.success.projectCreated'))
+      currentPage.value = 1
     }
 
     showCreateDialog.value = false
@@ -407,24 +543,38 @@ onMounted(async () => {
 
 <style scoped>
 .project-management {
-  padding: 20px;
+  min-height: 100%;
 }
 
-.header {
+.project-management-shell {
+  min-height: 100%;
+}
+
+.filters {
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.filters__actions {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  gap: 12px;
 }
 
-.header h2 {
-  margin: 0;
-  color: #303133;
+.table-section {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-.pagination {
-  margin-top: 20px;
-  display: flex;
-  justify-content: center;
+.table-container {
+  min-height: 240px;
+}
+
+.member-tag {
+  margin-right: 5px;
+  margin-bottom: 5px;
 }
 </style>

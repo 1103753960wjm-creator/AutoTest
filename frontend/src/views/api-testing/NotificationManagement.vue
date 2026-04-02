@@ -1,16 +1,12 @@
 <template>
   <div class="notification-management">
-    <!-- 顶部标题 -->
     <div class="header">
       <h3>{{ $t('apiTesting.notification.title') }}</h3>
     </div>
 
-    <!-- Tab页 -->
     <el-tabs v-model="activeTab" class="notification-tabs">
-      <!-- 通知列表Tab -->
       <el-tab-pane :label="$t('apiTesting.notification.notificationList')" name="list">
         <div class="tab-content">
-          <!-- 筛选条件 -->
           <div class="filters">
             <el-row :gutter="20">
               <el-col :span="6">
@@ -18,6 +14,8 @@
                   v-model="filters.task_name"
                   :placeholder="$t('apiTesting.notification.searchTaskName')"
                   clearable
+                  @clear="handleFilterChange"
+                  @keyup.enter="handleFilterChange"
                 />
               </el-col>
               <el-col :span="6">
@@ -30,8 +28,8 @@
                   value-format="YYYY-MM-DD"
                 />
               </el-col>
-              <el-col :span="6">
-                <el-button type="primary" @click="loadNotifications">
+              <el-col :span="6" class="filters__actions">
+                <el-button type="primary" @click="handleFilterChange">
                   <el-icon><Search /></el-icon>
                   {{ $t('apiTesting.common.search') }}
                 </el-button>
@@ -43,67 +41,77 @@
             </el-row>
           </div>
 
-          <!-- 通知列表 -->
-          <el-table
-            :data="notifications"
-            v-loading="loading"
-            style="width: 100%"
-          >
-            <el-table-column prop="task_name" :label="$t('apiTesting.notification.taskName')" min-width="120" />
-            <el-table-column prop="notify_time" :label="$t('apiTesting.notification.notifyTime')" min-width="140">
-              <template #default="{ row }">
-                {{ formatDateTime(row.notify_time) }}
-              </template>
-            </el-table-column>
-            <el-table-column prop="recipients" :label="$t('apiTesting.notification.recipients')" min-width="120">
-              <template #default="{ row }">
-                <span v-if="row.notify_type === 'EMAIL'">
-                  {{ row.recipients.join(', ') }}
-                </span>
-                <span v-else-if="row.notify_type === 'WEBHOOK'">
-                  {{ $t('apiTesting.notification.webhookBot') }}
-                </span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="status" :label="$t('apiTesting.common.status')" width="80">
-              <template #default="{ row }">
-                <el-tag :type="row.status === 'SUCCESS' ? 'success' : 'danger'">
-                  {{ row.status === 'SUCCESS' ? $t('apiTesting.common.success') : $t('apiTesting.common.failed') }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column :label="$t('apiTesting.common.operation')" width="100">
-              <template #default="{ row }">
-                <el-button
-                  type="primary"
-                  size="small"
-                  @click="showNotificationDetail(row)"
-                >
-                  {{ $t('apiTesting.notification.viewDetail') }}
-                </el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-
-          <!-- 分页 -->
-          <div class="pagination">
-            <el-pagination
-              v-model:current-page="pagination.current"
-              v-model:page-size="pagination.size"
-              :total="pagination.total"
-              :page-sizes="[10, 20, 50, 100]"
-              layout="total, sizes, prev, pager, next, jumper"
-              @size-change="loadNotifications"
-              @current-change="loadNotifications"
+          <div class="table-section">
+            <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+            <StateForbidden
+              v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+              compact
+              :primary-action-text="$t('common.uiState.actions.goHome')"
+              @primary-action="router.push('/home')"
             />
+            <StateError
+              v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+              compact
+              :description="requestErrorMessage || $t('common.uiState.error.description')"
+              @primary-action="loadNotifications"
+            />
+            <StateSearchEmpty
+              v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+              compact
+              :primary-action-text="$t('common.uiState.actions.clearFilters')"
+              @primary-action="resetFilters"
+            />
+            <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+            <div v-else class="table-container">
+              <UnifiedListTable
+                v-model:currentPage="pagination.current"
+                v-model:pageSize="pagination.size"
+                :total="pagination.total"
+                :data="notifications"
+                :loading="loading"
+                row-key="id"
+                selection-mode="none"
+                :actions="{ view: false, edit: false, delete: false }"
+                :action-column-width="120"
+                @page-change="loadNotifications"
+              >
+                <el-table-column prop="task_name" :label="$t('apiTesting.notification.taskName')" min-width="140" show-overflow-tooltip />
+                <el-table-column prop="notify_time" :label="$t('apiTesting.notification.notifyTime')" min-width="180">
+                  <template #default="{ row }">
+                    {{ formatDateTime(row.notify_time) }}
+                  </template>
+                </el-table-column>
+                <el-table-column prop="recipients" :label="$t('apiTesting.notification.recipients')" min-width="180" show-overflow-tooltip>
+                  <template #default="{ row }">
+                    <span v-if="row.notify_type === 'EMAIL'">
+                      {{ row.recipients.join(', ') }}
+                    </span>
+                    <span v-else-if="row.notify_type === 'WEBHOOK'">
+                      {{ $t('apiTesting.notification.webhookBot') }}
+                    </span>
+                    <span v-else>-</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="status" :label="$t('apiTesting.common.status')" width="90">
+                  <template #default="{ row }">
+                    <el-tag :type="row.status === 'SUCCESS' ? 'success' : 'danger'">
+                      {{ row.status === 'SUCCESS' ? $t('apiTesting.common.success') : $t('apiTesting.common.failed') }}
+                    </el-tag>
+                  </template>
+                </el-table-column>
+                <template #actions="{ row }">
+                  <el-button link type="primary" @click="showNotificationDetail(row)">
+                    {{ $t('apiTesting.notification.viewDetail') }}
+                  </el-button>
+                </template>
+              </UnifiedListTable>
+            </div>
           </div>
         </div>
       </el-tab-pane>
 
-      <!-- 通知配置Tab -->
       <el-tab-pane :label="$t('apiTesting.notification.notificationConfig')" name="config">
         <div class="tab-content">
-          <!-- 邮箱配置 -->
           <div class="config-section">
             <h4>{{ $t('apiTesting.notification.emailConfig') }}</h4>
             <el-card>
@@ -148,7 +156,6 @@
             </el-card>
           </div>
 
-          <!-- 收件人管理 -->
           <div class="config-section">
             <h4>{{ $t('apiTesting.notification.recipientManagement') }}</h4>
             <el-card>
@@ -163,11 +170,7 @@
                 <el-table-column prop="email" :label="$t('apiTesting.notification.emailAddress')" min-width="200" />
                 <el-table-column :label="$t('apiTesting.common.operation')" width="120">
                   <template #default="{ row }">
-                    <el-button
-                      type="danger"
-                      size="small"
-                      @click="deleteRecipient(row)"
-                    >
+                    <el-button type="danger" size="small" @click="deleteRecipient(row)">
                       {{ $t('apiTesting.common.delete') }}
                     </el-button>
                   </template>
@@ -176,7 +179,6 @@
             </el-card>
           </div>
 
-          <!-- Webhook配置 -->
           <div class="config-section">
             <h4>{{ $t('apiTesting.notification.webhookConfig') }}</h4>
             <el-card>
@@ -198,19 +200,12 @@
                 <el-table-column prop="webhook_url" :label="$t('apiTesting.notification.webhookAddress')" min-width="200" />
                 <el-table-column prop="enabled" :label="$t('apiTesting.common.status')" width="80">
                   <template #default="{ row }">
-                    <el-switch
-                      v-model="row.enabled"
-                      @change="toggleWebhookStatus(row)"
-                    />
+                    <el-switch v-model="row.enabled" @change="toggleWebhookStatus(row)" />
                   </template>
                 </el-table-column>
                 <el-table-column :label="$t('apiTesting.common.operation')" width="120">
                   <template #default="{ row }">
-                    <el-button
-                      type="danger"
-                      size="small"
-                      @click="deleteWebhook(row)"
-                    >
+                    <el-button type="danger" size="small" @click="deleteWebhook(row)">
                       {{ $t('apiTesting.common.delete') }}
                     </el-button>
                   </template>
@@ -222,7 +217,6 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 通知详情对话框 -->
     <el-dialog
       v-model="showDetailDialog"
       :title="$t('apiTesting.notification.notificationDetail')"
@@ -255,14 +249,13 @@
           <el-descriptions-item :label="$t('apiTesting.notification.content')">
             <pre class="content-pre">{{ currentNotification.content }}</pre>
           </el-descriptions-item>
-          <el-descriptions-item :label="$t('apiTesting.scheduledTask.errorMessage')" v-if="currentNotification.error_message">
+          <el-descriptions-item v-if="currentNotification.error_message" :label="$t('apiTesting.scheduledTask.errorMessage')">
             {{ currentNotification.error_message }}
           </el-descriptions-item>
         </el-descriptions>
       </div>
     </el-dialog>
 
-    <!-- 新增收件人对话框 -->
     <el-dialog
       v-model="showRecipientDialog"
       :title="$t('apiTesting.notification.addRecipient')"
@@ -283,7 +276,6 @@
       </template>
     </el-dialog>
 
-    <!-- 新增Webhook对话框 -->
     <el-dialog
       v-model="showWebhookDialog"
       :title="$t('apiTesting.notification.addWebhook')"
@@ -319,36 +311,41 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { Search, Refresh, Plus } from '@element-plus/icons-vue'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
+const router = useRouter()
 const { t } = useI18n()
+
 const activeTab = ref('list')
 const loading = ref(false)
+const hasLoaded = ref(false)
+const requestState = ref(UI_PAGE_STATE.READY)
+const requestErrorMessage = ref('')
 const showDetailDialog = ref(false)
 const showRecipientDialog = ref(false)
 const showWebhookDialog = ref(false)
 
-// 筛选条件
 const filters = reactive({
   task_name: '',
   date_range: []
 })
 
-// 分页配置
 const pagination = reactive({
   current: 1,
   size: 10,
   total: 0
 })
 
-// 通知列表数据
 const notifications = ref([])
+const allNotifications = ref([])
 const currentNotification = ref(null)
 
-// 邮箱配置
 const emailConfig = reactive({
   sender_email: '',
   smtp_host: '',
@@ -356,14 +353,12 @@ const emailConfig = reactive({
   smtp_password: ''
 })
 
-// 收件人列表
 const recipients = ref([])
 const newRecipient = reactive({
   name: '',
   email: ''
 })
 
-// Webhook列表
 const webhooks = ref([])
 const newWebhook = reactive({
   name: '',
@@ -371,61 +366,134 @@ const newWebhook = reactive({
   webhook_url: ''
 })
 
-// 加载通知列表
+const hasActiveFilter = computed(() => {
+  return Boolean(filters.task_name.trim() || (filters.date_range && filters.date_range.length === 2))
+})
+
+const pageState = computed(() => {
+  if (loading.value && !hasLoaded.value) {
+    return UI_PAGE_STATE.LOADING
+  }
+  if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    return UI_PAGE_STATE.FORBIDDEN
+  }
+  if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    return UI_PAGE_STATE.REQUEST_ERROR
+  }
+  if (notifications.value.length === 0) {
+    return hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return UI_PAGE_STATE.READY
+})
+
+const resolveRequestState = (error) => {
+  if (error?.response?.status === 403) {
+    return UI_PAGE_STATE.FORBIDDEN
+  }
+  return UI_PAGE_STATE.REQUEST_ERROR
+}
+
+const createMockNotifications = () => ([
+  {
+    id: 1,
+    task_name: '每日API测试',
+    notify_time: new Date().toISOString(),
+    notify_type: 'EMAIL',
+    recipients: ['user1@example.com', 'user2@example.com'],
+    status: 'SUCCESS',
+    content: '测试任务执行完成，共执行10个接口，成功8个，失败2个',
+    error_message: ''
+  },
+  {
+    id: 2,
+    task_name: '每周数据同步',
+    notify_time: new Date(Date.now() - 86400000).toISOString(),
+    notify_type: 'WEBHOOK',
+    recipients: [],
+    status: 'FAILED',
+    content: '数据同步任务执行失败',
+    error_message: '网络连接超时'
+  },
+  {
+    id: 3,
+    task_name: '接口冒烟检查',
+    notify_time: new Date(Date.now() - 2 * 86400000).toISOString(),
+    notify_type: 'EMAIL',
+    recipients: ['qa@example.com'],
+    status: 'SUCCESS',
+    content: '接口冒烟检查执行完成，全部通过',
+    error_message: ''
+  }
+])
+
+const applyFilters = (source) => {
+  let result = [...source]
+  if (filters.task_name.trim()) {
+    const keyword = filters.task_name.trim().toLowerCase()
+    result = result.filter((item) => item.task_name.toLowerCase().includes(keyword))
+  }
+  if (filters.date_range && filters.date_range.length === 2) {
+    const [startDate, endDate] = filters.date_range
+    result = result.filter((item) => {
+      const current = item.notify_time.slice(0, 10)
+      return current >= startDate && current <= endDate
+    })
+  }
+  return result
+}
+
 const loadNotifications = async () => {
   loading.value = true
   try {
-    // 模拟数据
-    notifications.value = [
-      {
-        id: 1,
-        task_name: '每日API测试',
-        notify_time: new Date().toISOString(),
-        notify_type: 'EMAIL',
-        recipients: ['user1@example.com', 'user2@example.com'],
-        status: 'SUCCESS',
-        content: '测试任务执行完成，共执行10个接口，成功8个，失败2个',
-        error_message: ''
-      },
-      {
-        id: 2,
-        task_name: '每周数据同步',
-        notify_time: new Date(Date.now() - 86400000).toISOString(),
-        notify_type: 'WEBHOOK',
-        recipients: [],
-        status: 'FAILED',
-        content: '数据同步任务执行失败',
-        error_message: '网络连接超时'
-      }
-    ]
-    pagination.total = 2
+    allNotifications.value = createMockNotifications()
+    const filtered = applyFilters(allNotifications.value)
+    pagination.total = filtered.length
+    const start = (pagination.current - 1) * pagination.size
+    const end = start + pagination.size
+    notifications.value = filtered.slice(start, end)
+    requestState.value = UI_PAGE_STATE.READY
+    requestErrorMessage.value = ''
+    hasLoaded.value = true
+
+    const maxPage = Math.max(1, Math.ceil((pagination.total || 0) / pagination.size))
+    if (pagination.total > 0 && pagination.current > maxPage) {
+      pagination.current = maxPage
+      await loadNotifications()
+    }
   } catch (error) {
     ElMessage.error(t('apiTesting.messages.error.loadNotifications'))
+    notifications.value = []
+    pagination.total = 0
+    hasLoaded.value = true
+    requestState.value = resolveRequestState(error)
+    requestErrorMessage.value = error?.message || t('apiTesting.messages.error.loadNotifications')
   } finally {
     loading.value = false
   }
 }
 
-// 重置筛选条件
-const resetFilters = () => {
-  filters.task_name = ''
-  filters.date_range = []
+const handleFilterChange = () => {
+  pagination.current = 1
   loadNotifications()
 }
 
-// 显示通知详情
+const resetFilters = () => {
+  filters.task_name = ''
+  filters.date_range = []
+  pagination.current = 1
+  loadNotifications()
+}
+
 const showNotificationDetail = (notification) => {
   currentNotification.value = notification
   showDetailDialog.value = true
 }
 
-// 格式化日期时间
 const formatDateTime = (dateString) => {
   const date = new Date(dateString)
   return date.toLocaleString('zh-CN')
 }
 
-// 保存邮箱配置
 const saveEmailConfig = async () => {
   try {
     ElMessage.success(t('apiTesting.messages.success.emailConfigSaved'))
@@ -434,7 +502,6 @@ const saveEmailConfig = async () => {
   }
 }
 
-// 测试邮箱配置
 const testEmailConfig = async () => {
   try {
     ElMessage.success(t('apiTesting.messages.success.emailTestSuccess'))
@@ -443,14 +510,12 @@ const testEmailConfig = async () => {
   }
 }
 
-// 显示新增收件人对话框
 const showAddRecipientDialog = () => {
   newRecipient.name = ''
   newRecipient.email = ''
   showRecipientDialog.value = true
 }
 
-// 添加收件人
 const addRecipient = async () => {
   if (!newRecipient.name || !newRecipient.email) {
     ElMessage.warning(t('apiTesting.notification.fillCompleteInfo'))
@@ -462,7 +527,6 @@ const addRecipient = async () => {
   ElMessage.success(t('apiTesting.messages.success.recipientAdded'))
 }
 
-// 删除收件人
 const deleteRecipient = async (recipient) => {
   try {
     await ElMessageBox.confirm(
@@ -475,17 +539,18 @@ const deleteRecipient = async (recipient) => {
       }
     )
 
-    const index = recipients.value.findIndex(r => r.email === recipient.email)
+    const index = recipients.value.findIndex((item) => item.email === recipient.email)
     if (index !== -1) {
       recipients.value.splice(index, 1)
       ElMessage.success(t('apiTesting.messages.success.recipientDeleted'))
     }
   } catch (error) {
-    // 用户取消删除
+    if (error !== 'cancel') {
+      console.error(error)
+    }
   }
 }
 
-// 显示新增Webhook对话框
 const showAddWebhookDialog = () => {
   newWebhook.name = ''
   newWebhook.platform = ''
@@ -493,7 +558,6 @@ const showAddWebhookDialog = () => {
   showWebhookDialog.value = true
 }
 
-// 添加Webhook
 const addWebhook = async () => {
   if (!newWebhook.name || !newWebhook.platform || !newWebhook.webhook_url) {
     ElMessage.warning(t('apiTesting.notification.fillCompleteInfo'))
@@ -508,7 +572,6 @@ const addWebhook = async () => {
   ElMessage.success(t('apiTesting.messages.success.webhookAdded'))
 }
 
-// 删除Webhook
 const deleteWebhook = async (webhook) => {
   try {
     await ElMessageBox.confirm(
@@ -521,17 +584,18 @@ const deleteWebhook = async (webhook) => {
       }
     )
 
-    const index = webhooks.value.findIndex(w => w.webhook_url === webhook.webhook_url)
+    const index = webhooks.value.findIndex((item) => item.webhook_url === webhook.webhook_url)
     if (index !== -1) {
       webhooks.value.splice(index, 1)
       ElMessage.success(t('apiTesting.messages.success.webhookDeleted'))
     }
   } catch (error) {
-    // 用户取消删除
+    if (error !== 'cancel') {
+      console.error(error)
+    }
   }
 }
 
-// 切换Webhook状态
 const toggleWebhookStatus = async (webhook) => {
   try {
     ElMessage.success(webhook.enabled ? t('apiTesting.notification.webhookEnabled') : t('apiTesting.notification.webhookDisabled'))
@@ -541,7 +605,6 @@ const toggleWebhookStatus = async (webhook) => {
   }
 }
 
-// 获取平台名称
 const getPlatformName = (platform) => {
   const platformKey = {
     FEISHU: 'feishu',
@@ -551,7 +614,6 @@ const getPlatformName = (platform) => {
   return platformKey ? t(`apiTesting.notification.platforms.${platformKey}`) : platform
 }
 
-// 获取平台标签类型
 const getPlatformTagType = (platform) => {
   const typeMap = {
     FEISHU: 'success',
@@ -561,16 +623,14 @@ const getPlatformTagType = (platform) => {
   return typeMap[platform] || 'info'
 }
 
-// 初始化加载数据
 onMounted(() => {
   loadNotifications()
-  
-  // 加载模拟数据
+
   recipients.value = [
     { name: '张三', email: 'zhangsan@example.com' },
     { name: '李四', email: 'lisi@example.com' }
   ]
-  
+
   webhooks.value = [
     {
       name: '飞书通知',
@@ -621,10 +681,19 @@ onMounted(() => {
   border-radius: 8px;
 }
 
-.pagination {
-  margin-top: 20px;
+.filters__actions {
   display: flex;
-  justify-content: flex-end;
+  gap: 12px;
+}
+
+.table-section {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.table-container {
+  min-height: 240px;
 }
 
 .config-section {

@@ -1,6 +1,5 @@
 <template>
   <div class="ui-flow-case-list">
-    <!-- 页面标题 -->
     <div class="page-header">
       <h3>APP测试用例</h3>
       <div class="header-actions">
@@ -16,7 +15,6 @@
       </div>
     </div>
 
-    <!-- 设备和应用选择 -->
     <el-card class="device-card">
       <el-form :model="form" label-width="100px" size="small">
         <el-row :gutter="16">
@@ -28,7 +26,7 @@
                 clearable
                 filterable
                 style="width: 100%"
-                @change="loadTestCases"
+                @change="handleListFilterChange"
               >
                 <el-option
                   v-for="proj in projectList"
@@ -82,14 +80,14 @@
                 v-model="searchQuery"
                 placeholder="搜索测试用例名称"
                 clearable
-                @clear="loadTestCases"
-                @keyup.enter="loadTestCases"
+                @clear="handleListFilterChange"
+                @keyup.enter="handleListFilterChange"
               >
                 <template #prefix>
                   <el-icon><Search /></el-icon>
                 </template>
                 <template #append>
-                  <el-button :icon="Search" @click="loadTestCases">搜索</el-button>
+                  <el-button :icon="Search" @click="handleListFilterChange">搜索</el-button>
                 </template>
               </el-input>
             </el-form-item>
@@ -98,8 +96,7 @@
       </el-form>
     </el-card>
 
-    <!-- 批量操作栏 -->
-    <div v-if="selectedCases.length > 0" class="batch-bar">
+    <div v-if="selectedCases.length > 0 && pageState === UI_PAGE_STATE.READY" class="batch-bar">
       <span>已选择 <strong>{{ selectedCases.length }}</strong> 个用例</span>
       <el-button type="success" size="small" @click="batchRun">
         批量执行
@@ -109,57 +106,71 @@
       </el-button>
     </div>
 
-    <!-- 测试用例列表 -->
-    <el-table
-      ref="tableRef"
-      v-loading="loading"
-      :data="testCases"
-      style="width: 100%; margin-top: 16px"
-      empty-text="暂无测试用例"
-      @selection-change="handleSelectionChange"
-    >
-      <el-table-column type="selection" width="50" />
-      <el-table-column prop="name" label="用例名称" min-width="200" />
-      <el-table-column label="场景描述" min-width="250">
-        <template #default="{ row }">
-          {{ row.description || '-' }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="updated_at" label="更新时间" width="180">
-        <template #default="{ row }">
-          {{ formatDateTime(row.updated_at) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="200">
-        <template #default="{ row }">
-          <el-button link type="success" size="small" @click="runCase(row)">
-            运行
-          </el-button>
-          <el-button link type="primary" size="small" @click="editCase(row)">
-            编辑
-          </el-button>
-          <el-button link type="danger" size="small" @click="deleteCase(row)">
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="table-section">
+      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+      <StateForbidden
+        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+        compact
+        primary-action-text="返回首页"
+        @primary-action="router.push('/home')"
+      />
+      <StateError
+        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || '加载测试用例失败，请稍后重试。'"
+        @primary-action="loadTestCases"
+      />
+      <StateSearchEmpty
+        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+        compact
+        primary-action-text="清空筛选"
+        @primary-action="resetListFilters"
+      />
+      <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+      <div v-else class="table-container">
+        <UnifiedListTable
+          :key="tableRenderKey"
+          v-model:currentPage="caseCurrentPage"
+          v-model:pageSize="casePageSize"
+          :total="caseTotal"
+          :page-sizes="[10, 20, 50, 100]"
+          :data="testCases"
+          :loading="loading"
+          row-key="id"
+          selection-mode="multi"
+          :toggle-on-row-click="false"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="220"
+          @selection-change="handleSelectionChange"
+          @page-change="loadTestCases"
+        >
+          <el-table-column prop="name" label="用例名称" min-width="200" show-overflow-tooltip />
+          <el-table-column label="场景描述" min-width="250" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.description || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="updated_at" label="更新时间" width="180">
+            <template #default="{ row }">
+              {{ formatDateTime(row.updated_at) }}
+            </template>
+          </el-table-column>
+          <template #actions="{ row }">
+            <el-button link type="success" size="small" @click="runCase(row)">
+              运行
+            </el-button>
+            <el-button link type="primary" size="small" @click="editCase(row)">
+              编辑
+            </el-button>
+            <el-button link type="danger" size="small" @click="deleteCase(row)">
+              删除
+            </el-button>
+          </template>
+        </UnifiedListTable>
+      </div>
+    </div>
 
-    <!-- 分页 -->
-    <el-pagination
-      v-show="caseTotal > 0"
-      v-model:current-page="caseCurrentPage"
-      v-model:page-size="casePageSize"
-      :page-sizes="[10, 20, 30, 50]"
-      :total="caseTotal"
-      layout="total, sizes, prev, pager, next, jumper"
-      style="margin-top: 16px; text-align: right"
-      @size-change="handleCaseSizeChange"
-      @current-change="handleCasePageChange"
-    />
-
-    <!-- 测试执行记录 -->
-    <el-card class="execution-card" style="margin-top: 20px">
+    <el-card class="execution-card">
       <template #header>
         <div class="card-header">
           <span>最近测试执行记录</span>
@@ -241,10 +252,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search } from '@element-plus/icons-vue'
+import { UnifiedListTable } from '@/components/platform-shared'
+import {
+  StateEmpty,
+  StateError,
+  StateForbidden,
+  StateLoading,
+  StateSearchEmpty,
+  UI_PAGE_STATE
+} from '@/components/ui-states'
 import {
   getTestCaseList,
   deleteTestCase as apiDeleteTestCase,
@@ -254,20 +274,22 @@ import {
   stopExecution as apiStopExecution,
   getPackageList,
   getAppProjects,
-  getWsStatus
+  getWsStatus,
+  getDeviceList
 } from '@/api/app-automation'
-import { getDeviceList } from '@/api/app-automation'
-import { getExecutionStatusType, getExecutionStatusText, getDisplayStatus, formatDateTime } from '@/utils/app-automation-helpers'
+import { getDisplayStatus, formatDateTime } from '@/utils/app-automation-helpers'
 
 const router = useRouter()
 
-// 响应式数据
 const loading = ref(false)
 const devicesLoading = ref(false)
 const executionsLoading = ref(false)
 const availableDevices = ref([])
 const appPackages = ref([])
 const searchQuery = ref('')
+const requestState = ref(UI_PAGE_STATE.READY)
+const requestErrorMessage = ref('')
+const hasLoaded = ref(false)
 
 const projectList = ref([])
 const form = ref({
@@ -276,17 +298,14 @@ const form = ref({
   packageId: null
 })
 
-// 用例列表数据
 const testCases = ref([])
 const caseCurrentPage = ref(1)
 const casePageSize = ref(20)
 const caseTotal = ref(0)
+const tableRenderKey = ref(0)
 
-// 批量选择
-const tableRef = ref(null)
 const selectedCases = ref([])
 
-// 执行记录数据
 const executionData = ref({
   count: 0,
   results: []
@@ -294,18 +313,35 @@ const executionData = ref({
 const websockets = ref({})
 const lastStatusMessages = ref({})
 
-// 定时刷新执行记录
 let refreshTimer = null
 
-// 加载项目列表
+const hasActiveFilter = computed(() => Boolean(form.value.projectId || searchQuery.value.trim()))
+
+const pageState = computed(() => {
+  if (loading.value && !hasLoaded.value) {
+    return UI_PAGE_STATE.LOADING
+  }
+  if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    return UI_PAGE_STATE.FORBIDDEN
+  }
+  if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    return UI_PAGE_STATE.REQUEST_ERROR
+  }
+  if (testCases.value.length === 0) {
+    return hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return UI_PAGE_STATE.READY
+})
+
 const loadProjectList = async () => {
   try {
     const res = await getAppProjects({ page_size: 100 })
     projectList.value = res.data.results || res.data || []
-  } catch { /* ignore */ }
+  } catch {
+    projectList.value = []
+  }
 }
 
-// 加载设备列表
 const loadDevices = async () => {
   devicesLoading.value = true
   try {
@@ -339,19 +375,30 @@ const loadPackages = async () => {
   }
 }
 
-// 加载测试用例列表
+const resolveRequestState = (error) => {
+  if (error?.response?.status === 403) {
+    return UI_PAGE_STATE.FORBIDDEN
+  }
+  return UI_PAGE_STATE.REQUEST_ERROR
+}
+
 const loadTestCases = async () => {
   loading.value = true
   try {
     const params = {
       page: caseCurrentPage.value,
-      page_size: casePageSize.value,
-      search: searchQuery.value
+      page_size: casePageSize.value
     }
-    if (form.value.projectId) params.project = form.value.projectId
+    if (searchQuery.value.trim()) {
+      params.search = searchQuery.value.trim()
+    }
+    if (form.value.projectId) {
+      params.project = form.value.projectId
+    }
+
     const res = await getTestCaseList(params)
     const data = res.data
-    
+
     if (data.success !== undefined) {
       testCases.value = data.data?.results || data.data || []
       caseTotal.value = data.data?.count || 0
@@ -359,16 +406,40 @@ const loadTestCases = async () => {
       testCases.value = data.results || data || []
       caseTotal.value = data.count || 0
     }
+
+    requestState.value = UI_PAGE_STATE.READY
+    requestErrorMessage.value = ''
+    hasLoaded.value = true
+
+    const maxPage = Math.max(1, Math.ceil((caseTotal.value || 0) / casePageSize.value))
+    if (caseTotal.value > 0 && caseCurrentPage.value > maxPage) {
+      caseCurrentPage.value = maxPage
+      await loadTestCases()
+    }
   } catch (error) {
     console.error('加载测试用例失败:', error)
     testCases.value = []
     caseTotal.value = 0
+    hasLoaded.value = true
+    requestState.value = resolveRequestState(error)
+    requestErrorMessage.value = error?.response?.data?.detail || error?.message || '加载测试用例失败'
   } finally {
     loading.value = false
   }
 }
 
-// 加载执行记录
+const handleListFilterChange = () => {
+  caseCurrentPage.value = 1
+  loadTestCases()
+}
+
+const resetListFilters = () => {
+  form.value.projectId = null
+  searchQuery.value = ''
+  caseCurrentPage.value = 1
+  loadTestCases()
+}
+
 const loadExecutions = async () => {
   executionsLoading.value = true
   try {
@@ -379,7 +450,7 @@ const loadExecutions = async () => {
     }
     const res = await getExecutionList(params)
     const data = res.data
-    
+
     if (data.success !== undefined) {
       executionData.value = {
         count: data.data?.count || 0,
@@ -392,7 +463,7 @@ const loadExecutions = async () => {
       }
     }
 
-    executionData.value.results.forEach(execution => {
+    executionData.value.results.forEach((execution) => {
       if ((execution.status === 'pending' || execution.status === 'running') && execution.id) {
         trackExecution(execution.id)
       }
@@ -405,7 +476,6 @@ const loadExecutions = async () => {
   }
 }
 
-// 刷新执行记录
 const refreshExecutions = () => {
   loadExecutions()
 }
@@ -423,7 +493,6 @@ const viewReport = (execution) => {
   window.open(reportUrl, '_blank')
 }
 
-// 停止测试
 const stopTest = async (execution) => {
   try {
     await ElMessageBox.confirm(
@@ -444,11 +513,12 @@ const stopTest = async (execution) => {
       ElMessage.error(res.data.message || '停止失败')
     }
   } catch (error) {
-    // 用户取消
+    if (error !== 'cancel') {
+      console.error('停止测试失败:', error)
+    }
   }
 }
 
-// 运行测试用例
 const runCase = async (testCase) => {
   if (!form.value.deviceId) {
     ElMessage.warning('请先选择设备')
@@ -457,19 +527,19 @@ const runCase = async (testCase) => {
 
   try {
     const params = {
-      device_id: availableDevices.value.find(d => d.id === form.value.deviceId)?.device_id
+      device_id: availableDevices.value.find((device) => device.id === form.value.deviceId)?.device_id
     }
 
     if (form.value.packageId) {
-      const selected = appPackages.value.find(pkg => pkg.id === form.value.packageId)
+      const selected = appPackages.value.find((pkg) => pkg.id === form.value.packageId)
       if (selected) {
         params.package_name = selected.package_name
       }
     }
-    
+
     const res = await apiExecuteTestCase(testCase.id, params)
     const data = res.data
-    
+
     if (data.success || data.execution_id) {
       ElMessage.success('测试已提交执行')
       const executionId = data.execution?.id || data.execution_id
@@ -477,7 +547,6 @@ const runCase = async (testCase) => {
         trackExecution(executionId)
         checkExecutionStatus(executionId)
       }
-      // 刷新执行记录
       setTimeout(() => {
         loadExecutions()
       }, 1000)
@@ -504,7 +573,6 @@ const checkExecutionStatus = (executionId) => {
   }, 3000)
 }
 
-// 编辑测试用例
 const editCase = (testCase) => {
   router.push({
     path: '/app-automation/scene-builder',
@@ -512,7 +580,6 @@ const editCase = (testCase) => {
   })
 }
 
-// 删除测试用例
 const deleteCase = async (testCase) => {
   try {
     await ElMessageBox.confirm(
@@ -527,7 +594,7 @@ const deleteCase = async (testCase) => {
 
     await apiDeleteTestCase(testCase.id)
     ElMessage.success('删除成功')
-    loadTestCases()
+    await loadTestCases()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败: ' + (error.message || '未知错误'))
@@ -535,13 +602,11 @@ const deleteCase = async (testCase) => {
   }
 }
 
-// 查看测试报告
-
 const updateExecutionData = (updates) => {
   if (!updates || !updates.execution_id) {
     return
   }
-  const target = executionData.value.results.find(item => item.id === updates.execution_id)
+  const target = executionData.value.results.find((item) => item.id === updates.execution_id)
   if (!target) {
     loadExecutions()
     return
@@ -553,13 +618,11 @@ const updateExecutionData = (updates) => {
   if (updates.finished_at) target.finished_at = updates.finished_at
 }
 
-// ===== 执行状态推送：WebSocket 模式 / 轮询模式（由 ws_status 接口决定） =====
 const wsDisabled = ref(false)
 const pollingTimers = ref({})
-const wsRetryCount = ref({})  // WebSocket 重试计数
-const WS_MAX_RETRY = 3       // 最大重试次数
+const wsRetryCount = ref({})
+const WS_MAX_RETRY = 3
 
-// --- 轮询模式：每 3 秒查一次执行状态 ---
 const startPolling = (executionId) => {
   if (pollingTimers.value[executionId]) return
   pollingTimers.value[executionId] = setInterval(async () => {
@@ -572,7 +635,7 @@ const startPolling = (executionId) => {
           result: res.data.result,
           progress: res.data.progress,
           report_path: res.data.report_path,
-          finished_at: res.data.finished_at,
+          finished_at: res.data.finished_at
         })
         if (['completed', 'error', 'stopped'].includes(res.data.status)) {
           stopPolling(executionId)
@@ -581,8 +644,8 @@ const startPolling = (executionId) => {
           else if (res.data.status === 'error') ElMessage.error('执行异常')
         }
       }
-    } catch (e) {
-      console.error('轮询执行状态失败:', e)
+    } catch (error) {
+      console.error('轮询执行状态失败:', error)
     }
   }, 3000)
 }
@@ -595,10 +658,9 @@ const stopPolling = (executionId) => {
 }
 
 const stopAllPolling = () => {
-  Object.keys(pollingTimers.value).forEach(id => stopPolling(id))
+  Object.keys(pollingTimers.value).forEach((id) => stopPolling(id))
 }
 
-// --- WebSocket 模式：实时推送 ---
 const connectWebSocket = (executionId) => {
   if (websockets.value[executionId]) return
 
@@ -639,22 +701,19 @@ const connectWebSocket = (executionId) => {
     const retries = (wsRetryCount.value[executionId] || 0) + 1
     wsRetryCount.value[executionId] = retries
     if (retries <= WS_MAX_RETRY) {
-      console.warn(`WebSocket 连接异常 (${retries}/${WS_MAX_RETRY})，${retries}秒后重试`)
       setTimeout(() => {
-        const target = executionData.value.results.find(e => e.id === executionId)
+        const target = executionData.value.results.find((item) => item.id === executionId)
         if (target && ['pending', 'running'].includes(target.status)) {
           connectWebSocket(executionId)
         }
       }, retries * 1000)
     } else {
-      console.warn(`WebSocket 重试超限，execution_id=${executionId} 切换为轮询`)
       delete wsRetryCount.value[executionId]
       startPolling(executionId)
     }
   }
 }
 
-// --- 统一入口：根据模式选择推送方式 ---
 const trackExecution = (executionId) => {
   if (wsDisabled.value) {
     startPolling(executionId)
@@ -672,17 +731,16 @@ const closeWebSocket = (executionId) => {
 }
 
 const closeAllWebSockets = () => {
-  Object.keys(websockets.value).forEach(id => closeWebSocket(id))
+  Object.keys(websockets.value).forEach((id) => closeWebSocket(id))
 }
 
-// 批量选择与执行
 const handleSelectionChange = (selection) => {
   selectedCases.value = selection
 }
 
 const clearSelection = () => {
-  tableRef.value?.clearSelection()
   selectedCases.value = []
+  tableRenderKey.value += 1
 }
 
 const batchRun = async () => {
@@ -702,23 +760,26 @@ const batchRun = async () => {
       { confirmButtonText: '执行', cancelButtonText: '取消', type: 'info' }
     )
 
-    const deviceIdStr = availableDevices.value.find(d => d.id === form.value.deviceId)?.device_id
+    const deviceIdStr = availableDevices.value.find((device) => device.id === form.value.deviceId)?.device_id
     let packageName = null
     if (form.value.packageId) {
-      const selected = appPackages.value.find(pkg => pkg.id === form.value.packageId)
-      if (selected) packageName = selected.package_name
+      const selected = appPackages.value.find((pkg) => pkg.id === form.value.packageId)
+      if (selected) {
+        packageName = selected.package_name
+      }
     }
 
-    // 逐个提交执行
     let submitted = 0
-    for (const tc of selectedCases.value) {
+    for (const testCase of selectedCases.value) {
       try {
         const params = { device_id: deviceIdStr }
-        if (packageName) params.package_name = packageName
-        await apiExecuteTestCase(tc.id, params)
-        submitted++
+        if (packageName) {
+          params.package_name = packageName
+        }
+        await apiExecuteTestCase(testCase.id, params)
+        submitted += 1
       } catch (error) {
-        console.error(`执行用例 ${tc.name} 失败:`, error)
+        console.error(`执行用例 ${testCase.name} 失败:`, error)
       }
     }
 
@@ -726,22 +787,12 @@ const batchRun = async () => {
     clearSelection()
     setTimeout(() => loadExecutions(), 1500)
   } catch (error) {
-    // 用户取消
+    if (error !== 'cancel') {
+      console.error('批量执行失败:', error)
+    }
   }
 }
 
-// 分页处理
-const handleCaseSizeChange = () => {
-  caseCurrentPage.value = 1  // 切换每页条数时回到第1页
-  loadTestCases()
-}
-
-const handleCasePageChange = () => {
-  loadTestCases()
-}
-
-
-// 计算执行进度
 const calculateProgress = (execution) => {
   if (execution.status === 'completed') return 100
   if (execution.status === 'error' || execution.status === 'stopped') return execution.progress || 0
@@ -749,7 +800,6 @@ const calculateProgress = (execution) => {
   return 0
 }
 
-// 获取进度条状态（基于测试结果）
 const getProgressStatus = (row) => {
   if (row.status === 'completed') {
     return row.result === 'failed' ? 'exception' : 'success'
@@ -758,19 +808,12 @@ const getProgressStatus = (row) => {
   return undefined
 }
 
-// formatDateTime 已从 app-automation-helpers 导入
-
-// 组件挂载
 onMounted(async () => {
-  // 先检测 WebSocket 是否可用
   try {
     const res = await getWsStatus()
     wsDisabled.value = !(res.data?.websocket)
   } catch {
     wsDisabled.value = true
-  }
-  if (wsDisabled.value) {
-    console.info('WebSocket 不可用，将使用轮询模式')
   }
 
   loadProjectList()
@@ -778,12 +821,10 @@ onMounted(async () => {
   loadPackages()
   loadTestCases()
   loadExecutions()
-  
-  // WebSocket 模式下，每10秒刷新执行列表（补充 WS 推送）
-  // 轮询模式下不需要（trackExecution 已有 3 秒轮询）
+
   if (!wsDisabled.value) {
     refreshTimer = setInterval(() => {
-      const hasRunning = executionData.value.results.some(e => e.status === 'running')
+      const hasRunning = executionData.value.results.some((item) => item.status === 'running')
       if (hasRunning) {
         loadExecutions()
       }
@@ -791,7 +832,6 @@ onMounted(async () => {
   }
 })
 
-// 组件卸载
 onBeforeUnmount(() => {
   if (refreshTimer) {
     clearInterval(refreshTimer)
@@ -804,6 +844,19 @@ onBeforeUnmount(() => {
 <style scoped lang="scss">
 .ui-flow-case-list {
   padding: 0;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+
+  h3 {
+    margin: 0;
+    font-size: 20px;
+    color: #303133;
+  }
 }
 
 .batch-bar {
@@ -822,106 +875,42 @@ onBeforeUnmount(() => {
   }
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  background: white;
-  padding: 16px 20px;
-  border-radius: 4px;
+.table-section {
+  margin-top: 16px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-
-  h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #303133;
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 12px;
-  }
 }
 
-.device-card {
-  margin-bottom: 16px;
+.table-container {
+  min-height: 240px;
+}
 
-  :deep(.el-card__body) {
-    padding: 20px;
-  }
+.execution-card {
+  margin-top: 20px;
+}
 
-  :deep(.el-form-item) {
-    margin-bottom: 0;
-  }
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .progress-wrapper {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 4px 8px;
-  background-color: #f5f7fa;
-  border-radius: 4px;
-
-  .progress-text {
-    min-width: 45px;
-    text-align: right;
-    font-size: 12px;
-    color: #606266;
-    font-weight: 500;
-  }
+  gap: 8px;
 }
 
-.execution-card {
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .card-actions {
-    display: flex;
-    gap: 12px;
-  }
-
-  :deep(.el-card__header) {
-    padding: 16px 20px;
-    background-color: #fafafa;
-    border-bottom: 1px solid #e8e8e8;
-  }
-
-  :deep(.el-card__body) {
-    padding: 20px;
-  }
-}
-
-// 表格样式优化
-:deep(.el-table) {
-  .el-table__header {
-    th {
-      background-color: #fafafa;
-      color: #606266;
-      font-weight: 600;
-    }
-  }
-
-  .el-table__body {
-    tr:hover {
-      background-color: #f5f7fa;
-    }
-  }
-}
-
-// 响应式设计
-@media screen and (max-width: 1366px) {
-  .page-header h3 {
-    font-size: 16px;
-  }
-
-  .device-card :deep(.el-form-item__label) {
-    font-size: 13px;
-  }
+.progress-text {
+  min-width: 40px;
+  font-size: 12px;
+  color: #606266;
 }
 </style>

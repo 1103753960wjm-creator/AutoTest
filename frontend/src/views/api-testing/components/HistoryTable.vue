@@ -1,12 +1,15 @@
 <template>
   <div class="history-table">
-    <el-table
+    <UnifiedListTable
       :data="data"
-      v-loading="loading"
-      style="width: 100%"
+      :loading="loading"
+      row-key="id"
+      selection-mode="multi"
+      :show-pagination="false"
+      :actions="{ view: false, edit: false, delete: false }"
+      :action-column-width="200"
       @selection-change="$emit('selection-change', $event)"
     >
-      <el-table-column type="selection" width="55" align="center" />
       <el-table-column prop="request.name" :label="$t('apiTesting.component.historyTable.requestName')" min-width="200" />
       <el-table-column prop="request.method" :label="$t('apiTesting.component.historyTable.method')" width="80">
         <template #default="scope">
@@ -44,25 +47,24 @@
           {{ formatDate(scope.row.executed_at) }}
         </template>
       </el-table-column>
-      <el-table-column :label="$t('apiTesting.common.operation')" width="200" fixed="right">
-        <template #default="scope">
-          <el-button link type="primary" @click="$emit('view-detail', scope.row)" size="small">
+      <template #actions="{ row }">
+          <el-button link type="primary" @click="$emit('view-detail', row)" size="small">
             {{ $t('apiTesting.component.historyTable.viewDetail') }}
           </el-button>
-          <el-button link type="primary" @click="$emit('retry-request', scope.row)" size="small">
+          <el-button link type="primary" @click="$emit('retry-request', row)" size="small">
             {{ $t('apiTesting.component.historyTable.retryRequest') }}
           </el-button>
-          <el-button link type="danger" @click="$emit('delete-item', scope.row)" size="small">
+          <el-button link type="danger" @click="$emit('delete-item', row)" size="small">
             {{ $t('apiTesting.component.historyTable.delete') }}
           </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+      </template>
+    </UnifiedListTable>
   </div>
 </template>
 
 <script setup>
 import dayjs from 'dayjs'
+import { UnifiedListTable } from '@/components/platform-shared'
 
 defineProps({
   data: {
@@ -103,5 +105,11 @@ const formatDate = (dateString) => {
 <style scoped>
 .history-table {
   height: 100%;
+  overflow: hidden;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+  }
 }
 </style>

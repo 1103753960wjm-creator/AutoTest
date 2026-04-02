@@ -1,15 +1,7 @@
 <template>
   <div class="request-history">
-    <div class="header">
-      <h3>{{ $t('apiTesting.history.title') }}</h3>
-      <div class="filters">
-        <el-input
-          v-model="searchText"
-          :placeholder="$t('apiTesting.history.searchRequest')"
-          style="width: 200px"
-          clearable
-          @input="loadHistory"
-        />
+    <DetailResultShell class="request-history-shell">
+      <template #actions>
         <el-button
           type="danger"
           :disabled="selectedIds.length === 0"
@@ -20,43 +12,97 @@
         <el-button @click="clearHistory" type="danger" plain>
           {{ $t('apiTesting.history.clearHistory') }}
         </el-button>
+      </template>
+
+      <div class="filters">
+        <el-input
+          v-model="searchText"
+          :placeholder="$t('apiTesting.history.searchRequest')"
+          style="width: 200px"
+          clearable
+          @input="loadHistory"
+        />
       </div>
-    </div>
 
-    <el-tabs v-model="activeTab" @tab-change="onTabChange">
-      <el-tab-pane :label="$t('apiTesting.history.httpRequest')" name="HTTP">
-        <HistoryTable
-          :data="httpHistory"
-          :loading="loading"
-          @view-detail="viewDetail"
-          @retry-request="retryRequest"
-          @selection-change="handleSelectionChange"
-          @delete-item="handleDelete"
-        />
-      </el-tab-pane>
-      <el-tab-pane :label="$t('apiTesting.history.websocketRequest')" name="WEBSOCKET">
-        <HistoryTable
-          :data="websocketHistory"
-          :loading="loading"
-          @view-detail="viewDetail"
-          @retry-request="retryRequest"
-          @selection-change="handleSelectionChange"
-          @delete-item="handleDelete"
-        />
-      </el-tab-pane>
-    </el-tabs>
+      <el-tabs v-model="activeTab" @tab-change="onTabChange">
+        <el-tab-pane :label="$t('apiTesting.history.httpRequest')" name="HTTP">
+          <StateLoading v-if="activeTab === 'HTTP' && pageState === UI_PAGE_STATE.LOADING" compact />
+          <StateForbidden
+            v-else-if="activeTab === 'HTTP' && pageState === UI_PAGE_STATE.FORBIDDEN"
+            compact
+            :primary-action-text="$t('common.uiState.actions.goHome')"
+            @primary-action="router.push('/home')"
+          />
+          <StateError
+            v-else-if="activeTab === 'HTTP' && pageState === UI_PAGE_STATE.REQUEST_ERROR"
+            compact
+            :description="requestErrorMessage || $t('common.uiState.error.description')"
+            @primary-action="loadHistory"
+          />
+          <StateSearchEmpty
+            v-else-if="activeTab === 'HTTP' && pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+            compact
+            :primary-action-text="$t('common.uiState.actions.clearFilters')"
+            @primary-action="resetHistoryFilters"
+          />
+          <StateEmpty v-else-if="activeTab === 'HTTP' && pageState === UI_PAGE_STATE.EMPTY" compact />
+          <HistoryTable
+            v-else
+            :data="httpHistory"
+            :loading="loading"
+            @view-detail="viewDetail"
+            @retry-request="retryRequest"
+            @selection-change="handleSelectionChange"
+            @delete-item="handleDelete"
+          />
+        </el-tab-pane>
+        <el-tab-pane :label="$t('apiTesting.history.websocketRequest')" name="WEBSOCKET">
+          <StateLoading v-if="activeTab === 'WEBSOCKET' && pageState === UI_PAGE_STATE.LOADING" compact />
+          <StateForbidden
+            v-else-if="activeTab === 'WEBSOCKET' && pageState === UI_PAGE_STATE.FORBIDDEN"
+            compact
+            :primary-action-text="$t('common.uiState.actions.goHome')"
+            @primary-action="router.push('/home')"
+          />
+          <StateError
+            v-else-if="activeTab === 'WEBSOCKET' && pageState === UI_PAGE_STATE.REQUEST_ERROR"
+            compact
+            :description="requestErrorMessage || $t('common.uiState.error.description')"
+            @primary-action="loadHistory"
+          />
+          <StateSearchEmpty
+            v-else-if="activeTab === 'WEBSOCKET' && pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+            compact
+            :primary-action-text="$t('common.uiState.actions.clearFilters')"
+            @primary-action="resetHistoryFilters"
+          />
+          <StateEmpty v-else-if="activeTab === 'WEBSOCKET' && pageState === UI_PAGE_STATE.EMPTY" compact />
+          <HistoryTable
+            v-else
+            :data="websocketHistory"
+            :loading="loading"
+            @view-detail="viewDetail"
+            @retry-request="retryRequest"
+            @selection-change="handleSelectionChange"
+            @delete-item="handleDelete"
+          />
+        </el-tab-pane>
+      </el-tabs>
 
-    <!-- 分页 -->
-    <el-pagination
-      v-model:current-page="currentPage"
-      v-model:page-size="pageSize"
-      :page-sizes="[10, 20, 50, 100]"
-      :total="total"
-      layout="total, sizes, prev, pager, next, jumper"
-      @size-change="handleSizeChange"
-      @current-change="handleCurrentChange"
-      class="pagination"
-    />
+      <template #footer>
+        <el-pagination
+          v-if="pageState === UI_PAGE_STATE.READY"
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handleCurrentChange"
+          class="pagination"
+        />
+      </template>
+    </DetailResultShell>
 
     <!-- 详情对话框 -->
     <el-dialog
@@ -167,14 +213,18 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import api from '@/utils/api'
 import { deleteRequestHistory, batchDeleteRequestHistory } from '@/api/api-testing'
 import dayjs from 'dayjs'
 import HistoryTable from './components/HistoryTable.vue'
+import { DetailResultShell } from '@/components/page-shells'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const { t } = useI18n()
+const router = useRouter()
 const activeTab = ref('HTTP')
 const httpHistory = ref([])
 const websocketHistory = ref([])
@@ -187,9 +237,28 @@ const showDetailDialog = ref(false)
 const selectedHistory = ref(null)
 const detailTab = ref('request')
 const selectedIds = ref([])
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 
 const currentHistory = computed(() => {
   return activeTab.value === 'HTTP' ? httpHistory.value : websocketHistory.value
+})
+
+const hasActiveFilter = computed(() => Boolean(searchText.value))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (currentHistory.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
 })
 
 const responseBodyText = computed(() => {
@@ -239,6 +308,9 @@ const formatHeaders = (headers) => {
 
 const loadHistory = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: currentPage.value,
@@ -260,11 +332,26 @@ const loadHistory = async () => {
     }
 
     total.value = response.data.count || data.length
+    const maxPage = Math.max(1, Math.ceil((total.value || 0) / pageSize.value || 1))
+    if (currentPage.value > maxPage) {
+      currentPage.value = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(t('apiTesting.messages.error.loadHistory'))
     console.error(error)
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await loadHistory()
   }
 }
 
@@ -274,8 +361,15 @@ const onTabChange = () => {
   loadHistory()
 }
 
+const resetHistoryFilters = () => {
+  searchText.value = ''
+  currentPage.value = 1
+  loadHistory()
+}
+
 const handleSizeChange = (size) => {
   pageSize.value = size
+  currentPage.value = 1
   loadHistory()
 }
 
@@ -388,32 +482,21 @@ onMounted(() => {
 
 <style scoped>
 .request-history {
-  padding: 20px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+  min-height: 100%;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.header h3 {
-  margin: 0;
-  color: #303133;
+.request-history-shell {
+  min-height: 100%;
 }
 
 .filters {
   display: flex;
   gap: 10px;
   align-items: center;
+  margin-bottom: 4px;
 }
 
 .pagination {
-  margin-top: 20px;
   display: flex;
   justify-content: center;
 }

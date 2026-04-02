@@ -46,56 +46,84 @@
     
     <!-- 执行记录列表 -->
     <el-card class="table-card" shadow="never">
-      <el-table
-        v-loading="loading"
-        :data="executions"
-        stripe
-        style="width: 100%"
-      >
-        <el-table-column prop="case_name" label="测试用例" min-width="180" />
-        <el-table-column prop="device_name" label="设备" width="150" />
-        <el-table-column label="状态" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getDisplayStatus(row.status, row.result).type" size="small">
-              {{ getDisplayStatus(row.status, row.result).text }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="进度" width="150">
-          <template #default="{ row }">
-            <el-progress
-              :percentage="row.progress || 0"
-              :status="row.status === 'error' ? 'exception' : row.result === 'failed' ? 'exception' : row.result === 'passed' ? 'success' : undefined"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column label="步骤统计" width="180">
-          <template #default="{ row }">
-            <div class="step-stats">
-              <span class="stat-item success">通过: {{ row.passed_steps || 0 }}</span>
-              <span class="stat-item danger">失败: {{ row.failed_steps || 0 }}</span>
-              <span class="stat-item">总数: {{ row.total_steps || 0 }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="耗时" width="100">
-          <template #default="{ row }">
-            {{ formatDuration(row.duration) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="user_name" label="执行人" width="100" />
-        <el-table-column label="开始时间" width="160">
-          <template #default="{ row }">
-            {{ formatDateTime(row.started_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column label="结束时间" width="160">
-          <template #default="{ row }">
-            {{ row.finished_at ? formatDateTime(row.finished_at) : '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
-          <template #default="{ row }">
+      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+      <StateForbidden
+        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+        compact
+        :primary-action-text="$t('common.uiState.actions.goHome')"
+        @primary-action="router.push('/home')"
+      />
+      <StateError
+        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || $t('common.uiState.error.description')"
+        @primary-action="loadExecutions"
+      />
+      <StateSearchEmpty
+        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+        compact
+        :primary-action-text="$t('common.uiState.actions.clearFilters')"
+        @primary-action="resetFilters"
+      />
+      <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+
+      <div v-else class="table-container">
+        <UnifiedListTable
+          v-model:currentPage="currentPage"
+          v-model:pageSize="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50, 100]"
+          :data="executions"
+          :loading="loading"
+          row-key="id"
+          selection-mode="none"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="180"
+          @page-change="loadExecutions"
+        >
+          <el-table-column prop="case_name" label="测试用例" min-width="180" />
+          <el-table-column prop="device_name" label="设备" width="150" />
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="getDisplayStatus(row.status, row.result).type" size="small">
+                {{ getDisplayStatus(row.status, row.result).text }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="进度" width="150">
+            <template #default="{ row }">
+              <el-progress
+                :percentage="row.progress || 0"
+                :status="row.status === 'error' ? 'exception' : row.result === 'failed' ? 'exception' : row.result === 'passed' ? 'success' : undefined"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column label="步骤统计" width="180">
+            <template #default="{ row }">
+              <div class="step-stats">
+                <span class="stat-item success">通过: {{ row.passed_steps || 0 }}</span>
+                <span class="stat-item danger">失败: {{ row.failed_steps || 0 }}</span>
+                <span class="stat-item">总数: {{ row.total_steps || 0 }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="耗时" width="100">
+            <template #default="{ row }">
+              {{ formatDuration(row.duration) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="user_name" label="执行人" width="100" />
+          <el-table-column label="开始时间" width="160">
+            <template #default="{ row }">
+              {{ formatDateTime(row.started_at) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="结束时间" width="160">
+            <template #default="{ row }">
+              {{ row.finished_at ? formatDateTime(row.finished_at) : '-' }}
+            </template>
+          </el-table-column>
+          <template #actions="{ row }">
             <el-button
               v-if="row.status === 'running'"
               type="warning"
@@ -124,20 +152,7 @@
               查看错误
             </el-button>
           </template>
-        </el-table-column>
-      </el-table>
-      
-      <!-- 分页 -->
-      <div class="pagination">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :total="total"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="loadExecutions"
-          @current-change="loadExecutions"
-        />
+        </UnifiedListTable>
       </div>
     </el-card>
     
@@ -160,7 +175,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   getExecutionList,
@@ -169,7 +185,10 @@ import {
 } from '@/api/app-automation'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { getExecutionStatusType, getExecutionStatusText, getDisplayStatus, formatDateTime } from '@/utils/app-automation-helpers'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
+const router = useRouter()
 const loading = ref(false)
 const executions = ref([])
 const searchQuery = ref('')
@@ -179,14 +198,40 @@ const projectList = ref([])
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 
 const errorDialogVisible = ref(false)
 const currentError = ref('')
+
+const hasActiveFilter = computed(() => Boolean(
+  searchQuery.value ||
+  statusFilter.value ||
+  projectFilter.value
+))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (executions.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
 
 let refreshTimer = null
 
 const loadExecutions = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: currentPage.value,
@@ -198,11 +243,34 @@ const loadExecutions = async () => {
     const res = await getExecutionList(params)
     executions.value = res.data.results || []
     total.value = res.data.count || 0
+    const maxPage = Math.max(1, Math.ceil((total.value || 0) / pageSize.value || 1))
+    if (currentPage.value > maxPage) {
+      currentPage.value = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error('加载执行记录失败: ' + (error.message || '未知错误'))
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
   }
+  if (shouldRefetch) {
+    await loadExecutions()
+  }
+}
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  statusFilter.value = ''
+  projectFilter.value = null
+  currentPage.value = 1
+  loadExecutions()
 }
 
 const stopExecution = async (execution) => {
@@ -299,10 +367,13 @@ onUnmounted(() => {
 }
 
 .table-card {
-  .pagination {
-    margin-top: 20px;
-    display: flex;
-    justify-content: flex-end;
+  .table-container {
+    overflow: hidden;
+
+    :deep(.unified-list-table) {
+      display: flex;
+      flex-direction: column;
+    }
   }
 }
 

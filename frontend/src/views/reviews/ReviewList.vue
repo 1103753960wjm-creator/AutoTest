@@ -21,7 +21,7 @@
             class="filter-select"
             :placeholder="$t('reviewList.selectProject')"
             clearable
-            @change="fetchReviews"
+            @change="handleFilter"
           >
             <el-option
               v-for="project in projects"
@@ -37,7 +37,7 @@
             class="filter-select"
             :placeholder="$t('reviewList.selectStatus')"
             clearable
-            @change="fetchReviews"
+            @change="handleFilter"
           >
             <el-option :label="$t('reviewList.statusPending')" value="pending" />
             <el-option :label="$t('reviewList.statusInProgress')" value="in_progress" />
@@ -52,7 +52,7 @@
             class="filter-select"
             :placeholder="$t('reviewList.selectReviewer')"
             clearable
-            @change="fetchReviews"
+            @change="handleFilter"
           >
             <el-option
               v-for="user in users"
@@ -65,8 +65,45 @@
       </el-form>
     </div>
 
-    <div class="table-container">
-      <el-table :data="reviews" v-loading="loading" stripe>
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="fetchReviews"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="resetFilters"
+    />
+    <StateEmpty
+      v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+      compact
+      :primary-action-text="$t('reviewList.createReview')"
+      @primary-action="createReview"
+    />
+    <div v-else class="table-container">
+      <UnifiedListTable
+        v-model:currentPage="pagination.page"
+        v-model:pageSize="pagination.size"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="pagination.total"
+        :data="reviews"
+        :loading="loading"
+        row-key="id"
+        selection-mode="none"
+        :actions="{ view: false, edit: false, delete: false }"
+        :action-column-width="180"
+        @page-change="fetchReviews"
+      >
         <el-table-column :label="$t('reviewList.reviewTitle')" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
             <el-link type="primary" @click="viewReview(row.id)">
@@ -117,37 +154,23 @@
             {{ formatDate(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column :label="$t('reviewList.actions')" width="180" fixed="right">
-          <template #default="{ row }">
-            <div class="table-actions">
-              <el-button v-if="canReview(row)" link type="success" @click="submitReview(row)">{{ $t('reviewList.review') }}</el-button>
-              <el-button v-if="canEdit(row)" link type="warning" @click="editReview(row.id)">{{ $t('reviewList.edit') }}</el-button>
-              <el-popconfirm
-                v-if="canDelete(row)"
-                :title="$t('reviewList.deleteConfirm')"
-                @confirm="deleteReview(row.id)"
-              >
-                <template #reference>
-                  <el-button link type="danger">{{ $t('reviewList.delete') }}</el-button>
-                </template>
-              </el-popconfirm>
-              <span v-if="!hasRowActions(row)" class="action-placeholder">-</span>
-            </div>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="pagination.page"
-          v-model:page-size="pagination.size"
-          :total="pagination.total"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="fetchReviews"
-          @current-change="fetchReviews"
-        />
-      </div>
+        <template #actions="{ row }">
+          <div class="table-actions">
+            <el-button v-if="canReview(row)" link type="success" @click="submitReview(row)">{{ $t('reviewList.review') }}</el-button>
+            <el-button v-if="canEdit(row)" link type="warning" @click="editReview(row.id)">{{ $t('reviewList.edit') }}</el-button>
+            <el-popconfirm
+              v-if="canDelete(row)"
+              :title="$t('reviewList.deleteConfirm')"
+              @confirm="deleteReview(row.id)"
+            >
+              <template #reference>
+                <el-button link type="danger">{{ $t('reviewList.delete') }}</el-button>
+              </template>
+            </el-popconfirm>
+            <span v-if="!hasRowActions(row)" class="action-placeholder">-</span>
+          </div>
+        </template>
+      </UnifiedListTable>
     </div>
 
     <el-dialog v-model="reviewDialogVisible" :title="$t('reviewList.submitReview')" width="600px">
@@ -176,7 +199,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
@@ -184,6 +207,8 @@ import { Plus } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 import { useUserStore } from '@/stores/user'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -195,6 +220,9 @@ const users = ref([])
 const loading = ref(false)
 const reviewDialogVisible = ref(false)
 const currentReview = ref(null)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 
 const filters = reactive({
   project: '',
@@ -208,6 +236,22 @@ const pagination = reactive({
   total: 0
 })
 
+const hasActiveFilter = computed(() => Boolean(filters.project || filters.status || filters.reviewer))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (reviews.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
+
 const reviewForm = reactive({
   status: 'approved',
   comment: ''
@@ -215,6 +259,9 @@ const reviewForm = reactive({
 
 const fetchReviews = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: pagination.page,
@@ -226,10 +273,25 @@ const fetchReviews = async () => {
     const response = await api.get('/reviews/reviews/', { params })
     reviews.value = response.data.results
     pagination.total = response.data.count
+    const maxPage = Math.max(1, Math.ceil((pagination.total || 0) / pagination.size || 1))
+    if (pagination.page > maxPage) {
+      pagination.page = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(t('reviewList.fetchListFailed'))
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await fetchReviews()
   }
 }
 
@@ -362,6 +424,19 @@ const formatDate = (dateString) => {
   return dayjs(dateString).format('YYYY-MM-DD HH:mm')
 }
 
+const handleFilter = () => {
+  pagination.page = 1
+  fetchReviews()
+}
+
+const resetFilters = () => {
+  filters.project = ''
+  filters.status = ''
+  filters.reviewer = ''
+  pagination.page = 1
+  fetchReviews()
+}
+
 onMounted(() => {
   fetchReviews()
   fetchProjects()
@@ -370,6 +445,15 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.table-container {
+  overflow: hidden;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 .filter-form {
   :deep(.filter-select) {
     width: 180px;

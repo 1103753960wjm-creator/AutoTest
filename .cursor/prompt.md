@@ -15,11 +15,11 @@
 
 1. 用户当前回合的明确要求
 2. 全局规则 `C:\Users\Administrator\.gemini\GEMINI.md`
-3. 本文件 `.antigravity/prompt.md`
-4. `.antigravity/workflow_rules.md`
-5. `.antigravity/architecture.md`
-6. `.antigravity/storage_rules.md`
-7. `.antigravity/project_rules.md`
+3. 本文件 `.cursor/prompt.md`
+4. `.cursor/workflow_rules.md`
+5. `.cursor/architecture.md`
+6. `.cursor/storage_rules.md`
+7. `.cursor/project_rules.md`
 8. `docs/project-memory/current_phase.md`
 9. 代码库现状与最小惊扰原则
 
@@ -49,6 +49,7 @@
 ## 4. 默认工作方式
 
 - 先读相关代码、规则和文档，再做判断。
+- 默认按全局 `Spec/SDD -> TDD -> Execution -> VDD` 流程推进。
 - 优先复用现有目录、接口封装、返回结构、状态管理和工具函数。
 - 默认做最小可落地改动，不把一次需求扩展成全仓重构。
 - 规则问题归规则层，阶段结论归项目开发记忆层，启动摘要归对话启动记忆层，不混写。

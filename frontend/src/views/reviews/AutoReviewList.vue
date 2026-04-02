@@ -49,41 +49,66 @@
       默认仅展示每个任务最新一条自动评审记录。本轮列表不展开历史记录，但每条记录可展开查看完整评审内容。
     </div>
 
-    <el-table :data="records" v-loading="loading" stripe>
-      <el-table-column prop="task_id" label="任务 ID" width="180" />
-      <el-table-column prop="task_title" label="任务标题" min-width="240" show-overflow-tooltip />
-      <el-table-column prop="project_name" label="项目" min-width="160" show-overflow-tooltip />
-      <el-table-column label="评审状态" width="120">
-        <template #default="{ row }">
-          <el-tag :type="getStatusTagType(row.review_status)">{{ getStatusLabel(row.review_status) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="review_summary" label="评审摘要" min-width="260" show-overflow-tooltip />
-      <el-table-column prop="source_stage" label="来源阶段" width="140" />
-      <el-table-column prop="created_at" label="创建时间" width="180">
-        <template #default="{ row }">
-          {{ formatDate(row.created_at) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right">
-        <template #default="{ row }">
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="fetchRecords"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="resetFilters"
+    />
+    <StateEmpty
+      v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+      compact
+      description="当前还没有可展示的自动评审记录。"
+    />
+    <div v-else class="table-container">
+      <UnifiedListTable
+        v-model:currentPage="pagination.page"
+        v-model:pageSize="pagination.pageSize"
+        :page-sizes="[10, 20, 50]"
+        :total="pagination.total"
+        :data="records"
+        :loading="loading"
+        row-key="id"
+        selection-mode="none"
+        :actions="{ view: false, edit: false, delete: false }"
+        :action-column-width="220"
+        @page-change="fetchRecords"
+      >
+        <el-table-column prop="task_id" label="任务 ID" width="180" />
+        <el-table-column prop="task_title" label="任务标题" min-width="240" show-overflow-tooltip />
+        <el-table-column prop="project_name" label="项目" min-width="160" show-overflow-tooltip />
+        <el-table-column label="评审状态" width="120">
+          <template #default="{ row }">
+            <el-tag :type="getStatusTagType(row.review_status)">{{ getStatusLabel(row.review_status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="review_summary" label="评审摘要" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="source_stage" label="来源阶段" width="140" />
+        <el-table-column prop="created_at" label="创建时间" width="180">
+          <template #default="{ row }">
+            {{ formatDate(row.created_at) }}
+          </template>
+        </el-table-column>
+        <template #actions="{ row }">
           <div class="row-actions">
             <el-button link type="primary" @click="openReviewContent(row)">查看全文</el-button>
             <el-button link type="success" @click="goToTaskDetail(row)">查看任务</el-button>
           </div>
         </template>
-      </el-table-column>
-    </el-table>
-
-    <div class="pagination-bar">
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :page-sizes="[10, 20, 50]"
-        :total="pagination.total"
-        layout="total, sizes, prev, pager, next, jumper"
-        @current-change="fetchRecords"
-        @size-change="fetchRecords" />
+      </UnifiedListTable>
     </div>
 
     <el-drawer
@@ -110,13 +135,15 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
 import { getAutoReviewRecords } from '@/api/requirement-analysis'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const router = useRouter()
 const route = useRoute()
@@ -132,6 +159,9 @@ const records = ref([])
 const projects = ref([])
 const drawerVisible = ref(false)
 const activeRecord = ref(null)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 
 const filters = reactive({
   project: route.query.project ? String(route.query.project) : '',
@@ -143,6 +173,22 @@ const pagination = reactive({
   page: 1,
   pageSize: 20,
   total: 0
+})
+
+const hasActiveFilter = computed(() => Boolean(filters.project || filters.taskId || filters.status))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (records.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
 })
 
 const getStatusLabel = (status) => {
@@ -195,6 +241,9 @@ const syncQuery = () => {
 
 const fetchRecords = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     syncQuery()
     const response = await getAutoReviewRecords({
@@ -206,10 +255,25 @@ const fetchRecords = async () => {
     })
     records.value = response.data.results || response.data || []
     pagination.total = response.data.count || records.value.length
+    const maxPage = Math.max(1, Math.ceil((pagination.total || 0) / pagination.pageSize || 1))
+    if (pagination.page > maxPage) {
+      pagination.page = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(`获取自动评审记录失败: ${error.response?.data?.error || error.message}`)
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.error || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await fetchRecords()
   }
 }
 
@@ -246,6 +310,15 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.table-container {
+  overflow: hidden;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 .summary-tip {
   margin-bottom: 16px;
   color: #64748b;
@@ -254,12 +327,6 @@ onMounted(async () => {
 .row-actions {
   display: flex;
   gap: 12px;
-}
-
-.pagination-bar {
-  margin-top: 16px;
-  display: flex;
-  justify-content: flex-end;
 }
 
 .drawer-meta {

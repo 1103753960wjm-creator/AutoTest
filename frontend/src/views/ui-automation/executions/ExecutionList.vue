@@ -53,8 +53,41 @@
         </el-form>
       </div>
 
-      <el-table :data="executions" v-loading="loading" style="width: 100%" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="55" align="center" />
+      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+      <StateForbidden
+        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+        compact
+        :primary-action-text="$t('common.uiState.actions.goHome')"
+        @primary-action="router.push('/home')"
+      />
+      <StateError
+        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || $t('common.uiState.error.description')"
+        @primary-action="loadExecutions"
+      />
+      <StateSearchEmpty
+        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+        compact
+        :primary-action-text="$t('common.uiState.actions.clearFilters')"
+        @primary-action="resetQuery"
+      />
+      <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+
+      <div v-else class="table-container">
+      <UnifiedListTable
+        v-model:currentPage="pagination.currentPage"
+        v-model:pageSize="pagination.pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="total"
+        :data="executions"
+        :loading="loading"
+        row-key="id"
+        selection-mode="multi"
+        :actions="{ view: false, edit: false, delete: false }"
+        :action-column-width="180"
+        @selection-change="handleSelectionChange"
+        @page-change="loadExecutions">
         <el-table-column prop="id" label="ID" width="80" align="center" />
         <el-table-column prop="test_case_name" :label="$t('uiAutomation.execution.caseName')" min-width="200">
           <template #default="{ row }">
@@ -105,8 +138,7 @@
             {{ formatDuration(row.execution_time) }}
           </template>
         </el-table-column>
-        <el-table-column :label="$t('uiAutomation.common.operation')" width="150" fixed="right" align="center">
-          <template #default="{ row }">
+        <template #actions="{ row }">
             <el-button size="small" type="primary" link @click="viewExecutionDetail(row)">
               <el-icon><View /></el-icon>
               {{ $t('uiAutomation.common.details') }}
@@ -128,20 +160,8 @@
             >
               {{ $t('uiAutomation.common.delete') }}
             </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="pagination.currentPage"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          :total="total"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
+        </template>
+      </UnifiedListTable>
       </div>
     </div>
 
@@ -262,7 +282,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, View, WarningFilled, Refresh } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
@@ -273,8 +294,11 @@ import {
   batchDeleteTestCaseExecutions,
   runTestCase
 } from '@/api/ui_automation'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const { t } = useI18n()
+const router = useRouter()
 
 // 项目和执行数据
 const projects = ref([])
@@ -282,6 +306,9 @@ const projectId = ref('')
 const executions = ref([])
 const loading = ref(false)
 const total = ref(0)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 const pagination = reactive({
   currentPage: 1,
   pageSize: 20
@@ -295,6 +322,27 @@ const queryParams = reactive({
   browser: ''
 })
 const selectedIds = ref([])
+
+const hasActiveFilter = computed(() => Boolean(
+  projectId.value ||
+  queryParams.search ||
+  queryParams.status ||
+  queryParams.browser
+))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (executions.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
 
 // 详情对话框相关
 const showDetailDialog = ref(false)
@@ -447,6 +495,9 @@ const loadProjects = async () => {
 // 加载执行列表
 const loadExecutions = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: pagination.currentPage,
@@ -464,11 +515,26 @@ const loadExecutions = async () => {
     const response = await getTestCaseExecutions(params)
     executions.value = response.data.results || response.data
     total.value = response.data.count || executions.value.length
+    const maxPage = Math.max(1, Math.ceil((total.value || 0) / pagination.pageSize || 1))
+    if (pagination.currentPage > maxPage) {
+      pagination.currentPage = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(t('uiAutomation.execution.messages.loadFailed'))
     console.error('获取执行列表失败:', error)
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await loadExecutions()
   }
 }
 
@@ -493,18 +559,6 @@ const resetQuery = () => {
   queryParams.status = ''
   queryParams.browser = ''
   pagination.currentPage = 1
-  loadExecutions()
-}
-
-// 分页处理
-const handleSizeChange = (val) => {
-  pagination.pageSize = val
-  pagination.currentPage = 1
-  loadExecutions()
-}
-
-const handleCurrentChange = (val) => {
-  pagination.currentPage = val
   loadExecutions()
 }
 
@@ -656,9 +710,16 @@ onMounted(async () => {
 }
 
 .pagination-container {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
+  display: none;
+}
+
+.table-container {
+  overflow: hidden;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 .execution-detail {

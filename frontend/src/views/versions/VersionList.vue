@@ -51,70 +51,98 @@
           </el-col>
         </el-row>
       </div>
-      
-      <UnifiedListTable
-        v-model:currentPage="currentPage"
-        v-model:pageSize="pageSize"
-        :total="total"
-        :data="versions"
-        :loading="loading"
-        row-key="id"
-        selection-mode="multi"
-        :actions="{
-          view: false,
-          edit: true,
-          delete: true
-        }"
-        :delete-name="(row) => row?.name || ''"
-        @selection-change="handleSelectionChange"
-        @edit="editVersion"
-        @delete="deleteVersionConfirmed"
-        @row-dblclick="editVersion"
-        @page-change="fetchVersions"
-        @sort-change="handleSortChange"
-      >
-        <el-table-column prop="name" :label="$t('version.versionName')" min-width="120" sortable="custom">
-          <template #default="{ row }">
-            <div class="version-name">
-              <span>{{ row.name }}</span>
-              <el-tag v-if="row.is_baseline" type="warning" size="small" class="baseline-tag">{{ $t('version.baseline') }}</el-tag>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="projects" :label="$t('version.relatedProject')" width="300">
-          <template #default="{ row }">
-            <div v-if="row.projects && row.projects.length > 0" class="project-tags">
-              <el-tag
-                v-for="project in row.projects.slice(0, 2)"
-                :key="project.id"
-                size="small"
-                type="primary"
-                class="project-tag"
-              >
-                {{ project.name }}
-              </el-tag>
-              <el-tooltip v-if="row.projects.length > 2" :content="getProjectsTooltip(row.projects)">
-                <el-tag size="small" type="info" class="project-tag">
-                  +{{ row.projects.length - 2 }}
-                </el-tag>
-              </el-tooltip>
-            </div>
-            <span v-else class="no-project">{{ $t('version.noProject') }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="description" :label="$t('version.description')" min-width="200" show-overflow-tooltip />
-        <el-table-column prop="testcases_count" :label="$t('version.testCaseCount')" width="100">
-          <template #default="{ row }">
-            <el-tag type="info" size="small">{{ row.testcases_count }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_by.username" :label="$t('version.creator')" width="120" />
-        <el-table-column prop="created_at" :label="$t('version.createdAt')" width="180" sortable="custom">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
-        </el-table-column>
-      </UnifiedListTable>
+      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+      <StateForbidden
+        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+        compact
+        :primary-action-text="$t('common.uiState.actions.goHome')"
+        @primary-action="router.push('/home')"
+      />
+      <StateError
+        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || $t('common.uiState.error.description')"
+        @primary-action="fetchVersions"
+      />
+      <StateSearchEmpty
+        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+        compact
+        :primary-action-text="$t('common.uiState.actions.clearFilters')"
+        @primary-action="resetFilters"
+      />
+      <StateEmpty
+        v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+        compact
+        :primary-action-text="$t('version.newVersion')"
+        @primary-action="createVersion"
+      />
+      <template v-else>
+        <div class="table-container">
+          <UnifiedListTable
+            v-model:currentPage="currentPage"
+            v-model:pageSize="pageSize"
+            :total="total"
+            :data="versions"
+            :loading="loading"
+            row-key="id"
+            selection-mode="multi"
+            :actions="{
+              view: false,
+              edit: true,
+              delete: true
+            }"
+            :delete-name="(row) => row?.name || ''"
+            @selection-change="handleSelectionChange"
+            @edit="editVersion"
+            @delete="deleteVersionConfirmed"
+            @row-dblclick="editVersion"
+            @page-change="fetchVersions"
+            @sort-change="handleSortChange"
+          >
+            <el-table-column prop="name" :label="$t('version.versionName')" min-width="120" sortable="custom">
+              <template #default="{ row }">
+                <div class="version-name">
+                  <span>{{ row.name }}</span>
+                  <el-tag v-if="row.is_baseline" type="warning" size="small" class="baseline-tag">{{ $t('version.baseline') }}</el-tag>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column prop="projects" :label="$t('version.relatedProject')" width="300">
+              <template #default="{ row }">
+                <div v-if="row.projects && row.projects.length > 0" class="project-tags">
+                  <el-tag
+                    v-for="project in row.projects.slice(0, 2)"
+                    :key="project.id"
+                    size="small"
+                    type="primary"
+                    class="project-tag"
+                  >
+                    {{ project.name }}
+                  </el-tag>
+                  <el-tooltip v-if="row.projects.length > 2" :content="getProjectsTooltip(row.projects)">
+                    <el-tag size="small" type="info" class="project-tag">
+                      +{{ row.projects.length - 2 }}
+                    </el-tag>
+                  </el-tooltip>
+                </div>
+                <span v-else class="no-project">{{ $t('version.noProject') }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="description" :label="$t('version.description')" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="testcases_count" :label="$t('version.testCaseCount')" width="100">
+              <template #default="{ row }">
+                <el-tag type="info" size="small">{{ row.testcases_count }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="created_by.username" :label="$t('version.creator')" width="120" />
+            <el-table-column prop="created_at" :label="$t('version.createdAt')" width="180" sortable="custom">
+              <template #default="{ row }">
+                {{ formatDate(row.created_at) }}
+              </template>
+            </el-table-column>
+          </UnifiedListTable>
+        </div>
+      </template>
     </div>
     
     <!-- 版本表单对话框 -->
@@ -169,14 +197,17 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const { t } = useI18n()
+const router = useRouter()
 const loading = ref(false)
 const versions = ref([])
 const projects = ref([])
@@ -189,6 +220,29 @@ const baselineFilter = ref('')
 const sortOrdering = ref('')
 const selectedVersions = ref([])
 const isDeleting = ref(false)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
+
+const hasActiveFilter = computed(() => (
+  Boolean(searchText.value) ||
+  (projectFilter.value !== '' && projectFilter.value !== null && projectFilter.value !== undefined) ||
+  (baselineFilter.value !== '' && baselineFilter.value !== null && baselineFilter.value !== undefined)
+))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (versions.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
 
 const versionDialogVisible = ref(false)
 const versionFormRef = ref()
@@ -210,6 +264,9 @@ const versionRules = {
 
 const fetchVersions = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: currentPage.value,
@@ -225,10 +282,25 @@ const fetchVersions = async () => {
     const response = await api.get('/versions/', { params })
     versions.value = response.data.results || []
     total.value = response.data.count || 0
+    const maxPage = Math.max(1, Math.ceil(total.value / pageSize.value || 1))
+    if (currentPage.value > maxPage) {
+      currentPage.value = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(t('version.fetchListFailed'))
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await fetchVersions()
   }
 }
 
@@ -247,6 +319,14 @@ const handleSearch = () => {
 }
 
 const handleFilter = () => {
+  currentPage.value = 1
+  fetchVersions()
+}
+
+const resetFilters = () => {
+  searchText.value = ''
+  projectFilter.value = ''
+  baselineFilter.value = ''
   currentPage.value = 1
   fetchVersions()
 }
@@ -384,19 +464,75 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.filter-bar {
-  margin-bottom: 20px;
+.page-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 20px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-.pagination-container {
-  margin-top: 20px;
+.page-header {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.card-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+}
+
+.filter-bar {
+  padding: 20px;
+  border-bottom: 1px solid #ebeef5;
+  flex-shrink: 0;
+}
+
+.table-container {
+  flex: 1;
+  overflow: hidden;
+  padding: 0 20px;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
+  }
 }
 
 .header-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .version-name {

@@ -26,47 +26,69 @@
       </el-row>
     </div>
 
-    <!-- 列表 -->
-    <el-table :data="logsData" v-loading="loading" border stripe @sort-change="handleSortChange">
-      <el-table-column prop="task_name" label="任务名称" min-width="150" sortable="custom" />
-      <el-table-column label="任务类型" width="110">
-        <template #default="{ row }">
-          <el-tag type="info" size="small">{{ row.task_type_display }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="通知类型" width="120">
-        <template #default="{ row }">
-          <el-tag :type="getNotificationTypeTag(row.actual_notification_type_display)" size="small">
-            {{ row.actual_notification_type_display }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="通知时间" width="180" sortable="custom">
-        <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
-      </el-table-column>
-      <el-table-column label="状态" width="100" sortable="custom">
-        <template #default="{ row }">
-          <el-tag :type="getStatusTag(row.status)" size="small">{{ row.status_display }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" fixed="right" width="100">
-        <template #default="{ row }">
-          <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="fetchLogs"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="handleReset"
+    />
+    <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
 
-    <!-- 分页 -->
-    <div class="pagination">
-      <el-pagination
-        v-model:current-page="pagination.currentPage"
-        v-model:page-size="pagination.pageSize"
+    <!-- 列表 -->
+    <div v-else class="table-container">
+      <UnifiedListTable
+        v-model:currentPage="pagination.currentPage"
+        v-model:pageSize="pagination.pageSize"
         :page-sizes="[10, 20, 50, 100]"
         :total="pagination.total"
-        layout="total, sizes, prev, pager, next"
-        @size-change="fetchLogs"
-        @current-change="fetchLogs"
-      />
+        :data="logsData"
+        :loading="loading"
+        :default-sort="{ prop: sortParams.prop, order: sortParams.order }"
+        row-key="id"
+        selection-mode="none"
+        :actions="{ view: false, edit: false, delete: false }"
+        :action-column-width="100"
+        @sort-change="handleSortChange"
+        @page-change="fetchLogs"
+      >
+        <el-table-column prop="task_name" label="任务名称" min-width="150" sortable="custom" />
+        <el-table-column label="任务类型" width="110">
+          <template #default="{ row }">
+            <el-tag type="info" size="small">{{ row.task_type_display }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="通知类型" width="120">
+          <template #default="{ row }">
+            <el-tag :type="getNotificationTypeTag(row.actual_notification_type_display)" size="small">
+              {{ row.actual_notification_type_display }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="通知时间" width="180" sortable="custom">
+          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100" sortable="custom">
+          <template #default="{ row }">
+            <el-tag :type="getStatusTag(row.status)" size="small">{{ row.status_display }}</el-tag>
+          </template>
+        </el-table-column>
+        <template #actions="{ row }">
+          <el-button type="primary" link size="small" @click="viewDetail(row)">详情</el-button>
+        </template>
+      </UnifiedListTable>
     </div>
 
     <!-- 详情弹窗 -->
@@ -131,23 +153,51 @@
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import { getAppNotificationLogs } from '@/api/app-automation.js'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
+const router = useRouter()
 const loading = ref(false)
 const logsData = ref([])
 const detailVisible = ref(false)
 const selectedLog = ref(null)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 
 const searchForm = reactive({ taskName: '', dateRange: [], status: '' })
 const pagination = reactive({ currentPage: 1, pageSize: 10, total: 0 })
 const sortParams = reactive({ prop: 'created_at', order: 'descending' })
+const hasActiveFilter = computed(() => Boolean(
+  searchForm.taskName ||
+  searchForm.status ||
+  (searchForm.dateRange && searchForm.dateRange.length === 2)
+))
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (logsData.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
 
 onMounted(fetchLogs)
 
 async function fetchLogs() {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: pagination.currentPage,
@@ -163,8 +213,26 @@ async function fetchLogs() {
     const res = await getAppNotificationLogs(params)
     logsData.value = res.data.results || []
     pagination.total = res.data.count || 0
-  } catch { ElMessage.error('加载通知日志失败') }
-  finally { loading.value = false }
+    const maxPage = Math.max(1, Math.ceil((pagination.total || 0) / pagination.pageSize || 1))
+    if (pagination.currentPage > maxPage) {
+      pagination.currentPage = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
+  } catch (error) {
+    ElMessage.error('加载通知日志失败')
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
+  } finally {
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await fetchLogs()
+  }
 }
 
 function handleSearch() { pagination.currentPage = 1; fetchLogs() }
@@ -210,7 +278,14 @@ const parsedContent = computed(() => {
 <style scoped>
 .notification-logs { padding: 20px; background: #fff; border-radius: 8px; }
 .filters { margin-bottom: 20px; padding: 20px; background: #f8f9fa; border-radius: 6px; }
-.pagination { margin-top: 20px; display: flex; justify-content: flex-end; }
+.table-container {
+  overflow: hidden;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+  }
+}
 .content-box { width: 100%; }
 .parsed-content { background: #fff; border-radius: 8px; padding: 16px; border: 1px solid #e4e7ed; }
 .content-row { display: flex; padding: 10px 0; border-bottom: 1px solid #f0f2f5; }

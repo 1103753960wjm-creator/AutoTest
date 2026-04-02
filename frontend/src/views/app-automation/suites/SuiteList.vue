@@ -1,6 +1,5 @@
 <template>
   <div class="suite-list">
-    <!-- 页面标题 -->
     <div class="page-header">
       <h3>测试套件</h3>
       <div class="header-actions">
@@ -13,14 +12,20 @@
       </div>
     </div>
 
-    <!-- 设备和应用选择 -->
     <el-card class="config-card">
       <el-form :model="runConfig" label-width="100px" size="small">
         <el-row :gutter="16">
           <el-col :span="5">
             <el-form-item label="所属项目">
-              <el-select v-model="projectFilter" placeholder="全部项目" clearable filterable style="width:100%" @change="loadSuites">
-                <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
+              <el-select
+                v-model="projectFilter"
+                placeholder="全部项目"
+                clearable
+                filterable
+                style="width: 100%"
+                @change="handleFilterChange"
+              >
+                <el-option v-for="project in projectList" :key="project.id" :label="project.name" :value="project.id" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -67,8 +72,8 @@
                 v-model="searchQuery"
                 placeholder="搜索套件名称"
                 clearable
-                @clear="loadSuites"
-                @keyup.enter="loadSuites"
+                @clear="handleFilterChange"
+                @keyup.enter="handleFilterChange"
               >
                 <template #prefix>
                   <el-icon><Search /></el-icon>
@@ -80,73 +85,102 @@
       </el-form>
     </el-card>
 
-    <!-- 套件列表 -->
-    <el-table
-      v-loading="loading"
-      :data="suites"
-      style="width: 100%; margin-top: 16px"
-      empty-text="暂无测试套件"
-    >
-      <el-table-column prop="name" label="套件名称" min-width="180">
-        <template #default="{ row }">
-          <el-link type="primary" @click="showEditDialog(row)">{{ row.name }}</el-link>
-        </template>
-      </el-table-column>
-      <el-table-column prop="description" label="描述" min-width="200">
-        <template #default="{ row }">
-          {{ row.description || '-' }}
-        </template>
-      </el-table-column>
-      <el-table-column label="用例数" width="90" align="center">
-        <template #default="{ row }">
-          <el-tag size="small">{{ row.test_case_count }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="执行状态" width="110" align="center">
-        <template #default="{ row }">
-          <el-tag :type="getSuiteDisplayStatus(row).type" size="small">
-            {{ getSuiteDisplayStatus(row).text }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column label="通过/失败" width="110" align="center">
-        <template #default="{ row }">
-          <span v-if="row.execution_status !== 'not_run'" class="pass-fail">
-            <span class="pass">{{ row.passed_count }}</span> /
-            <span class="fail">{{ row.failed_count }}</span>
-          </span>
-          <span v-else>-</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="最后执行" width="170">
-        <template #default="{ row }">
-          {{ row.last_run_at ? formatDateTime(row.last_run_at) : '-' }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="updated_at" label="更新时间" width="170">
-        <template #default="{ row }">
-          {{ formatDateTime(row.updated_at) }}
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="220" fixed="right">
-        <template #default="{ row }">
-          <el-button link type="success" size="small" @click="runSuite(row)">
-            执行
-          </el-button>
-          <el-button link type="primary" size="small" @click="showEditDialog(row)">
-            编辑
-          </el-button>
-          <el-button link type="warning" size="small" @click="showSuiteExecutions(row)">
-            历史
-          </el-button>
-          <el-button link type="danger" size="small" @click="deleteSuite(row)">
-            删除
-          </el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <div class="table-section">
+      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+      <StateForbidden
+        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+        compact
+        primary-action-text="返回首页"
+        @primary-action="router.push('/home')"
+      />
+      <StateError
+        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || '加载测试套件失败，请稍后重试。'"
+        @primary-action="loadSuites"
+      />
+      <StateSearchEmpty
+        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+        compact
+        primary-action-text="清空筛选"
+        @primary-action="resetFilters"
+      />
+      <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+      <div v-else class="table-container">
+        <UnifiedListTable
+          v-model:currentPage="currentPage"
+          v-model:pageSize="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50, 100]"
+          :data="suites"
+          :loading="loading"
+          row-key="id"
+          selection-mode="none"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="260"
+          @page-change="loadSuites"
+        >
+          <el-table-column prop="name" label="套件名称" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              <el-link type="primary" @click="showEditDialog(row)">
+                {{ row.name }}
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column prop="description" label="描述" min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.description || '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column label="用例数" width="90" align="center">
+            <template #default="{ row }">
+              <el-tag size="small">{{ row.test_case_count }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="执行状态" width="110" align="center">
+            <template #default="{ row }">
+              <el-tag :type="getSuiteDisplayStatus(row).type" size="small">
+                {{ getSuiteDisplayStatus(row).text }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="通过/失败" width="110" align="center">
+            <template #default="{ row }">
+              <span v-if="row.execution_status !== 'not_run'" class="pass-fail">
+                <span class="pass">{{ row.passed_count }}</span> /
+                <span class="fail">{{ row.failed_count }}</span>
+              </span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="最后执行" width="170">
+            <template #default="{ row }">
+              {{ row.last_run_at ? formatDateTime(row.last_run_at) : '-' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="updated_at" label="更新时间" width="170">
+            <template #default="{ row }">
+              {{ formatDateTime(row.updated_at) }}
+            </template>
+          </el-table-column>
+          <template #actions="{ row }">
+            <el-button link type="success" size="small" @click="runSuite(row)">
+              执行
+            </el-button>
+            <el-button link type="primary" size="small" @click="showEditDialog(row)">
+              编辑
+            </el-button>
+            <el-button link type="warning" size="small" @click="showSuiteExecutions(row)">
+              历史
+            </el-button>
+            <el-button link type="danger" size="small" @click="deleteSuite(row)">
+              删除
+            </el-button>
+          </template>
+        </UnifiedListTable>
+      </div>
+    </div>
 
-    <!-- 创建/编辑套件对话框 -->
     <el-dialog
       v-model="dialogVisible"
       :title="isEdit ? '编辑测试套件' : '新建测试套件'"
@@ -159,8 +193,8 @@
           <el-input v-model="suiteForm.name" placeholder="请输入套件名称" />
         </el-form-item>
         <el-form-item label="所属项目">
-          <el-select v-model="suiteForm.project" placeholder="请选择项目" clearable filterable style="width:100%">
-            <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
+          <el-select v-model="suiteForm.project" placeholder="请选择项目" clearable filterable style="width: 100%">
+            <el-option v-for="project in projectList" :key="project.id" :label="project.name" :value="project.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="描述">
@@ -168,7 +202,6 @@
         </el-form-item>
       </el-form>
 
-      <!-- 用例选择器（双栏） -->
       <div class="case-selector">
         <div class="selector-panel available-panel">
           <div class="panel-header">
@@ -184,15 +217,15 @@
           </div>
           <div class="panel-body">
             <div
-              v-for="tc in filteredAvailableCases"
-              :key="tc.id"
+              v-for="testCase in filteredAvailableCases"
+              :key="testCase.id"
               class="case-item"
-              :class="{ disabled: selectedCaseIds.has(tc.id) }"
-              @click="addCase(tc)"
+              :class="{ disabled: selectedCaseIds.has(testCase.id) }"
+              @click="addCase(testCase)"
             >
-              <span class="case-name">{{ tc.name }}</span>
-              <span class="case-pkg">{{ tc.app_package_name || '' }}</span>
-              <el-icon v-if="!selectedCaseIds.has(tc.id)" class="add-icon"><Plus /></el-icon>
+              <span class="case-name">{{ testCase.name }}</span>
+              <span class="case-pkg">{{ testCase.app_package_name || '' }}</span>
+              <el-icon v-if="!selectedCaseIds.has(testCase.id)" class="add-icon"><Plus /></el-icon>
               <el-icon v-else class="added-icon"><Check /></el-icon>
             </div>
             <el-empty v-if="filteredAvailableCases.length === 0" description="暂无可选用例" :image-size="60" />
@@ -235,7 +268,6 @@
       </template>
     </el-dialog>
 
-    <!-- 执行历史对话框 -->
     <el-dialog
       v-model="historyVisible"
       :title="`执行历史 - ${currentSuiteName}`"
@@ -270,7 +302,9 @@
           <template #default="{ row }">
             <el-button
               v-if="row.status === 'completed' || row.status === 'error'"
-              link type="primary" size="small"
+              link
+              type="primary"
+              size="small"
               @click="viewReport(row)"
             >
               查看报告
@@ -283,10 +317,20 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Search, Check, Close, Rank } from '@element-plus/icons-vue'
 import draggable from 'vuedraggable'
+import { UnifiedListTable } from '@/components/platform-shared'
+import {
+  StateEmpty,
+  StateError,
+  StateForbidden,
+  StateLoading,
+  StateSearchEmpty,
+  UI_PAGE_STATE
+} from '@/components/ui-states'
 import {
   getTestSuiteList,
   getTestSuiteDetail,
@@ -301,11 +345,12 @@ import {
   getTestCaseList,
   getDeviceList,
   getPackageList,
-  getAppProjects,
+  getAppProjects
 } from '@/api/app-automation'
-import { getExecutionStatusType, getExecutionStatusText, getDisplayStatus, formatDateTime } from '@/utils/app-automation-helpers'
+import { getDisplayStatus, formatDateTime } from '@/utils/app-automation-helpers'
 
-// ===== 响应式数据 =====
+const router = useRouter()
+
 const loading = ref(false)
 const devicesLoading = ref(false)
 const saving = ref(false)
@@ -313,6 +358,12 @@ const historyLoading = ref(false)
 const searchQuery = ref('')
 const projectFilter = ref(null)
 const projectList = ref([])
+const currentPage = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
+const hasLoaded = ref(false)
+const requestState = ref(UI_PAGE_STATE.READY)
+const requestErrorMessage = ref('')
 
 const suites = ref([])
 const availableDevices = ref([])
@@ -324,7 +375,6 @@ const runConfig = ref({
   packageName: null
 })
 
-// 对话框
 const dialogVisible = ref(false)
 const historyVisible = ref(false)
 const isEdit = ref(false)
@@ -337,34 +387,102 @@ const suiteForm = ref({
   project: null
 })
 
-// 用例选择
 const caseSearchQuery = ref('')
 const selectedCases = ref([])
 const suiteExecutions = ref([])
 
-const selectedCaseIds = computed(() => new Set(selectedCases.value.map(c => c.id)))
+const hasActiveFilter = computed(() => Boolean(projectFilter.value || searchQuery.value.trim()))
+const selectedCaseIds = computed(() => new Set(selectedCases.value.map((item) => item.id)))
 
-const filteredAvailableCases = computed(() => {
-  const query = caseSearchQuery.value.toLowerCase()
-  if (!query) return allTestCases.value
-  return allTestCases.value.filter(tc =>
-    tc.name.toLowerCase().includes(query) ||
-    (tc.app_package_name && tc.app_package_name.toLowerCase().includes(query))
-  )
+const pageState = computed(() => {
+  if (loading.value && !hasLoaded.value) {
+    return UI_PAGE_STATE.LOADING
+  }
+  if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    return UI_PAGE_STATE.FORBIDDEN
+  }
+  if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    return UI_PAGE_STATE.REQUEST_ERROR
+  }
+  if (suites.value.length === 0) {
+    return hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return UI_PAGE_STATE.READY
 })
 
-// ===== 加载数据 =====
+const filteredAvailableCases = computed(() => {
+  const keyword = caseSearchQuery.value.trim().toLowerCase()
+  if (!keyword) {
+    return allTestCases.value
+  }
+  return allTestCases.value.filter((testCase) => {
+    return (
+      testCase.name.toLowerCase().includes(keyword) ||
+      (testCase.app_package_name && testCase.app_package_name.toLowerCase().includes(keyword))
+    )
+  })
+})
+
+const normalizeListPayload = (data) => {
+  const payload = data?.success !== undefined ? data.data : data
+  return {
+    results: Array.isArray(payload?.results) ? payload.results : Array.isArray(payload) ? payload : [],
+    count: Number(payload?.count || 0)
+  }
+}
+
+const resolveRequestState = (error) => {
+  if (error?.response?.status === 403) {
+    return UI_PAGE_STATE.FORBIDDEN
+  }
+  return UI_PAGE_STATE.REQUEST_ERROR
+}
+
+const handleFilterChange = () => {
+  currentPage.value = 1
+  loadSuites()
+}
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  projectFilter.value = null
+  currentPage.value = 1
+  loadSuites()
+}
+
 const loadSuites = async () => {
   loading.value = true
   try {
-    const params = { search: searchQuery.value }
-    if (projectFilter.value) params.project = projectFilter.value
+    const params = {
+      page: currentPage.value,
+      page_size: pageSize.value
+    }
+    if (searchQuery.value.trim()) {
+      params.search = searchQuery.value.trim()
+    }
+    if (projectFilter.value) {
+      params.project = projectFilter.value
+    }
     const res = await getTestSuiteList(params)
-    const data = res.data
-    suites.value = data.results || data || []
+    const payload = normalizeListPayload(res.data)
+    suites.value = payload.results
+    total.value = payload.count || suites.value.length || 0
+    requestState.value = UI_PAGE_STATE.READY
+    requestErrorMessage.value = ''
+    hasLoaded.value = true
+
+    const maxPage = Math.max(1, Math.ceil((total.value || 0) / pageSize.value))
+    if (total.value > 0 && currentPage.value > maxPage) {
+      currentPage.value = maxPage
+      await loadSuites()
+    }
   } catch (error) {
     console.error('加载套件列表失败:', error)
     suites.value = []
+    total.value = 0
+    hasLoaded.value = true
+    requestState.value = resolveRequestState(error)
+    requestErrorMessage.value = error?.response?.data?.detail || error?.message || '加载套件列表失败'
   } finally {
     loading.value = false
   }
@@ -398,6 +516,7 @@ const loadPackages = async () => {
       appPackages.value = data.results || data || []
     }
   } catch (error) {
+    console.error('加载应用包名失败:', error)
     appPackages.value = []
   }
 }
@@ -406,55 +525,52 @@ const loadAllTestCases = async () => {
   try {
     const res = await getTestCaseList({ page_size: 500 })
     const data = res.data
-    let cases = []
-    if (data.success !== undefined) {
-      cases = data.data?.results || data.data || []
-    } else {
-      cases = data.results || data || []
-    }
-    allTestCases.value = cases.map(tc => ({
-      id: tc.id,
-      name: tc.name,
-      description: tc.description || '',
-      app_package_name: tc.app_package_name || ''
+    const cases = data.success !== undefined ? (data.data?.results || data.data || []) : (data.results || data || [])
+    allTestCases.value = cases.map((testCase) => ({
+      id: testCase.id,
+      name: testCase.name,
+      description: testCase.description || '',
+      app_package_name: testCase.app_package_name || ''
     }))
   } catch (error) {
+    console.error('加载测试用例失败:', error)
     allTestCases.value = []
   }
 }
 
-// ===== 套件操作 =====
-const showCreateDialog = () => {
+const showCreateDialog = async () => {
   isEdit.value = false
   editingSuiteId.value = null
   suiteForm.value = { name: '', description: '', project: null }
   selectedCases.value = []
   caseSearchQuery.value = ''
   dialogVisible.value = true
-  loadAllTestCases()
+  await loadAllTestCases()
 }
 
 const showEditDialog = async (suite) => {
   isEdit.value = true
   editingSuiteId.value = suite.id
-  suiteForm.value = { name: suite.name, description: suite.description || '', project: suite.project || null }
+  suiteForm.value = {
+    name: suite.name,
+    description: suite.description || '',
+    project: suite.project || null
+  }
   caseSearchQuery.value = ''
   dialogVisible.value = true
 
   await loadAllTestCases()
 
-  // 加载套件中已有的用例
   try {
     const res = await getTestSuiteDetail(suite.id)
-    const data = res.data
-    const suiteCases = data.suite_cases || []
+    const suiteCases = res.data?.suite_cases || []
     selectedCases.value = suiteCases
       .sort((a, b) => a.order - b.order)
-      .map(sc => ({
-        id: sc.test_case.id,
-        name: sc.test_case.name,
-        description: sc.test_case.description || '',
-        app_package_name: sc.test_case.app_package_name || ''
+      .map((item) => ({
+        id: item.test_case.id,
+        name: item.test_case.name,
+        description: item.test_case.description || '',
+        app_package_name: item.test_case.app_package_name || ''
       }))
   } catch (error) {
     console.error('加载套件用例失败:', error)
@@ -471,52 +587,46 @@ const saveSuite = async () => {
   saving.value = true
   try {
     if (isEdit.value) {
-      // 更新套件基本信息
       await updateTestSuite(editingSuiteId.value, {
         name: suiteForm.value.name,
         description: suiteForm.value.description,
         project: suiteForm.value.project || null
       })
 
-      // 同步用例：获取当前套件中的用例
       const detailRes = await getTestSuiteDetail(editingSuiteId.value)
-      const currentCases = (detailRes.data.suite_cases || []).map(sc => sc.test_case.id)
-      const newCaseIds = selectedCases.value.map(c => c.id)
+      const currentCases = (detailRes.data?.suite_cases || []).map((item) => item.test_case.id)
+      const newCaseIds = selectedCases.value.map((item) => item.id)
 
-      // 移除不在新列表中的
-      for (const cid of currentCases) {
-        if (!newCaseIds.includes(cid)) {
-          await removeTestCaseFromSuite(editingSuiteId.value, { test_case_id: cid })
+      for (const caseId of currentCases) {
+        if (!newCaseIds.includes(caseId)) {
+          await removeTestCaseFromSuite(editingSuiteId.value, { test_case_id: caseId })
         }
       }
 
-      // 添加新的
-      const toAdd = newCaseIds.filter(id => !currentCases.includes(id))
+      const toAdd = newCaseIds.filter((id) => !currentCases.includes(id))
       if (toAdd.length) {
         await addTestCasesToSuite(editingSuiteId.value, { test_case_ids: toAdd })
       }
 
-      // 更新顺序
-      const orderData = selectedCases.value.map((c, idx) => ({
-        test_case_id: c.id,
-        order: idx
+      const orderData = selectedCases.value.map((item, index) => ({
+        test_case_id: item.id,
+        order: index
       }))
       await updateSuiteTestCaseOrder(editingSuiteId.value, { test_case_orders: orderData })
-
       ElMessage.success('套件更新成功')
     } else {
-      // 创建套件
       await createTestSuite({
         name: suiteForm.value.name,
         description: suiteForm.value.description,
         project: suiteForm.value.project || null,
-        test_case_ids: selectedCases.value.map(c => c.id)
+        test_case_ids: selectedCases.value.map((item) => item.id)
       })
       ElMessage.success('套件创建成功')
+      currentPage.value = 1
     }
 
     dialogVisible.value = false
-    loadSuites()
+    await loadSuites()
   } catch (error) {
     ElMessage.error('保存失败: ' + (error.response?.data?.message || error.message || '未知错误'))
   } finally {
@@ -533,7 +643,7 @@ const deleteSuite = async (suite) => {
     )
     await apiDeleteSuite(suite.id)
     ElMessage.success('删除成功')
-    loadSuites()
+    await loadSuites()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败: ' + (error.message || '未知错误'))
@@ -541,10 +651,11 @@ const deleteSuite = async (suite) => {
   }
 }
 
-// ===== 用例选择操作 =====
-const addCase = (tc) => {
-  if (selectedCaseIds.value.has(tc.id)) return
-  selectedCases.value.push({ ...tc })
+const addCase = (testCase) => {
+  if (selectedCaseIds.value.has(testCase.id)) {
+    return
+  }
+  selectedCases.value.push({ ...testCase })
 }
 
 const removeCase = (index) => {
@@ -555,17 +666,13 @@ const clearAllCases = () => {
   selectedCases.value = []
 }
 
-const filterAvailableCases = () => {
-  // computed 自动处理
-}
+const filterAvailableCases = () => {}
 
-// ===== 执行套件 =====
 const runSuite = async (suite) => {
   if (!runConfig.value.deviceId) {
     ElMessage.warning('请先选择设备')
     return
   }
-
   if (suite.test_case_count === 0) {
     ElMessage.warning('该套件未包含任何测试用例')
     return
@@ -588,7 +695,6 @@ const runSuite = async (suite) => {
 
     if (data.success) {
       ElMessage.success(data.message || '套件已提交执行')
-      // 延迟刷新
       setTimeout(() => loadSuites(), 2000)
     } else {
       ElMessage.error(data.message || '执行失败')
@@ -600,7 +706,6 @@ const runSuite = async (suite) => {
   }
 }
 
-// ===== 执行历史 =====
 const showSuiteExecutions = async (suite) => {
   currentSuiteName.value = suite.name
   historyVisible.value = true
@@ -610,6 +715,7 @@ const showSuiteExecutions = async (suite) => {
     const res = await getTestSuiteExecutions(suite.id)
     suiteExecutions.value = res.data.data || res.data || []
   } catch (error) {
+    console.error('加载套件执行历史失败:', error)
     suiteExecutions.value = []
   } finally {
     historyLoading.value = false
@@ -624,34 +730,34 @@ const viewReport = (execution) => {
   window.open(`/api/app-automation/executions/${execution.id}/report/`, '_blank')
 }
 
-// ===== 工具方法 =====
 const getSuiteDisplayStatus = (row) => {
   const status = row.execution_status
   const result = row.execution_result
   if (status === 'not_run') return { type: 'info', text: '未执行' }
   if (status === 'running') return { type: 'warning', text: '执行中' }
   if (status === 'error') return { type: 'danger', text: '执行异常' }
-  // completed -> 显示测试结果
   if (result === 'passed') return { type: 'success', text: '通过' }
   if (result === 'failed') return { type: 'danger', text: '失败' }
   if (result === 'skipped') return { type: 'warning', text: '跳过' }
-  // 向后兼容旧值
   if (status === 'success') return { type: 'success', text: '通过' }
   if (status === 'failed') return { type: 'danger', text: '失败' }
-  return { type: 'info', text: status }
+  return { type: 'info', text: status || '未知' }
 }
 
 const getProgressStatus = (row) => {
   if (row.status === 'completed') {
     return row.result === 'failed' ? 'exception' : 'success'
   }
-  if (row.status === 'error') return 'exception'
+  if (row.status === 'error') {
+    return 'exception'
+  }
   return undefined
 }
 
-// ===== 初始化 =====
 onMounted(() => {
-  getAppProjects({ page_size: 100 }).then(res => { projectList.value = res.data.results || res.data || [] }).catch(() => {})
+  getAppProjects({ page_size: 100 }).then((res) => {
+    projectList.value = res.data.results || res.data || []
+  }).catch(() => {})
   loadSuites()
   loadDevices()
   loadPackages()
@@ -668,22 +774,17 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
-  background: white;
-  padding: 16px 20px;
-  border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 
   h3 {
     margin: 0;
-    font-size: 18px;
-    font-weight: 600;
+    font-size: 20px;
     color: #303133;
   }
+}
 
-  .header-actions {
-    display: flex;
-    gap: 12px;
-  }
+.header-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .config-card {
@@ -698,12 +799,29 @@ onMounted(() => {
   }
 }
 
-.pass-fail {
-  .pass { color: #67c23a; font-weight: 600; }
-  .fail { color: #f56c6c; font-weight: 600; }
+.table-section {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
-/* 用例选择器 */
+.table-container {
+  min-height: 240px;
+}
+
+.pass-fail {
+  .pass {
+    color: #67c23a;
+    font-weight: 600;
+  }
+
+  .fail {
+    color: #f56c6c;
+    font-weight: 600;
+  }
+}
+
 .case-selector {
   display: flex;
   gap: 16px;
@@ -798,31 +916,16 @@ onMounted(() => {
     color: #67c23a;
     flex-shrink: 0;
   }
-
-  .drag-handle {
-    cursor: grab;
-    color: #c0c4cc;
-    margin-right: 4px;
-    flex-shrink: 0;
-  }
-
-  .remove-icon {
-    color: #f56c6c;
-    cursor: pointer;
-    flex-shrink: 0;
-
-    &:hover {
-      color: #dd2020;
-    }
-  }
 }
 
-// 表格样式
-:deep(.el-table) {
-  .el-table__header th {
-    background-color: #fafafa;
-    color: #606266;
-    font-weight: 600;
-  }
+.drag-handle {
+  cursor: grab;
+  color: #909399;
+}
+
+.remove-icon {
+  cursor: pointer;
+  color: #f56c6c;
+  flex-shrink: 0;
 }
 </style>

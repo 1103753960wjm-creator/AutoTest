@@ -1,114 +1,145 @@
 <template>
   <div class="scheduled-tasks">
-    <div class="header">
-      <h3>{{ $t('apiTesting.scheduledTask.title') }}</h3>
-      <el-button type="primary" @click="handleCreateClick">
-        <el-icon><Plus /></el-icon>
-        {{ $t('apiTesting.scheduledTask.createTask') }}
-      </el-button>
-    </div>
+    <ListShell class="scheduled-tasks-shell">
+      <template #actions>
+        <el-button type="primary" @click="handleCreateClick">
+          <el-icon><Plus /></el-icon>
+          {{ $t('apiTesting.scheduledTask.createTask') }}
+        </el-button>
+      </template>
 
-    <!-- 筛选条件 -->
-    <div class="filters">
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <el-select v-model="filters.task_type" :placeholder="$t('apiTesting.scheduledTask.taskType')" clearable>
-            <el-option :label="$t('apiTesting.scheduledTask.taskTypes.testSuite')" value="TEST_SUITE" />
-            <el-option :label="$t('apiTesting.scheduledTask.taskTypes.apiRequest')" value="API_REQUEST" />
-          </el-select>
-        </el-col>
-        <el-col :span="6">
-          <el-select v-model="filters.trigger_type" :placeholder="$t('apiTesting.scheduledTask.triggerType')" clearable>
-            <el-option :label="$t('apiTesting.scheduledTask.triggerTypes.cron')" value="CRON" />
-            <el-option :label="$t('apiTesting.scheduledTask.triggerTypes.interval')" value="INTERVAL" />
-            <el-option :label="$t('apiTesting.scheduledTask.triggerTypes.once')" value="ONCE" />
-          </el-select>
-        </el-col>
-        <el-col :span="6">
-          <el-select v-model="filters.status" :placeholder="$t('apiTesting.scheduledTask.taskStatus')" clearable>
-            <el-option :label="$t('apiTesting.scheduledTask.status.active')" value="ACTIVE" />
-            <el-option :label="$t('apiTesting.scheduledTask.status.paused')" value="PAUSED" />
-            <el-option :label="$t('apiTesting.scheduledTask.status.completed')" value="COMPLETED" />
-            <el-option :label="$t('apiTesting.scheduledTask.status.failed')" value="FAILED" />
-          </el-select>
-        </el-col>
-        <el-col :span="6">
-          <el-button @click="resetFilters">{{ $t('apiTesting.common.reset') }}</el-button>
-          <el-button type="primary" @click="loadTasks">{{ $t('apiTesting.common.search') }}</el-button>
-        </el-col>
-      </el-row>
-    </div>
+      <div class="filters">
+        <el-row :gutter="20">
+          <el-col :span="6">
+            <el-select v-model="filters.task_type" :placeholder="$t('apiTesting.scheduledTask.taskType')" clearable>
+              <el-option :label="$t('apiTesting.scheduledTask.taskTypes.testSuite')" value="TEST_SUITE" />
+              <el-option :label="$t('apiTesting.scheduledTask.taskTypes.apiRequest')" value="API_REQUEST" />
+            </el-select>
+          </el-col>
+          <el-col :span="6">
+            <el-select v-model="filters.trigger_type" :placeholder="$t('apiTesting.scheduledTask.triggerType')" clearable>
+              <el-option :label="$t('apiTesting.scheduledTask.triggerTypes.cron')" value="CRON" />
+              <el-option :label="$t('apiTesting.scheduledTask.triggerTypes.interval')" value="INTERVAL" />
+              <el-option :label="$t('apiTesting.scheduledTask.triggerTypes.once')" value="ONCE" />
+            </el-select>
+          </el-col>
+          <el-col :span="6">
+            <el-select v-model="filters.status" :placeholder="$t('apiTesting.scheduledTask.taskStatus')" clearable>
+              <el-option :label="$t('apiTesting.scheduledTask.status.active')" value="ACTIVE" />
+              <el-option :label="$t('apiTesting.scheduledTask.status.paused')" value="PAUSED" />
+              <el-option :label="$t('apiTesting.scheduledTask.status.completed')" value="COMPLETED" />
+              <el-option :label="$t('apiTesting.scheduledTask.status.failed')" value="FAILED" />
+            </el-select>
+          </el-col>
+          <el-col :span="6">
+            <el-button @click="resetFilters">{{ $t('apiTesting.common.reset') }}</el-button>
+            <el-button type="primary" @click="loadTasks">{{ $t('apiTesting.common.search') }}</el-button>
+          </el-col>
+        </el-row>
+      </div>
 
-    <!-- 任务列表 -->
-    <div class="task-list">
-      <el-table :data="tasks" v-loading="loading">
-        <el-table-column prop="name" :label="$t('apiTesting.scheduledTask.taskName')" min-width="200" />
-        <el-table-column prop="task_type" :label="$t('apiTesting.scheduledTask.taskType')" width="120">
-          <template #default="scope">
-            <el-tag :type="scope.row.task_type === 'TEST_SUITE' ? 'success' : 'primary'">
-              {{ scope.row.task_type === 'TEST_SUITE' ? $t('apiTesting.scheduledTask.taskTypes.testSuiteShort') : $t('apiTesting.scheduledTask.taskTypes.apiRequestShort') }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="trigger_type" :label="$t('apiTesting.scheduledTask.triggerType')" width="120">
-          <template #default="scope">
-            <el-tag>
-              {{ getTriggerTypeText(scope.row.trigger_type) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" :label="$t('apiTesting.common.status')" width="100">
-          <template #default="scope">
-            <el-tag :type="scope.row.status === 'ACTIVE' ? 'success' : scope.row.status === 'PAUSED' ? 'warning' : 'info'">
-              {{ getStatusText(scope.row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="notification_type_display" :label="$t('apiTesting.scheduledTask.notificationType')" width="120">
-          <template #default="scope">
-            <el-tag
-              :type="getNotificationTypeTag(scope.row.notification_type_display)"
-              size="small"
-            >
-              {{ scope.row.notification_type_display || '-' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="next_run_time" :label="$t('apiTesting.scheduledTask.nextRunTime')" width="180">
-          <template #default="scope">
-            {{ formatDateTime(scope.row.next_run_time) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="last_run_time" :label="$t('apiTesting.scheduledTask.lastRunTime')" width="180">
-          <template #default="scope">
-            {{ formatDateTime(scope.row.last_run_time) }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('apiTesting.common.operation')" width="200" fixed="right">
-          <template #default="scope">
-            <el-button size="small" @click="runTaskNow(scope.row)" :loading="scope.row.running">
-              {{ $t('apiTesting.scheduledTask.runNow') }}
-            </el-button>
-            <el-dropdown @command="(command) => handleTaskAction(command, scope.row)">
-              <el-button size="small">
-                {{ $t('apiTesting.common.more') }}<el-icon><arrow-down /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="edit">{{ $t('apiTesting.common.edit') }}</el-dropdown-item>
-                  <el-dropdown-item command="pause" v-if="scope.row.status === 'ACTIVE'">{{ $t('apiTesting.scheduledTask.pause') }}</el-dropdown-item>
-                  <el-dropdown-item command="activate" v-if="scope.row.status === 'PAUSED'">{{ $t('apiTesting.scheduledTask.activate') }}</el-dropdown-item>
-                  <el-dropdown-item command="logs">{{ $t('apiTesting.scheduledTask.executionLogs') }}</el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>{{ $t('apiTesting.common.delete') }}</el-dropdown-item>
-                </el-dropdown-menu>
+      <div class="task-list">
+        <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+        <StateForbidden
+          v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+          compact
+          :primary-action-text="$t('common.uiState.actions.goHome')"
+          @primary-action="router.push('/home')"
+        />
+        <StateError
+          v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+          compact
+          :description="requestErrorMessage || $t('common.uiState.error.description')"
+          @primary-action="loadTasks"
+        />
+        <StateSearchEmpty
+          v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+          compact
+          :primary-action-text="$t('common.uiState.actions.clearFilters')"
+          @primary-action="resetFilters"
+        />
+        <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+        <div v-else class="table-container">
+          <UnifiedListTable
+            v-model:currentPage="pagination.current"
+            v-model:pageSize="pagination.size"
+            :total="pagination.total"
+            :page-sizes="[10, 20, 50, 100]"
+            :data="tasks"
+            :loading="loading"
+            row-key="id"
+            selection-mode="none"
+            :actions="{ view: false, edit: false, delete: false }"
+            :action-column-width="200"
+            @page-change="loadTasks"
+          >
+            <el-table-column prop="name" :label="$t('apiTesting.scheduledTask.taskName')" min-width="200" />
+            <el-table-column prop="task_type" :label="$t('apiTesting.scheduledTask.taskType')" width="120">
+              <template #default="scope">
+                <el-tag :type="scope.row.task_type === 'TEST_SUITE' ? 'success' : 'primary'">
+                  {{ scope.row.task_type === 'TEST_SUITE' ? $t('apiTesting.scheduledTask.taskTypes.testSuiteShort') : $t('apiTesting.scheduledTask.taskTypes.apiRequestShort') }}
+                </el-tag>
               </template>
-            </el-dropdown>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
+            </el-table-column>
+            <el-table-column prop="trigger_type" :label="$t('apiTesting.scheduledTask.triggerType')" width="120">
+              <template #default="scope">
+                <el-tag>
+                  {{ getTriggerTypeText(scope.row.trigger_type) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" :label="$t('apiTesting.common.status')" width="100">
+              <template #default="scope">
+                <el-tag :type="scope.row.status === 'ACTIVE' ? 'success' : scope.row.status === 'PAUSED' ? 'warning' : 'info'">
+                  {{ getStatusText(scope.row.status) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="notification_type_display" :label="$t('apiTesting.scheduledTask.notificationType')" width="120">
+              <template #default="scope">
+                <el-tag
+                  :type="getNotificationTypeTag(scope.row.notification_type_display)"
+                  size="small"
+                >
+                  {{ scope.row.notification_type_display || '-' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="next_run_time" :label="$t('apiTesting.scheduledTask.nextRunTime')" width="180">
+              <template #default="scope">
+                {{ formatDateTime(scope.row.next_run_time) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="last_run_time" :label="$t('apiTesting.scheduledTask.lastRunTime')" width="180">
+              <template #default="scope">
+                {{ formatDateTime(scope.row.last_run_time) }}
+              </template>
+            </el-table-column>
+            <template #actions="{ row }">
+              <el-button size="small" @click="runTaskNow(row)" :loading="row.running">
+                {{ $t('apiTesting.scheduledTask.runNow') }}
+              </el-button>
+              <el-dropdown @command="(command) => handleTaskAction(command, row)">
+                <el-button size="small">
+                  {{ $t('apiTesting.common.more') }}<el-icon><arrow-down /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="edit">{{ $t('apiTesting.common.edit') }}</el-dropdown-item>
+                    <el-dropdown-item command="pause" v-if="row.status === 'ACTIVE'">{{ $t('apiTesting.scheduledTask.pause') }}</el-dropdown-item>
+                    <el-dropdown-item command="activate" v-if="row.status === 'PAUSED'">{{ $t('apiTesting.scheduledTask.activate') }}</el-dropdown-item>
+                    <el-dropdown-item command="logs">{{ $t('apiTesting.scheduledTask.executionLogs') }}</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>{{ $t('apiTesting.common.delete') }}</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </template>
+          </UnifiedListTable>
+        </div>
+      </div>
+    </ListShell>
 
-    <!-- 分页 -->
+    <!-- 鍒嗛〉 -->
     <div class="pagination">
       <el-pagination
         v-model:current-page="pagination.current"
@@ -121,7 +152,7 @@
       />
     </div>
 
-    <!-- 创建/编辑对话框 -->
+    <!-- 鍒涘缓/缂栬緫瀵硅瘽妗?-->
     <el-dialog
       v-model="showCreateDialog"
       :title="editingTask ? $t('apiTesting.scheduledTask.editTask') : $t('apiTesting.scheduledTask.createTask')"
@@ -153,7 +184,7 @@
           </el-radio-group>
         </el-form-item>
 
-        <!-- 根据触发器类型显示不同配置 -->
+        <!-- 鏍规嵁瑙﹀彂鍣ㄧ被鍨嬫樉绀轰笉鍚岄厤缃?-->
         <el-form-item v-if="taskForm.trigger_type === 'CRON'" :label="$t('apiTesting.scheduledTask.cronExpression')" required>
           <el-input v-model="taskForm.cron_expression" placeholder="0 0 * * *" />
           <div class="cron-help">
@@ -164,16 +195,16 @@
               <template #content>
                 <div style="line-height: 1.6; text-align: left;">
                   <div>{{ $t('apiTesting.scheduledTask.cronHelp.format') }}</div>
-                  <div>• {{ $t('apiTesting.scheduledTask.cronHelp.minute') }}</div>
-                  <div>• {{ $t('apiTesting.scheduledTask.cronHelp.hour') }}</div>
-                  <div>• {{ $t('apiTesting.scheduledTask.cronHelp.day') }}</div>
-                  <div>• {{ $t('apiTesting.scheduledTask.cronHelp.month') }}</div>
-                  <div>• {{ $t('apiTesting.scheduledTask.cronHelp.week') }}</div>
+                  <div>鈥?{{ $t('apiTesting.scheduledTask.cronHelp.minute') }}</div>
+                  <div>鈥?{{ $t('apiTesting.scheduledTask.cronHelp.hour') }}</div>
+                  <div>鈥?{{ $t('apiTesting.scheduledTask.cronHelp.day') }}</div>
+                  <div>鈥?{{ $t('apiTesting.scheduledTask.cronHelp.month') }}</div>
+                  <div>鈥?{{ $t('apiTesting.scheduledTask.cronHelp.week') }}</div>
                   <div style="margin-top: 8px;">{{ $t('apiTesting.scheduledTask.cronHelp.examples') }}</div>
-                  <div>• {{ $t('apiTesting.scheduledTask.cronHelp.daily') }}</div>
-                  <div>• {{ $t('apiTesting.scheduledTask.cronHelp.hourly') }}</div>
-                  <div>• {{ $t('apiTesting.scheduledTask.cronHelp.weekly') }}</div>
-                  <div>• {{ $t('apiTesting.scheduledTask.cronHelp.monthly') }}</div>
+                  <div>鈥?{{ $t('apiTesting.scheduledTask.cronHelp.daily') }}</div>
+                  <div>鈥?{{ $t('apiTesting.scheduledTask.cronHelp.hourly') }}</div>
+                  <div>鈥?{{ $t('apiTesting.scheduledTask.cronHelp.weekly') }}</div>
+                  <div>鈥?{{ $t('apiTesting.scheduledTask.cronHelp.monthly') }}</div>
                 </div>
               </template>
               <span style="cursor: pointer; color: #409EFF;">{{ $t('apiTesting.scheduledTask.cronHelpLink') }}</span>
@@ -194,7 +225,7 @@
           />
         </el-form-item>
 
-        <!-- 根据任务类型显示不同配置 -->
+        <!-- 鏍规嵁浠诲姟绫诲瀷鏄剧ず涓嶅悓閰嶇疆 -->
         <el-form-item v-if="taskForm.task_type === 'TEST_SUITE'" :label="$t('apiTesting.automation.testSuite')" required>
           <el-select v-model="taskForm.test_suite" :placeholder="$t('apiTesting.scheduledTask.selectTestSuite')">
             <el-option
@@ -266,7 +297,7 @@
       </template>
     </el-dialog>
 
-    <!-- 执行日志对话框 -->
+    <!-- 鎵ц鏃ュ織瀵硅瘽妗?-->
     <el-dialog v-model="showLogsDialog" :title="$t('apiTesting.scheduledTask.executionLogs')" width="1000px">
       <el-table :data="executionLogs" v-loading="logsLoading">
         <el-table-column prop="start_time" :label="$t('apiTesting.scheduledTask.startTime')" width="180">
@@ -294,10 +325,14 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
 import api from '@/utils/api'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { ListShell } from '@/components/page-shells'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 import {
   getScheduledTasks,
   createScheduledTask,
@@ -312,8 +347,8 @@ import {
 } from '@/api/api-testing.js'
 
 const { t } = useI18n()
+const router = useRouter()
 
-// 获取状态文本
 const getStatusText = (status) => {
   const statusKey = {
     'ACTIVE': 'active',
@@ -324,7 +359,6 @@ const getStatusText = (status) => {
   return statusKey ? t(`apiTesting.scheduledTask.status.${statusKey}`) : status
 }
 
-// 获取触发器类型文本
 const getTriggerTypeText = (type) => {
   const typeKey = {
     'CRON': 'cron',
@@ -334,35 +368,56 @@ const getTriggerTypeText = (type) => {
   return typeKey ? t(`apiTesting.scheduledTask.triggerTypes.${typeKey}`) : type
 }
 
-// 数据状态
 const tasks = ref([])
 const executionLogs = ref([])
 const testSuites = ref([])
 const apiRequests = ref([])
 const environments = ref([])
-const users = ref([]) // 添加用户列表
+const users = ref([]) // 娣诲姞鐢ㄦ埛鍒楄〃
 const loading = ref(false)
 const logsLoading = ref(false)
 const submitting = ref(false)
 const showCreateDialog = ref(false)
 const showLogsDialog = ref(false)
 const editingTask = ref(null)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 
-// 筛选条件
 const filters = reactive({
   task_type: '',
   trigger_type: '',
   status: ''
 })
 
-// 分页配置
+// 鍒嗛〉閰嶇疆
 const pagination = reactive({
   current: 1,
   size: 10,
   total: 0
 })
 
-// 表单数据
+const hasActiveFilter = computed(() => Boolean(
+  filters.task_type ||
+  filters.trigger_type ||
+  filters.status
+))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (tasks.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
+
+// 琛ㄥ崟鏁版嵁
 const taskForm = reactive({
   name: '',
   description: '',
@@ -379,18 +434,21 @@ const taskForm = reactive({
   notify_emails: []
 })
 
-// 生命周期
+// 鐢熷懡鍛ㄦ湡
 onMounted(() => {
   loadTasks()
   loadTestSuites()
   loadApiRequests()
   loadEnvironments()
-  loadUsers() // 加载用户列表
+  loadUsers() // 鍔犺浇鐢ㄦ埛鍒楄〃
 })
 
-// 加载任务列表
+// 鍔犺浇浠诲姟鍒楄〃
 const loadTasks = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: pagination.current,
@@ -400,67 +458,82 @@ const loadTasks = async () => {
     const response = await getScheduledTasks(params)
     tasks.value = response.data.results
     pagination.total = response.data.count
+    const maxPage = Math.max(1, Math.ceil((pagination.total || 0) / pagination.size || 1))
+    if (pagination.current > maxPage) {
+      pagination.current = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(t('apiTesting.messages.error.loadTasksFailed'))
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await loadTasks()
   }
 }
 
-// 加载测试套件
+// 鍔犺浇娴嬭瘯濂椾欢
 const loadTestSuites = async () => {
   try {
     const response = await getTestSuites()
     testSuites.value = response.data.results
   } catch (error) {
-    console.error('加载测试套件失败:', error)
+    console.error('鍔犺浇娴嬭瘯濂椾欢澶辫触:', error)
   }
 }
 
-// 加载API请求
+// 鍔犺浇API璇锋眰
 const loadApiRequests = async () => {
   try {
     const response = await getApiRequests()
     apiRequests.value = response.data.results
   } catch (error) {
-    console.error('加载API请求失败:', error)
+    console.error('鍔犺浇API璇锋眰澶辫触:', error)
   }
 }
 
-// 加载环境
+// 鍔犺浇鐜
 const loadEnvironments = async () => {
   try {
     const response = await getEnvironments()
     environments.value = response.data.results
   } catch (error) {
-    console.error('加载环境失败:', error)
+    console.error('鍔犺浇鐜澶辫触:', error)
   }
 }
 
-// 加载用户列表
+// 鍔犺浇鐢ㄦ埛鍒楄〃
 const loadUsers = async () => {
   try {
     const response = await getUsers()
-    // 处理分页数据结构
+    // 澶勭悊鍒嗛〉鏁版嵁缁撴瀯
     const usersData = response.data.results || response.data
     users.value = usersData.map(user => ({
       ...user,
       display_name: user.first_name ? `${user.first_name}（${user.email}）` : `${user.username}（${user.email}）`
     }))
   } catch (error) {
-    console.error('加载用户列表失败:', error)
+    console.error('鍔犺浇鐢ㄦ埛鍒楄〃澶辫触:', error)
   }
 }
 
-// 新建按钮点击
+// 鏂板缓鎸夐挳鐐瑰嚮
 const handleCreateClick = () => {
-  console.log('新建按钮点击')
+  console.log('鏂板缓鎸夐挳鐐瑰嚮')
   editingTask.value = null
   resetTaskForm()
   showCreateDialog.value = true
 }
 
-// 重置表单
+// 閲嶇疆琛ㄥ崟
 const resetTaskForm = () => {
   Object.assign(taskForm, {
     name: '',
@@ -480,21 +553,20 @@ const resetTaskForm = () => {
   })
 }
 
-// 重置筛选
 const resetFilters = () => {
   Object.assign(filters, {
     task_type: '',
     trigger_type: '',
     status: ''
   })
+  pagination.current = 1
   loadTasks()
 }
 
-// 提交任务表单
+// 鎻愪氦浠诲姟琛ㄥ崟
 const submitTaskForm = async () => {
   submitting.value = true
   try {
-    // 准备提交数据，确保格式正确
     const submitData = {
       name: taskForm.name,
       description: taskForm.description,
@@ -507,7 +579,6 @@ const submitTaskForm = async () => {
       environment: taskForm.environment
     }
 
-    // 根据触发器类型添加对应字段
     if (taskForm.trigger_type === 'CRON') {
       submitData.cron_expression = taskForm.cron_expression
     } else if (taskForm.trigger_type === 'INTERVAL') {
@@ -516,7 +587,7 @@ const submitTaskForm = async () => {
       submitData.execute_at = taskForm.execute_at
     }
 
-    // 根据任务类型添加对应字段
+    // 鏍规嵁浠诲姟绫诲瀷娣诲姞瀵瑰簲瀛楁
     if (taskForm.task_type === 'TEST_SUITE') {
       submitData.test_suite = taskForm.test_suite
     } else if (taskForm.task_type === 'API_REQUEST') {
@@ -542,13 +613,12 @@ const submitTaskForm = async () => {
   }
 }
 
-// 立即执行任务
+// 绔嬪嵆鎵ц浠诲姟
 const runTaskNow = async (task) => {
   try {
     task.running = true
     await runScheduledTask(task.id)
     ElMessage.success(t('apiTesting.messages.success.taskStarted'))
-    // 等待一段时间后刷新任务状态
     setTimeout(() => {
       loadTasks()
     }, 2000)
@@ -559,7 +629,6 @@ const runTaskNow = async (task) => {
   }
 }
 
-// 格式化日期时间
 const formatDateTime = (dateString) => {
   if (!dateString) return '-'
   const date = new Date(dateString)
@@ -573,7 +642,7 @@ const formatDateTime = (dateString) => {
   }).replace(/\//g, '-')
 }
 
-// 获取通知类型标签样式
+// 鑾峰彇閫氱煡绫诲瀷鏍囩鏍峰紡
 const getNotificationTypeTag = (typeDisplay) => {
   const typeMap = {
     '邮箱通知': '',
@@ -583,7 +652,7 @@ const getNotificationTypeTag = (typeDisplay) => {
   return typeMap[typeDisplay] || 'info'
 }
 
-// 查看执行日志
+// 鏌ョ湅鎵ц鏃ュ織
 const viewTaskLogs = async (task) => {
   logsLoading.value = true
   try {
@@ -598,7 +667,7 @@ const viewTaskLogs = async (task) => {
   }
 }
 
-// 处理任务操作
+// 澶勭悊浠诲姟鎿嶄綔
 const handleTaskAction = (command, task) => {
   switch (command) {
     case 'pause':
@@ -619,7 +688,7 @@ const handleTaskAction = (command, task) => {
   }
 }
 
-// 编辑任务
+// 缂栬緫浠诲姟
 const editTask = (task) => {
   editingTask.value = task
   Object.assign(taskForm, {
@@ -638,7 +707,7 @@ const editTask = (task) => {
     notification_type: task.notification_type || 'email',
     notify_emails: task.notify_emails || []
   })
-  console.log('编辑任务数据回显:', {
+  console.log('缂栬緫浠诲姟鏁版嵁鍥炴樉:', {
     test_suite: task.test_suite,
     environment: task.environment,
     taskForm_test_suite: taskForm.test_suite,
@@ -647,7 +716,7 @@ const editTask = (task) => {
   showCreateDialog.value = true
 }
 
-// 暂停任务
+// 鏆傚仠浠诲姟
 const pauseTask = async (task) => {
   try {
     await api.post(`/api-testing/scheduled-tasks/${task.id}/pause/`)
@@ -659,7 +728,6 @@ const pauseTask = async (task) => {
   }
 }
 
-// 激活任务
 const activateTask = async (task) => {
   try {
     await api.post(`/api-testing/scheduled-tasks/${task.id}/activate/`)
@@ -670,7 +738,7 @@ const activateTask = async (task) => {
   }
 }
 
-// 删除任务
+// 鍒犻櫎浠诲姟
 const deleteTask = async (task) => {
   try {
     await ElMessageBox.confirm(
@@ -695,21 +763,14 @@ const deleteTask = async (task) => {
 
 <style scoped>
 .scheduled-tasks {
-  padding: 20px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+  min-height: 100%;
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: px;
+.scheduled-tasks-shell {
+  min-height: 100%;
 }
 
 .filters {
-  margin-bottom: 20px;
   background: #f8f9fa;
   padding: 20px;
   border-radius: 8px;
@@ -721,9 +782,16 @@ const deleteTask = async (task) => {
 }
 
 .pagination {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
+  display: none;
+}
+
+.table-container {
+  overflow: hidden;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 .cron-help {

@@ -10,63 +10,67 @@
       :title="$t('common.uiState.empty.title')"
       description="工作台可用入口为空，请先检查导航配置是否已接入。"
     />
-    <template v-else>
-      <section class="welcome-panel">
-        <div class="welcome-panel__copy">
-          <span class="welcome-panel__eyebrow">{{ greetingText }}</span>
-          <h2 class="welcome-panel__headline">{{ welcomeHeadline }}</h2>
-          <p class="welcome-panel__summary">
-            {{ currentWorkNote }}
-          </p>
-          <p class="welcome-panel__hint">
-            当前首页优先承接继续工作、模块入口和轻提醒，不复制各模块 dashboard，也不提前打开最近访问、收藏或全局搜索的真实能力。
-          </p>
-          <div class="welcome-panel__meta">
-            <span class="context-chip">项目上下文：阶段 1 占位展示，后续由统一项目上下文能力接入</span>
-            <span class="context-chip">工作说明：{{ workModeText }}</span>
-            <span class="context-chip">数据边界：真数据 + 占位结构</span>
-          </div>
-        </div>
-
-        <div class="welcome-panel__aside">
-          <div class="context-card">
-            <span class="context-card__label">当前上下文</span>
-            <div class="context-card__item">
-              <span>当前用户</span>
-              <strong>{{ userLabel }}</strong>
-            </div>
-            <div class="context-card__item">
-              <span>当前入口</span>
-              <strong>统一工作台首页</strong>
-            </div>
-            <div class="context-card__item">
-              <span>项目上下文</span>
-              <strong>阶段 1 占位</strong>
+    <DashboardShell v-else class="home-shell">
+      <template #metrics>
+        <section class="welcome-panel">
+          <div class="welcome-panel__copy">
+            <span class="welcome-panel__eyebrow">{{ greetingText }}</span>
+            <h2 class="welcome-panel__headline">{{ welcomeHeadline }}</h2>
+            <p class="welcome-panel__summary">
+              {{ currentWorkNote }}
+            </p>
+            <p class="welcome-panel__hint">
+              首页只承接平台级继续工作、常用入口和轻量提醒，不复制各模块 dashboard。
+            </p>
+            <div class="welcome-panel__meta">
+              <span class="context-chip">工作说明：{{ workModeText }}</span>
+              <span class="context-chip">最近访问：{{ productivityStore.recentVisits.length }} 条</span>
+              <span class="context-chip">我的收藏：{{ favoriteItems.length }} 条</span>
             </div>
           </div>
-        </div>
-      </section>
 
-      <section class="stats-section">
-        <el-row :gutter="18">
-          <el-col v-for="card in overviewCards" :key="card.key" :xs="24" :sm="12" :xl="6">
-            <StatCard
-              :title="card.title"
-              :value="card.value"
-              :description="card.description"
-              :icon="card.icon"
-              :accent="card.accent"
-              compact
-            />
-          </el-col>
-        </el-row>
-      </section>
+          <div class="welcome-panel__aside">
+            <div class="context-card">
+              <span class="context-card__label">当前上下文</span>
+              <div class="context-card__item">
+                <span>当前用户</span>
+                <strong>{{ userLabel }}</strong>
+              </div>
+              <div class="context-card__item">
+                <span>当前入口</span>
+                <strong>统一工作台首页</strong>
+              </div>
+              <div class="context-card__item">
+                <span>工作模式</span>
+                <strong>{{ workModeText }}</strong>
+              </div>
+            </div>
+          </div>
+        </section>
+      </template>
+
+      <template #overview>
+        <section class="stats-section">
+          <el-row :gutter="18">
+            <el-col v-for="card in overviewCards" :key="card.key" :xs="24" :sm="12" :xl="6">
+              <StatCard
+                :title="card.title"
+                :value="card.value"
+                :description="card.description"
+                :icon="card.icon"
+                :accent="card.accent"
+                compact
+              />
+            </el-col>
+          </el-row>
+        </section>
+      </template>
 
       <section class="section-block">
         <div class="section-heading">
           <div>
             <h3 class="section-title">我的工作</h3>
-            <p class="section-description">先告诉用户现在可以继续什么，而不是只展示模块目录。</p>
+            <p class="section-description">优先回到最近工作和常用入口，不再展示假待办和假风险数字。</p>
           </div>
         </div>
         <div class="my-work-grid">
@@ -80,6 +84,7 @@
             :badge="card.badge"
             variant="compact"
             :clickable="Boolean(card.route)"
+            :disabled="!card.route"
             @click="card.route && navigateTo(card.route)"
           >
             <span class="quick-note">{{ card.note }}</span>
@@ -88,10 +93,47 @@
       </section>
 
       <section class="section-block">
+        <RecentList
+          title="快捷继续"
+          description="这里直接消费真实最近访问记录，方便回到刚刚做过的页面。"
+          :items="quickContinueItems"
+          empty-title="暂无可继续事项"
+          empty-description="访问任意页面后，这里会自动出现最近访问记录。"
+        >
+          <template #actions>
+            <el-button
+              v-if="quickContinueItems.length"
+              text
+              type="primary"
+              @click="productivityStore.clearRecentVisits()"
+            >
+              清空记录
+            </el-button>
+          </template>
+          <template #item="{ item }">
+            <div class="stream-item">
+              <div class="stream-item__icon" :class="`accent-${item.accent}`">
+                <el-icon><component :is="item.icon" /></el-icon>
+              </div>
+              <div class="stream-item__body">
+                <div class="stream-item__top">
+                  <span class="stream-item__type">{{ item.type }}</span>
+                  <span class="stream-item__tag">{{ item.tag }}</span>
+                </div>
+                <div class="stream-item__title">{{ item.title }}</div>
+                <p class="stream-item__description">{{ item.description }}</p>
+              </div>
+              <el-button text type="primary" @click="navigateTo(item.route)">继续</el-button>
+            </div>
+          </template>
+        </RecentList>
+      </section>
+
+      <section class="section-block">
         <div class="section-heading">
           <div>
             <h3 class="section-title">核心模块入口</h3>
-            <p class="section-description">复用平台导航真源，不再重新做一套首页模块体系。</p>
+            <p class="section-description">直接复用平台导航真源，不再在首页重复长出一套模块体系。</p>
           </div>
         </div>
         <div class="module-grid">
@@ -108,14 +150,14 @@
         </div>
       </section>
 
-      <el-row :gutter="18" class="workspace-streams">
-        <el-col :xs="24" :xl="12">
+      <template #secondary>
+        <div class="aside-stack">
           <RecentList
-            title="快捷继续"
-            description="当前直接消费真实最近访问记录；收藏保留独立心智，不混入快捷继续。"
-            :items="quickContinueItems"
-            empty-title="暂无可继续事项"
-            empty-description="访问任意页面后，这里会自动出现最近访问记录。"
+            title="我的收藏"
+            description="这里展示已收藏的常用页面，方便直接进入高频入口。"
+            :items="favoriteItems"
+            empty-title="暂无收藏入口"
+            empty-description="在页面右上角收藏常用页面后，这里会自动出现。"
           >
             <template #item="{ item }">
               <div class="stream-item">
@@ -130,40 +172,16 @@
                   <div class="stream-item__title">{{ item.title }}</div>
                   <p class="stream-item__description">{{ item.description }}</p>
                 </div>
-                <el-button text type="primary" @click="navigateTo(item.route)">继续</el-button>
+                <div class="stream-item__actions">
+                  <el-button text type="primary" @click="navigateTo(item.route)">打开</el-button>
+                  <el-button text type="danger" @click="productivityStore.removeFavorite(item.fullPath)">移除</el-button>
+                </div>
               </div>
             </template>
           </RecentList>
-        </el-col>
-
-        <el-col :xs="24" :xl="12">
-          <RecentList
-            title="风险提醒 / 最近动态"
-            description="失败执行、异常和平台动态当前以轻量占位结构展示，不提前做平台级聚合中心。"
-            :items="riskFeedItems"
-            empty-title="暂无风险提醒"
-            empty-description="当前没有可展示的轻量提醒。"
-          >
-            <template #item="{ item }">
-              <div class="stream-item">
-                <div class="stream-item__icon" :class="`accent-${item.accent}`">
-                  <el-icon><component :is="item.icon" /></el-icon>
-                </div>
-                <div class="stream-item__body">
-                  <div class="stream-item__top">
-                    <span class="stream-item__type">{{ item.type }}</span>
-                    <span class="stream-item__tag">{{ item.tag }}</span>
-                  </div>
-                  <div class="stream-item__title">{{ item.title }}</div>
-                  <p class="stream-item__description">{{ item.description }}</p>
-                </div>
-                <el-button text type="primary" @click="navigateTo(item.route)">查看</el-button>
-              </div>
-            </template>
-          </RecentList>
-        </el-col>
-      </el-row>
-    </template>
+        </div>
+      </template>
+    </DashboardShell>
   </div>
 </template>
 
@@ -173,7 +191,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useProductivityStore } from '@/stores/productivity'
 import {
-  Bell,
   ChatDotRound,
   Clock,
   Collection,
@@ -184,13 +201,13 @@ import {
   Monitor,
   Setting,
   Cellphone,
-  Warning,
   Tools,
   User
 } from '@element-plus/icons-vue'
 import { TOP_LEVEL_NAVIGATION } from '@/config/navigation'
 import { getModuleEntry, getModuleLabel } from '@/router/route-meta'
 import { QuickActionCard, RecentList, StatCard } from '@/components/platform-shared'
+import { DashboardShell } from '@/components/page-shells'
 import { StateEmpty, StateLoading, UI_PAGE_STATE } from '@/components/ui-states'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 import { buildDeeplinkLocation } from '@/router/deeplink'
@@ -212,23 +229,26 @@ const coreModuleDefinitions = [
   { key: 'system-management', icon: User, accent: 'purple', badge: '系统' }
 ]
 
+const iconAccentMap = {
+  house: { icon: FolderOpened, accent: 'cyan' },
+  folder: { icon: FolderOpened, accent: 'cyan' },
+  'folder-opened': { icon: FolderOpened, accent: 'cyan' },
+  link: { icon: Link, accent: 'blue' },
+  monitor: { icon: Monitor, accent: 'green' },
+  setting: { icon: Setting, accent: 'slate' },
+  chat: { icon: ChatDotRound, accent: 'purple' },
+  'magic-stick': { icon: MagicStick, accent: 'cyan' },
+  'data-analysis': { icon: DataLine, accent: 'orange' },
+  user: { icon: User, accent: 'purple' }
+}
+
 const userLabel = computed(() => userStore.user?.username || '平台成员')
 
 const greetingText = computed(() => {
   const hour = new Date().getHours()
-
-  if (hour < 11) {
-    return '早上好'
-  }
-
-  if (hour < 14) {
-    return '中午好'
-  }
-
-  if (hour < 18) {
-    return '下午好'
-  }
-
+  if (hour < 11) return '早上好'
+  if (hour < 14) return '中午好'
+  if (hour < 18) return '下午好'
   return '晚上好'
 })
 
@@ -239,13 +259,15 @@ const workModeText = computed(() => {
 })
 
 const currentWorkNote = computed(() => {
-  return `${userLabel.value}，建议优先从待处理事项或最近继续入口开始，再进入具体模块。`
+  if (productivityStore.quickContinueItems.length > 0) {
+    return `${userLabel.value}，建议先从“快捷继续”或“我的收藏”进入，再切到具体模块继续处理。`
+  }
+  return `${userLabel.value}，可以先从核心模块入口进入，再逐步建立自己的最近访问和收藏入口。`
 })
 
 const coreModules = computed(() => {
   return coreModuleDefinitions.map((item) => {
     const navMeta = topLevelNavMap.get(item.key)
-
     return {
       ...item,
       title: navMeta?.title || item.key,
@@ -255,25 +277,9 @@ const coreModules = computed(() => {
   })
 })
 
-const iconAccentMap = {
-  house: { icon: FolderOpened, accent: 'cyan' },
-  folder: { icon: FolderOpened, accent: 'cyan' },
-  'folder-opened': { icon: FolderOpened, accent: 'cyan' },
-  link: { icon: Link, accent: 'blue' },
-  monitor: { icon: Monitor, accent: 'green' },
-  setting: { icon: Setting, accent: 'slate' },
-  chat: { icon: ChatDotRound, accent: 'purple' },
-  bell: { icon: Bell, accent: 'blue' },
-  warning: { icon: Warning, accent: 'orange' },
-  'magic-stick': { icon: MagicStick, accent: 'cyan' },
-  'data-analysis': { icon: DataLine, accent: 'orange' },
-  user: { icon: User, accent: 'purple' }
-}
-
 const quickContinueItems = computed(() => {
   return productivityStore.quickContinueItems.map((item) => {
     const visual = iconAccentMap[item.icon] || { icon: FolderOpened, accent: 'cyan' }
-
     return {
       id: item.id,
       type: '最近访问',
@@ -281,134 +287,124 @@ const quickContinueItems = computed(() => {
       title: item.title,
       description: item.summary || '继续回到最近访问的页面。',
       route: item.fullPath,
+      fullPath: item.fullPath,
       icon: visual.icon,
       accent: visual.accent
     }
   })
 })
 
-const riskFeedItems = computed(() => ([
-  {
-    id: 'risk-failed-execution',
-    type: '风险提醒',
-    tag: '占位',
-    title: '最近失败执行待回看',
-    description: '后续可接执行中心或模块结果页真实失败记录，本轮仅提供稳定落位。',
-    route: '/api-testing/history',
-    icon: Warning,
-    accent: 'orange'
-  },
-  {
-    id: 'risk-follow-up',
-    type: '待跟进',
-    tag: '占位',
-    title: '评审列表存在待处理项',
-    description: '后续可自然接入测试设计域的待处理汇总，本轮先提供工作台提醒结构。',
-    route: '/ai-generation/reviews',
-    icon: Bell,
-    accent: 'cyan'
-  },
-  {
-    id: 'risk-platform-dynamic',
-    type: '最近动态',
-    tag: '说明',
-    title: '工作台已接入统一共享组件',
-    description: '首页继续复用 QuickActionCard、StatCard 和 RecentList，不再生长新的首页专用体系。',
-    route: '/home',
-    icon: Collection,
-    accent: 'green'
-  }
-]))
+const favoriteItems = computed(() => {
+  return productivityStore.favorites.map((item) => {
+    const visual = iconAccentMap[item.icon] || { icon: Collection, accent: 'purple' }
+    return {
+      id: item.id,
+      type: '收藏入口',
+      tag: getModuleLabel(item.module) || '常用页面',
+      title: item.title,
+      description: item.summary || '已收藏的常用页面。',
+      route: item.fullPath,
+      fullPath: item.fullPath,
+      icon: visual.icon,
+      accent: visual.accent
+    }
+  })
+})
 
 const overviewCards = computed(() => ([
   {
-    key: 'todo',
-    title: '我的待处理',
-    value: 3,
-    description: '阶段 1 占位数据，后续对接真实待办与待处理流。',
-    icon: Bell,
+    key: 'recent-visits',
+    title: '最近访问',
+    value: productivityStore.recentVisits.length,
+    description: '真实本地记录，自动收集最近访问页面。',
+    icon: Clock,
     accent: 'blue'
   },
   {
-    key: 'risk',
-    title: '最近失败 / 风险',
-    value: 2,
-    description: '当前按工作台占位结构展示，不提前建设平台级运营看板。',
-    icon: Warning,
-    accent: 'orange'
+    key: 'quick-continue',
+    title: '快捷继续',
+    value: quickContinueItems.value.length,
+    description: '首页直接展示最近可继续的工作入口。',
+    icon: Tools,
+    accent: 'green'
   },
   {
-    key: 'activity',
-    title: '最近活动量',
-    value: riskFeedItems.value.length,
-    description: '当前展示工作台轻量动态条目数。',
-    icon: Clock,
+    key: 'favorites',
+    title: '我的收藏',
+    value: favoriteItems.value.length,
+    description: '来自真实收藏能力，不再展示占位卡片。',
+    icon: Collection,
     accent: 'purple'
   },
   {
     key: 'modules',
     title: '已接入工作域',
     value: coreModules.value.length,
-    description: '该数据来自平台导航真源，属于当前真实接入数。',
+    description: '来自平台导航真源的真实模块入口数。',
     icon: DataLine,
-    accent: 'green'
+    accent: 'orange'
   }
 ]))
 
-const myWorkCards = computed(() => ([
-  {
-    key: 'pending',
-    title: '待处理事项',
-    description: '优先回到项目、用例或评审继续推进当前工作。',
-    badge: '3',
-    icon: Bell,
-    accent: 'blue',
-    route: '',
-    note: '阶段 1 占位待办'
-  },
-  {
-    key: 'follow-up',
-    title: '待跟进',
-    description: '平台级工作台先提示需要继续确认和回看的事项。',
-    badge: '2',
-    icon: Warning,
-    accent: 'orange',
-    route: '',
-    note: '阶段 1 占位跟进项'
-  },
-  {
-    key: 'continue-design',
-    title: '继续当前工作',
-    description: '直接回到测试设计模块，继续项目、用例和评审处理。',
-    badge: '入口',
-    icon: Tools,
-    accent: 'green',
-    route: '/ai-generation/projects',
-    note: '当前可直接继续的入口'
-  }
-]))
+const myWorkCards = computed(() => {
+  const latestVisit = quickContinueItems.value[0]
+  const latestFavorite = favoriteItems.value[0]
+
+  return [
+    {
+      key: 'continue-latest',
+      title: latestVisit ? '继续最近页面' : '等待最近访问',
+      description: latestVisit ? latestVisit.title : '访问任意业务页面后，这里会自动出现可继续入口。',
+      badge: latestVisit ? latestVisit.tag : '空',
+      icon: latestVisit?.icon || Clock,
+      accent: latestVisit?.accent || 'blue',
+      route: latestVisit?.route || '',
+      note: latestVisit ? '直接回到刚刚工作过的页面' : '当前还没有最近访问记录'
+    },
+    {
+      key: 'open-favorite',
+      title: latestFavorite ? '打开常用收藏' : '建立常用收藏',
+      description: latestFavorite ? latestFavorite.title : '在常用页面右上角收藏后，这里会自动显示最近收藏入口。',
+      badge: latestFavorite ? latestFavorite.tag : '提示',
+      icon: latestFavorite?.icon || Collection,
+      accent: latestFavorite?.accent || 'purple',
+      route: latestFavorite?.route || '',
+      note: latestFavorite ? '优先进入高频页面' : '收藏能力已经接入首页展示'
+    },
+    {
+      key: 'continue-design',
+      title: '进入测试设计',
+      description: '直接回到测试设计主链，继续项目、用例和评审处理。',
+      badge: '入口',
+      icon: MagicStick,
+      accent: 'cyan',
+      route: '/ai-generation/projects',
+      note: '当前最稳定的继续工作入口'
+    }
+  ]
+})
 
 const homePageState = computed(() => {
   if (Boolean(userStore.accessToken) && !userStore.user) {
     return UI_PAGE_STATE.LOADING
   }
-
   return coreModules.value.length ? UI_PAGE_STATE.READY : UI_PAGE_STATE.EMPTY
 })
 
 usePlatformPageHeader(() => ({
-  description: '平台工作台优先承接继续工作、模块入口和轻量提醒，不复制各模块 dashboard。',
+  description: '平台工作台优先承接继续工作、常用入口和轻量信息，不复制各模块 dashboard。',
   statusTags: [
     {
       label: '工作台首页',
       type: 'primary'
     }
   ],
-  helperText: '首页主体只做平台级工作台；最近访问与收藏已接入第一版本地能力，全局搜索和项目上下文仍保留后续接入边界。',
+  helperText: '首页已经接入最近访问和收藏能力；项目上下文、平台待办和全局搜索继续保持独立接入边界。',
   metaItems: [
     { label: '当前用户', value: userLabel.value },
     { label: '工作域', value: `${coreModules.value.length} 个` },
-    { label: '快捷继续', value: `${productivityStore.quickContinueItems.length} 条最近访问` }
+    { label: '最近访问', value: `${productivityStore.recentVisits.length} 条` },
+    { label: '我的收藏', value: `${favoriteItems.value.length} 条` }
   ],
   actions: [
     {
@@ -451,10 +447,11 @@ const navigateTo = (path) => {
 
 <style scoped lang="scss">
 .home-workbench {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
   min-height: 100%;
+}
+
+.home-shell {
+  gap: 24px;
 }
 
 .welcome-panel {
@@ -524,10 +521,6 @@ const navigateTo = (path) => {
   background: rgba(226, 232, 240, 0.6);
   color: #475569;
   font-size: 12px;
-}
-
-.welcome-panel__aside {
-  min-width: 0;
 }
 
 .context-card {
@@ -605,8 +598,28 @@ const navigateTo = (path) => {
   gap: 18px;
 }
 
-.workspace-streams {
-  margin-bottom: 8px;
+.aside-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+:deep(.home-shell .shell-main),
+:deep(.home-shell .shell-secondary) {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+:deep(.home-shell .shell-body.has-secondary) {
+  grid-template-columns: minmax(0, 1.72fr) minmax(320px, 0.9fr);
+  align-items: start;
+}
+
+:deep(.home-shell .shell-secondary) {
+  position: sticky;
+  top: 0;
 }
 
 .stream-item {
@@ -658,6 +671,11 @@ const navigateTo = (path) => {
   color: #047857;
 }
 
+.stream-item__icon.accent-slate {
+  background: rgba(100, 116, 139, 0.16);
+  color: #334155;
+}
+
 .stream-item__body {
   flex: 1;
   min-width: 0;
@@ -692,6 +710,13 @@ const navigateTo = (path) => {
   line-height: 1.7;
 }
 
+.stream-item__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
 .quick-note {
   font-size: 12px;
   color: #64748b;
@@ -705,13 +730,17 @@ const navigateTo = (path) => {
   .my-work-grid {
     grid-template-columns: 1fr;
   }
+
+  :deep(.home-shell .shell-body.has-secondary) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :deep(.home-shell .shell-secondary) {
+    position: static;
+  }
 }
 
 @media (max-width: 768px) {
-  .home-workbench {
-    gap: 20px;
-  }
-
   .welcome-panel {
     padding: 18px;
   }
@@ -722,6 +751,16 @@ const navigateTo = (path) => {
 
   .module-grid {
     grid-template-columns: 1fr;
+  }
+
+  .stream-item {
+    flex-wrap: wrap;
+  }
+
+  .stream-item__actions {
+    width: 100%;
+    flex-direction: row;
+    justify-content: flex-start;
   }
 }
 </style>

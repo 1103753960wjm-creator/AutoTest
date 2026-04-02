@@ -38,6 +38,33 @@
       </el-form>
     </div>
 
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="fetchTestPlans"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="resetFilters"
+    />
+    <StateEmpty
+      v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+      compact
+      :primary-action-text="$t('execution.newPlan')"
+      @primary-action="openCreatePlanDialog"
+    />
+
+    <div v-else class="table-container">
     <UnifiedListTable
       v-model:currentPage="currentPage"
       v-model:pageSize="pageSize"
@@ -98,6 +125,7 @@
         </el-button>
       </template>
     </UnifiedListTable>
+    </div>
 
     <!-- 创建测试计划对话框 -->
     <el-dialog :title="$t('execution.createPlanDialog')" v-model="isCreatePlanDialogOpen" width="600px" :close-on-click-modal="false">
@@ -213,6 +241,7 @@ import { Plus, Delete } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { buildDeeplinkLocation } from '@/router/deeplink'
 import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const { t } = useI18n()
 
@@ -230,6 +259,9 @@ const loadingTestcases = ref(false)
 const users = ref([])
 const selectedPlans = ref([])
 const isDeleting = ref(false)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 
 // 分页
 const currentPage = ref(1)
@@ -240,6 +272,25 @@ const total = ref(0)
 const filters = reactive({
   project: null,
   is_active: null
+})
+
+const hasActiveFilter = computed(() => (
+  filters.project !== null ||
+  filters.is_active !== null
+))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (testPlans.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
 })
 
 // 表单
@@ -294,6 +345,9 @@ const planRules = {
 
 const fetchTestPlans = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
   try {
     const params = {
       page: currentPage.value,
@@ -310,10 +364,25 @@ const fetchTestPlans = async () => {
     const response = await api.get('/executions/plans/', { params })
     testPlans.value = response.data.results || response.data || []
     total.value = response.data.count || testPlans.value.length
+    const maxPage = Math.max(1, Math.ceil((total.value || 0) / pageSize.value || 1))
+    if (currentPage.value > maxPage) {
+      currentPage.value = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(t('execution.fetchListFailed'))
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+  if (shouldRefetch) {
+    await fetchTestPlans()
   }
 }
 
@@ -698,6 +767,15 @@ onMounted(() => {
   padding: 16px;
   background: #f8f9fa;
   border-radius: 4px;
+}
+
+.table-container {
+  overflow: hidden;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 .pagination {

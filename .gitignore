@@ -70,3 +70,7 @@ docker-compose*.yml
 nginx.conf
 Makefile
 build-multiplatform.sh
+
+# Logs
+backend.log
+*.log

@@ -1,62 +1,74 @@
 <template>
   <div class="environment-table">
-    <el-table :data="data" v-loading="loading" style="width: 100%">
-      <el-table-column prop="name" :label="$t('apiTesting.component.environmentTable.environmentName')" min-width="200" />
+    <UnifiedListTable
+      v-model:currentPage="innerCurrentPage"
+      v-model:pageSize="innerPageSize"
+      :total="total"
+      :page-sizes="pageSizes"
+      :data="data"
+      :loading="loading"
+      row-key="id"
+      selection-mode="none"
+      :actions="{ view: false, edit: false, delete: false }"
+      :action-column-width="280"
+      @page-change="emitPageChange"
+    >
+      <el-table-column prop="name" :label="$t('apiTesting.component.environmentTable.environmentName')" min-width="200" show-overflow-tooltip />
       <el-table-column prop="scope" :label="$t('apiTesting.component.environmentTable.scope')" width="120">
-        <template #default="scope">
-          <el-tag :type="scope.row.scope === 'GLOBAL' ? 'primary' : 'success'">
-            {{ scope.row.scope === 'GLOBAL' ? $t('apiTesting.component.environmentTable.global') : $t('apiTesting.component.environmentTable.local') }}
+        <template #default="{ row }">
+          <el-tag :type="row.scope === 'GLOBAL' ? 'primary' : 'success'">
+            {{ row.scope === 'GLOBAL' ? $t('apiTesting.component.environmentTable.global') : $t('apiTesting.component.environmentTable.local') }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column v-if="scope === 'LOCAL'" prop="project_name" :label="$t('apiTesting.component.environmentTable.relatedProject')" width="150" />
+      <el-table-column
+        v-if="scope === 'LOCAL'"
+        prop="project_name"
+        :label="$t('apiTesting.component.environmentTable.relatedProject')"
+        width="150"
+      />
       <el-table-column :label="$t('apiTesting.component.environmentTable.variableCount')" width="100">
-        <template #default="scope">
-          {{ Object.keys(scope.row.variables || {}).length }}
+        <template #default="{ row }">
+          {{ Object.keys(row.variables || {}).length }}
         </template>
       </el-table-column>
-      <el-table-column prop="is_active" :label="$t('apiTesting.component.environmentTable.status')" width="80">
-        <template #default="scope">
-          <el-tag v-if="scope.row.is_active" type="success" size="small">{{ $t('apiTesting.component.environmentTable.activated') }}</el-tag>
+      <el-table-column prop="is_active" :label="$t('apiTesting.component.environmentTable.status')" width="100">
+        <template #default="{ row }">
+          <el-tag v-if="row.is_active" type="success" size="small">{{ $t('apiTesting.component.environmentTable.activated') }}</el-tag>
           <el-tag v-else type="info" size="small">{{ $t('apiTesting.component.environmentTable.notActivated') }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="created_by.username" :label="$t('apiTesting.component.environmentTable.createdBy')" width="120" />
       <el-table-column prop="created_at" :label="$t('apiTesting.component.environmentTable.createdAt')" width="160">
-        <template #default="scope">
-          {{ formatDate(scope.row.created_at) }}
+        <template #default="{ row }">
+          {{ formatDate(row.created_at) }}
         </template>
       </el-table-column>
-      <el-table-column :label="$t('apiTesting.component.environmentTable.operation')" width="250" fixed="right">
-        <template #default="scope">
-          <el-button-group>
-            <el-button
-              v-if="!scope.row.is_active"
-              link
-              type="success"
-              @click="$emit('activate', scope.row)"
-              size="small"
-            >
-              {{ $t('apiTesting.component.environmentTable.activate') }}
-            </el-button>
-            <el-button link type="primary" @click="viewVariables(scope.row)" size="small">
-              {{ $t('apiTesting.component.environmentTable.viewVariables') }}
-            </el-button>
-            <el-button link type="primary" @click="$emit('edit', scope.row)" size="small">
-              {{ $t('apiTesting.component.environmentTable.edit') }}
-            </el-button>
-            <el-button link type="primary" @click="$emit('duplicate', scope.row)" size="small">
-              {{ $t('apiTesting.component.environmentTable.copy') }}
-            </el-button>
-            <el-button link type="danger" @click="$emit('delete', scope.row)" size="small">
-              {{ $t('apiTesting.component.environmentTable.delete') }}
-            </el-button>
-          </el-button-group>
-        </template>
-      </el-table-column>
-    </el-table>
+      <template #actions="{ row }">
+        <el-button
+          v-if="!row.is_active"
+          link
+          type="success"
+          size="small"
+          @click="$emit('activate', row)"
+        >
+          {{ $t('apiTesting.component.environmentTable.activate') }}
+        </el-button>
+        <el-button link type="primary" size="small" @click="viewVariables(row)">
+          {{ $t('apiTesting.component.environmentTable.viewVariables') }}
+        </el-button>
+        <el-button link type="primary" size="small" @click="$emit('edit', row)">
+          {{ $t('apiTesting.component.environmentTable.edit') }}
+        </el-button>
+        <el-button link type="primary" size="small" @click="$emit('duplicate', row)">
+          {{ $t('apiTesting.component.environmentTable.copy') }}
+        </el-button>
+        <el-button link type="danger" size="small" @click="$emit('delete', row)">
+          {{ $t('apiTesting.component.environmentTable.delete') }}
+        </el-button>
+      </template>
+    </UnifiedListTable>
 
-    <!-- 查看变量对话框 -->
     <el-dialog
       v-model="showViewDialog"
       :title="$t('apiTesting.component.environmentTable.environmentVariables')"
@@ -104,10 +116,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import dayjs from 'dayjs'
+import { UnifiedListTable } from '@/components/platform-shared'
 
-defineProps({
+const props = defineProps({
   data: {
     type: Array,
     default: () => []
@@ -119,22 +132,56 @@ defineProps({
   scope: {
     type: String,
     default: 'GLOBAL'
+  },
+  currentPage: {
+    type: Number,
+    default: 1
+  },
+  pageSize: {
+    type: Number,
+    default: 20
+  },
+  total: {
+    type: Number,
+    default: 0
+  },
+  pageSizes: {
+    type: Array,
+    default: () => [10, 20, 50, 100]
   }
 })
 
-defineEmits(['edit', 'delete', 'activate', 'duplicate'])
+const emit = defineEmits([
+  'edit',
+  'delete',
+  'activate',
+  'duplicate',
+  'update:currentPage',
+  'update:pageSize',
+  'page-change'
+])
 
 const showViewDialog = ref(false)
 const viewingEnvironment = ref(null)
+const innerCurrentPage = ref(props.currentPage)
+const innerPageSize = ref(props.pageSize)
+
+watch(() => props.currentPage, (value) => {
+  innerCurrentPage.value = value
+})
+
+watch(() => props.pageSize, (value) => {
+  innerPageSize.value = value
+})
 
 const formatDate = (dateString) => {
-  return dayjs(dateString).format('YYYY-MM-DD HH:mm')
+  return dateString ? dayjs(dateString).format('YYYY-MM-DD HH:mm') : '-'
 }
 
 const formatVariables = (variables) => {
   if (!variables || typeof variables !== 'object') return []
-  
-  return Object.keys(variables).map(key => {
+
+  return Object.keys(variables).map((key) => {
     const value = variables[key]
     if (typeof value === 'object') {
       return {
@@ -142,12 +189,11 @@ const formatVariables = (variables) => {
         initialValue: value.initialValue || '',
         currentValue: value.currentValue || value.initialValue || ''
       }
-    } else {
-      return {
-        key,
-        initialValue: value || '',
-        currentValue: value || ''
-      }
+    }
+    return {
+      key,
+      initialValue: value || '',
+      currentValue: value || ''
     }
   })
 }
@@ -155,6 +201,12 @@ const formatVariables = (variables) => {
 const viewVariables = (environment) => {
   viewingEnvironment.value = environment
   showViewDialog.value = true
+}
+
+const emitPageChange = ({ currentPage, pageSize }) => {
+  emit('update:currentPage', currentPage)
+  emit('update:pageSize', pageSize)
+  emit('page-change', { currentPage, pageSize })
 }
 </script>
 

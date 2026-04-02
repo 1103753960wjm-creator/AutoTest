@@ -90,15 +90,34 @@
 
     <!-- AI任务列表 -->
     <div class="testcases-section">
-      <div v-if="isLoading" class="loading-state">
-        <p>{{ $t('generatedTestCases.loadingTasks') }}</p>
-      </div>
-
-      <div v-else-if="tasks.length === 0" class="empty-state">
-        <div class="empty-icon">📝</div>
-        <h3>{{ $t('generatedTestCases.noTasks') }}</h3>
-        <p>{{ $t('generatedTestCases.emptyHint') }}<router-link to="/ai-generation/requirement-analysis">{{ $t('generatedTestCases.aiGeneration') }}</router-link>{{ $t('generatedTestCases.createTask') }}</p>
-      </div>
+      <StateLoading
+        v-if="pageState === uiPageState.LOADING"
+        compact
+        :description="$t('generatedTestCases.loadingTasks')" />
+      <StateForbidden
+        v-else-if="pageState === uiPageState.FORBIDDEN"
+        compact
+        :primary-action-text="$t('common.uiState.actions.goHome')"
+        @primary-action="$router.push('/home')" />
+      <StateError
+        v-else-if="pageState === uiPageState.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || $t('common.uiState.error.description')"
+        @primary-action="loadTasks" />
+      <StateSearchEmpty
+        v-else-if="pageState === uiPageState.SEARCH_EMPTY"
+        compact
+        :primary-action-text="$t('common.uiState.actions.clearFilters')"
+        @primary-action="resetListFilters" />
+      <StateEmpty
+        v-else-if="pageState === uiPageState.EMPTY"
+        compact>
+        <template #actions>
+          <el-button type="primary" @click="$router.push('/ai-generation/requirement-analysis')">
+            {{ $t('generatedTestCases.aiGeneration') }}
+          </el-button>
+        </template>
+      </StateEmpty>
 
       <div v-else class="testcases-table">
         <UnifiedListTable
@@ -585,13 +604,18 @@ import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
 import { ArrowDown } from '@element-plus/icons-vue'
 import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 export default {
   name: 'GeneratedTestCaseList',
-  components: { ArrowDown, UnifiedListTable },
+  components: { ArrowDown, UnifiedListTable, StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty },
   data() {
     return {
+      uiPageState: UI_PAGE_STATE,
       isLoading: false,
+      hasLoaded: false,
+      requestState: UI_PAGE_STATE.READY,
+      requestErrorMessage: '',
       tasks: [], // 改为任务列表
       selectedStatus: '',
       selectedProject: '',
@@ -638,6 +662,24 @@ export default {
   },
 
   computed: {
+    pageState() {
+      if (this.isLoading && !this.hasLoaded) {
+        return UI_PAGE_STATE.LOADING
+      }
+      if (this.requestState === UI_PAGE_STATE.FORBIDDEN) {
+        return UI_PAGE_STATE.FORBIDDEN
+      }
+      if (this.requestState === UI_PAGE_STATE.REQUEST_ERROR) {
+        return UI_PAGE_STATE.REQUEST_ERROR
+      }
+      if (!this.tasks.length) {
+        return this.hasActiveFilter ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+      }
+      return UI_PAGE_STATE.READY
+    },
+    hasActiveFilter() {
+      return Boolean(this.selectedProject || this.selectedStatus)
+    },
     currentProjectLabel() {
       if (!this.selectedProject) {
         return this.$route.query.projectName || '全部项目'
@@ -707,6 +749,9 @@ export default {
 
     async loadTasks() {
       this.isLoading = true
+      this.requestState = UI_PAGE_STATE.READY
+      this.requestErrorMessage = ''
+      let shouldRefetch = false
       try {
         let url = '/requirement-analysis/testcase-generation/'
         const params = new URLSearchParams()
@@ -736,6 +781,14 @@ export default {
           this.tasks = response.data || []
           this.pagination.total = this.tasks.length
         }
+
+        const maxPage = Math.max(1, Math.ceil((this.pagination.total || 0) / this.pagination.pageSize || 1))
+        if (this.pagination.currentPage > maxPage) {
+          this.pagination.currentPage = maxPage
+          shouldRefetch = true
+          return
+        }
+        this.hasLoaded = true
         
         // 更新统计数据（统计所有数据，不只是当前页）
         this.updateStats()
@@ -744,10 +797,18 @@ export default {
         console.error(this.$t('generatedTestCases.loadTasksFailed'), error)
         this.tasks = []
         this.pagination.total = 0
+        this.requestState = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+        this.requestErrorMessage = error.response?.data?.detail || error.message || ''
+        this.hasLoaded = true
       } finally {
-        this.isLoading = false
-        // 清空选择（因为任务列表已更新）
-        this.selectedTasks = []
+        if (!shouldRefetch) {
+          this.isLoading = false
+          // 清空选择（因为任务列表已更新）
+          this.selectedTasks = []
+        }
+      }
+      if (shouldRefetch) {
+        await this.loadTasks()
       }
     },
 
@@ -913,6 +974,13 @@ export default {
     },
 
     handleProjectChange() {
+      this.pagination.currentPage = 1
+      this.loadTasks()
+    },
+
+    resetListFilters() {
+      this.selectedProject = ''
+      this.selectedStatus = ''
       this.pagination.currentPage = 1
       this.loadTasks()
     },

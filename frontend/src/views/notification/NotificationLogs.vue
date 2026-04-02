@@ -57,14 +57,41 @@
     </div>
 
     <!-- 通知列表 -->
-    <div class="logs-table-container">
-      <el-table
+    <StateLoading v-if="pageState === uiPageState.LOADING" compact />
+    <StateForbidden
+        v-else-if="pageState === uiPageState.FORBIDDEN"
+        compact
+        :primary-action-text="$t('common.uiState.actions.goHome')"
+        @primary-action="$router.push('/home')"
+    />
+    <StateError
+        v-else-if="pageState === uiPageState.REQUEST_ERROR"
+        compact
+        :description="requestErrorMessage || $t('common.uiState.error.description')"
+        @primary-action="fetchLogsData"
+    />
+    <StateSearchEmpty
+        v-else-if="pageState === uiPageState.SEARCH_EMPTY"
+        compact
+        :primary-action-text="$t('common.uiState.actions.clearFilters')"
+        @primary-action="handleReset"
+    />
+    <StateEmpty v-else-if="pageState === uiPageState.EMPTY" compact />
+    <div v-else class="logs-table-container">
+      <UnifiedListTable
+          v-model:currentPage="pagination.currentPage"
+          v-model:pageSize="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
           :data="logsData"
-          v-loading="loading"
-          :element-loading-text="$t('notification.logs.loading')"
-          stripe
-          style="width: 100%"
+          :loading="loading"
+          :default-sort="{ prop: sortParams.prop, order: sortParams.order }"
+          row-key="id"
+          selection-mode="none"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="120"
           @sort-change="handleSortChange"
+          @page-change="fetchLogsData"
       >
         <el-table-column
             prop="task_name"
@@ -134,23 +161,17 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column
-            :label="$t('notification.logs.columns.operation')"
-            fixed="right"
-            width="120"
-        >
-          <template #default="{ row }">
-            <el-button
-                type="primary"
-                link
-                size="small"
-                @click="viewDetail(row)"
-            >
-              {{ $t('notification.logs.viewDetail') }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+        <template #actions="{ row }">
+          <el-button
+              type="primary"
+              link
+              size="small"
+              @click="viewDetail(row)"
+          >
+            {{ $t('notification.logs.viewDetail') }}
+          </el-button>
+        </template>
+      </UnifiedListTable>
 
       <!-- 分页 -->
       <div class="pagination-container">
@@ -276,12 +297,20 @@ import {Search} from '@element-plus/icons-vue'
 import {ref, reactive, onMounted, computed} from 'vue'
 import {useI18n} from 'vue-i18n'
 import {ElMessage} from 'element-plus'
-import axios from 'axios'
+import api from '@/utils/api'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 export default {
   name: 'NotificationLogs',
   components: {
-    Search
+    Search,
+    UnifiedListTable,
+    StateEmpty,
+    StateError,
+    StateForbidden,
+    StateLoading,
+    StateSearchEmpty
   },
   setup() {
     const {t, locale} = useI18n()
@@ -291,6 +320,9 @@ export default {
     const logsData = ref([])
     const detailDialogVisible = ref(false)
     const selectedLog = ref(null)
+    const hasLoaded = ref(false)
+    const requestState = ref(`${UI_PAGE_STATE.READY}`)
+    const requestErrorMessage = ref('')
 
     // 搜索表单
     const searchForm = reactive({
@@ -312,9 +344,32 @@ export default {
       order: 'descending'
     })
 
+    const hasActiveFilter = computed(() => Boolean(
+      searchForm.taskName ||
+      searchForm.status ||
+      (searchForm.dateRange && searchForm.dateRange.length === 2)
+    ))
+
+    const pageState = computed(() => {
+      let state = String(UI_PAGE_STATE.READY)
+      if (loading.value && !hasLoaded.value) {
+        state = UI_PAGE_STATE.LOADING
+      } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+        state = UI_PAGE_STATE.FORBIDDEN
+      } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+        state = UI_PAGE_STATE.REQUEST_ERROR
+      } else if (logsData.value.length === 0) {
+        state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+      }
+      return state
+    })
+
     // 获取通知日志数据
     const fetchLogsData = async () => {
       loading.value = true
+      requestState.value = UI_PAGE_STATE.READY
+      requestErrorMessage.value = ''
+      let shouldRefetch = false
       try {
         const params = {
           page: pagination.currentPage,
@@ -334,14 +389,29 @@ export default {
           params.status = searchForm.status
         }
 
-        const response = await axios.get('/api/api-testing/notification-logs/', {params})
+        const response = await api.get('/api-testing/notification-logs/', {params})
         logsData.value = response.data.results || []
         pagination.total = response.data.count || 0
+        const maxPage = Math.max(1, Math.ceil((pagination.total || 0) / pagination.pageSize || 1))
+        if (pagination.currentPage > maxPage) {
+          pagination.currentPage = maxPage
+          shouldRefetch = true
+          return
+        }
+        hasLoaded.value = true
       } catch (error) {
         console.error('Fetch notification logs failed:', error)
         ElMessage.error(t('notification.logs.messages.fetchFailed'))
+        requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+        requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+        hasLoaded.value = true
       } finally {
-        loading.value = false
+        if (!shouldRefetch) {
+          loading.value = false
+        }
+      }
+      if (shouldRefetch) {
+        await fetchLogsData()
       }
     }
 
@@ -382,7 +452,7 @@ export default {
     // 查看详情
     const viewDetail = async (row) => {
       try {
-        const response = await axios.get(`/api/api-testing/notification-logs/${row.id}/detail/`)
+        const response = await api.get(`/api-testing/notification-logs/${row.id}/detail/`)
         selectedLog.value = response.data
         detailDialogVisible.value = true
       } catch (error) {
@@ -574,10 +644,14 @@ export default {
       logsData,
       detailDialogVisible,
       selectedLog,
+      uiPageState: UI_PAGE_STATE,
+      pageState,
+      requestErrorMessage,
       searchForm,
       pagination,
       sortParams,
       parsedNotificationContent,
+      fetchLogsData,
       handleSearch,
       handleReset,
       handleSizeChange,
@@ -620,12 +694,16 @@ export default {
 
 .logs-table-container {
   margin-top: 20px;
+  overflow: hidden;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 .pagination-container {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
+  display: none;
 }
 
 .notification-detail-form :deep(.el-form-item) {
