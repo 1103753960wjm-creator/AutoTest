@@ -17,9 +17,11 @@
         <span class="result-object-card__desc">已保存为正式测试用例的批次数量。</span>
       </div>
       <div class="result-object-card">
-        <span class="result-object-card__label">对象语义</span>
-        <strong class="result-object-card__value">生成结果对象</strong>
-        <span class="result-object-card__desc">点击任务详情可继续查看来源任务、配置摘要和结果内容。</span>
+        <span class="result-object-card__label">当前焦点任务</span>
+        <strong class="result-object-card__value">{{ $route.query.taskId || '全部结果批次' }}</strong>
+        <span class="result-object-card__desc">
+          {{ $route.query.taskId ? '当前通过来源任务进入，页面继续保持结果批次视角。' : '点击任务详情可继续查看来源任务、配置摘要和结果内容。' }}
+        </span>
       </div>
     </div>
 
@@ -233,6 +235,14 @@
             <div class="action-buttons">
               <el-button size="small" type="primary" link @click.stop="viewTaskDetail(row)">
                 {{ $t('generatedTestCases.viewDetail') }}
+              </el-button>
+              <el-button
+                v-if="row.project"
+                size="small"
+                type="primary"
+                link
+                @click.stop="goToProjectCases(row)">
+                正式资产
               </el-button>
               <el-button
                 v-if="canMutateTaskResults(row)"
@@ -1117,6 +1127,21 @@ export default {
         query: {
           taskId: task.task_id,
           project: String(task.project || ''),
+          from: 'list',
+          fromPath: this.$route.fullPath,
+          fromTitle: this.$route.meta?.title || 'AI 生成用例',
+          fromModule: this.$route.meta?.module || 'test-design'
+        }
+      })
+    },
+
+    goToProjectCases(task) {
+      this.$router.push({
+        path: '/ai-generation/testcases',
+        query: {
+          project: String(task.project || ''),
+          projectName: task.project_name || '',
+          taskId: task.task_id,
           from: 'list',
           fromPath: this.$route.fullPath,
           fromTitle: this.$route.meta?.title || 'AI 生成用例',

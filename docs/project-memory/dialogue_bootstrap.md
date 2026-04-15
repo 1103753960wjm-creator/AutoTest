@@ -1,6 +1,6 @@
 # TestHub 对话启动记忆
 
-更新时间：2026-03-25
+更新时间：2026-04-15
 
 ## 1. 文件职责
 
@@ -10,8 +10,11 @@
 
 - 本文件不是正式规则来源。
 - 全局规则以 `GEMINI.md` 为准。
-- 项目规则以仓库内 `.antigravity/*.md` 为准。
-- 项目开发记忆以 `docs/project-memory/current_phase.md` 为准。
+- 项目规则以 `AGENTS.md` 与仓库内 `.cursor/*.md` 为准。
+- 阶段事实以 `docs/project-memory/current_phase.md` 为准。
+- 已冻结决策以 `docs/project-memory/decision_log.md` 为准。
+- 模块局部记忆以 `docs/project-memory/module_memory.md` 为准。
+- 最近任务交接以 `docs/project-memory/task_handoff.md` 为准。
 
 ## 2. 30 秒项目摘要
 
@@ -35,3 +38,6 @@
 - 页面壳规范：`docs/page-shell-spec.md`
 - AI 生成链路：`docs/ai-generation-chain-spec.md`
 - smoke 回归基线：`docs/platform-smoke-baseline.md`
+- 决策日志：`docs/project-memory/decision_log.md`
+- 模块记忆：`docs/project-memory/module_memory.md`
+- 任务交接：`docs/project-memory/task_handoff.md`

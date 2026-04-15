@@ -35,7 +35,7 @@
         v-if="task.task_id"
         class="secondary-btn"
         @click="goToGeneratedResults">
-        查看生成结果页
+        前往结果批次页处理
       </button>
       <button
         v-if="taskStatusAllowsCancel"
@@ -85,7 +85,12 @@
       <div class="task-context-card">
         <span class="task-context-card__label">下游入口预留</span>
         <strong class="task-context-card__value">{{ task.downstream_summary?.label || '结果层入口预留' }}</strong>
-        <span class="task-context-card__desc">{{ task.downstream_summary?.detail || '当前可继续跳往生成结果页或项目测试用例。' }}</span>
+        <span class="task-context-card__desc">{{ task.downstream_summary?.detail || '任务页当前只保留结果批次页和正式资产层入口，不继续扩成主处理战场。' }}</span>
+        <button
+          class="asset-btn"
+          @click="goToGeneratedResults">
+          前往结果批次页处理
+        </button>
       </div>
       <div class="task-context-card">
         <span class="task-context-card__label">AI 自动评审</span>
@@ -137,7 +142,7 @@
       <div class="result-preview-header" v-if="testCases.length > 0">
         <div>
           <h3>结果预览区</h3>
-          <p>本区保留任务下游结果预览与轻量处理，完整结果确认流将在后续阶段继续深化。</p>
+          <p>本区只保留任务下游结果预览与轻量处理，结果层主语义继续收口到结果批次页。</p>
           <p v-if="isResultReadonly" class="result-readonly-hint">{{ resultReadonlyHint }}</p>
         </div>
       </div>

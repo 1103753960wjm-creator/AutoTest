@@ -20,19 +20,26 @@ def _extract_ai_source_from_tags(tags):
 
 def _build_testcase_object_summaries(obj):
     ai_source = _extract_ai_source_from_tags(getattr(obj, 'tags', []))
+    project = getattr(obj, 'project', None)
+    project_id = ai_source.get('project_id') if ai_source else getattr(project, 'id', None)
+    project_name = ai_source.get('project_name') if ai_source else getattr(project, 'name', '')
+    task_id = ai_source.get('task_id') if ai_source else ''
 
     if ai_source:
         source_summary = {
             'type': 'ai',
             'label': 'AI 生成',
-            'detail': f"来源任务 {ai_source.get('task_id') or '-'}"
+            'detail': f"来源任务 {task_id or '-'}，已进入正式测试资产层。"
         }
         generation_source_summary = {
             'label': '来源于 AI 生成任务',
-            'task_id': ai_source.get('task_id') or '',
-            'project_id': ai_source.get('project_id'),
-            'project_name': ai_source.get('project_name') or '',
-            'detail': ai_source.get('source_label') or '由 AI 生成链导入'
+            'task_id': task_id or '',
+            'project_id': project_id,
+            'project_name': project_name or '',
+            'task_entry_path': f'/ai-generation/task-detail/{task_id}' if task_id else '',
+            'result_entry_path': f'/ai-generation/generated-testcases?taskId={task_id}' if task_id else '',
+            'project_entry_path': f'/ai-generation/testcases?project={project_id}' if project_id else '',
+            'detail': ai_source.get('source_label') or '由 AI 生成链导入，可继续回到来源任务或结果批次。'
         }
     else:
         source_summary = {
@@ -45,6 +52,9 @@ def _build_testcase_object_summaries(obj):
             'task_id': '',
             'project_id': None,
             'project_name': '',
+            'task_entry_path': '',
+            'result_entry_path': '',
+            'project_entry_path': f'/ai-generation/testcases?project={project.id}' if project else '',
             'detail': '后续 AI 生成任务与正式用例的回链将在此处继续收敛。'
         }
 

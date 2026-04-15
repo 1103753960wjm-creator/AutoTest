@@ -1,6 +1,21 @@
-# AutoTest 代理入口规范
+# TestHub Agent 入口规则
 
-进入仓库后，先按顺序读取并遵守以下文件：
+## 1. 文件职责
+
+本文件是 TestHub 仓库内的 agent 总入口，只负责：
+
+- 说明读取顺序
+- 说明规则优先级
+- 说明默认流程闸门
+- 说明全仓硬红线
+- 提供常用验证命令入口
+- 指引进入子目录后继续读取最近的 `AGENTS.md`
+
+本文件不承载阶段性冻结事实，也不展开具体业务域细则。
+
+## 2. 读取顺序
+
+进入仓库后，按以下顺序读取并遵守：
 
 1. `C:\Users\Administrator\.gemini\GEMINI.md`
 2. 当前仓库 `.cursor/prompt.md`
@@ -9,31 +24,88 @@
 5. 当前仓库 `.cursor/storage_rules.md`
 6. 当前仓库 `.cursor/project_rules.md`
 7. `docs/project-memory/current_phase.md`（如存在）
-8. `docs/project-memory/dialogue_bootstrap.md`（如存在，仅用于快速进入上下文，不属于正式规则层）
+8. `docs/project-memory/decision_log.md`（如存在，用于查看已冻结决策）
+9. `docs/project-memory/module_memory.md`（如存在，用于查看模块局部记忆）
+10. `docs/project-memory/task_handoff.md`（如存在，用于查看最近任务交接）
+11. `docs/project-memory/dialogue_bootstrap.md`（如存在，仅用于快速进入上下文）
 
-默认交付流程：
+## 3. 项目基线
+
+- 项目：`TestHub` 智能测试管理平台
+- 后端目录：`backend` + `apps`
+- 前端目录：`frontend`
+- 后端技术栈：Django 4.2 + Django REST Framework + MySQL + SimpleJWT + Channels + Celery
+- 前端技术栈：Vue 3 + JavaScript + Vite + Pinia + Element Plus
+
+高风险链路：
+
+- JWT 登录、退出、刷新
+- AI 配置与模型调用
+- Celery 异步执行
+- Channels / WebSocket
+- Selenium / Playwright / Airtest 执行器
+- Allure 报告
+- Webhook / 邮件通知
+
+## 4. 默认开发流程
+
+默认按以下顺序推进：
 
 1. `Spec/SDD`
 2. `TDD`
 3. `Execution`
 4. `VDD`
 
-执行要求：
+默认存在“Spec 确认闸门”：
 
-- 未完成 `Spec/SDD` 对齐前，不进入正式实现。
-- `Spec/SDD` 阶段出现不确定/歧义/取舍问题必须先询问用户，禁止 AI 自己决定后继续推进。
-- 默认存在“Spec 确认闸门”：非“小修小改”场景下，必须等待用户确认 `Spec/SDD` 后才能进入 TDD，且确认可进入 Execution 后才能正式编码（细则见 `.cursor/workflow_rules.md`）。
-- 完成编码后，必须经过 `VDD` 验证与验收核对，才能按已完成交付。
-- 开始编码前，先总结当前生效规则、范围边界和验收标准。
-- 优先复用现有目录、接口封装、返回结构和工具函数。
-- `workflow_rules.md` 不能突破 `architecture.md` 的架构红线。
-- 新增配置统一进入配置层，不得在业务模块散写硬编码地址、密钥和路径。
-- 所有新增或修改的规范文件、设计文档、任务文档、交付说明统一使用中文。
-- 所有新增或修改的代码注释统一使用中文；字段名、协议关键字、库名和第三方服务名可保留英文原文。
+- 未完成 `Spec/SDD` 对齐前，不进入正式实现
+- `Spec/SDD` 阶段存在不确定、歧义、取舍问题时，必须先询问用户
+- 非“小修小改”场景下，必须等待用户确认 `Spec/SDD` 后才能进入 `TDD`
+- 完成 `TDD` 后，必须等待用户确认可以进入 `Execution` 才能正式修改文件
 
-当前仓库基线：
+开始正式修改前，必须明确：
 
-- 项目：`TestHub` 智能测试管理平台
-- 后端目录：`backend` + `apps`，Django 4.2 + Django REST Framework + MySQL + SimpleJWT + Channels + Celery
-- 前端目录：`frontend`，Vue 3 + JavaScript + Vite + Pinia + Element Plus
-- 后续 AI 能力必须通过统一入口接入，禁止在业务模块直接散接模型调用
+- 当前生效规则
+- 范围边界
+- 验收标准
+- 验证目标与失败场景
+
+## 5. 全仓硬红线
+
+- `workflow_rules.md` 不得突破 `architecture.md` 已定义的架构红线
+- 前端请求必须统一经由 `frontend/src/api/* -> frontend/src/utils/api.js`
+- 后端接口必须统一经由 `backend/urls.py -> apps/<module>/urls.py -> views`
+- 新增配置必须进入配置层，不得在业务模块散写地址、密钥、路径与环境判断
+- 新增 AI 能力必须通过统一入口或统一服务层接入，禁止在业务模块直接散接模型调用
+- 所有新增或修改的规范文件、设计文档、任务文档、交付说明统一使用中文
+- 所有新增或修改的代码注释统一使用中文；字段名、协议关键字、库名和第三方服务名可保留英文原文
+
+## 6. 常用验证命令
+
+按改动类型选择最低验证：
+
+- 前端构建级验证：`cd frontend && cmd /c npm run build`
+- 后端编译级验证：`python -m py_compile apps\\...` 或 `python -m py_compile backend\\...`
+- 后端请求级验证：至少核对一次真实请求参数、响应结构和页面消费一致性
+
+若验证受环境限制无法执行，必须在交付时如实说明原因。
+
+## 7. 子目录规则入口
+
+进入以下目录后，继续读取最近规则：
+
+- `frontend/**`：先读 `frontend/AGENTS.md`
+- `backend/**`：先读 `backend/AGENTS.md`
+- `apps/requirement_analysis/**`：先读 `apps/requirement_analysis/AGENTS.md`
+
+若后续其他业务域出现稳定的局部规则，应在对应目录新增 `AGENTS.md`，不要继续堆回根入口。
+
+## 8. 文档回写规则
+
+- 长期规则变化：更新 `.cursor/*.md` 或对应子目录 `AGENTS.md`
+- 阶段边界、验收口径、下一步主线变化：更新 `docs/project-memory/current_phase.md`
+- 已确认的关键取舍、冻结口径、不可回退决策：更新 `docs/project-memory/decision_log.md`
+- 模块级边界、局部风险、开发注意事项变化：更新 `docs/project-memory/module_memory.md`
+- 一轮任务完成后的最近进展、未完成项、阻塞项与下一步建议：更新 `docs/project-memory/task_handoff.md`
+- 对话启动摘要变化：更新 `docs/project-memory/dialogue_bootstrap.md`
+- 显著规则、功能或文档变更：更新 `更新日志.md`

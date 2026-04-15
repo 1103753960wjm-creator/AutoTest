@@ -21,6 +21,37 @@
         <strong class="asset-summary-card__value">{{ testcase.automation_summary?.label || '待接自动化草稿' }}</strong>
         <span class="asset-summary-card__desc">{{ testcase.automation_summary?.detail }}</span>
       </div>
+      <div class="asset-summary-card">
+        <span class="asset-summary-card__label">回链入口</span>
+        <strong class="asset-summary-card__value">{{ generationSourceSummary.label }}</strong>
+        <span class="asset-summary-card__desc">{{ sourceEntryDescription }}</span>
+        <div class="asset-summary-card__actions">
+          <el-button
+            v-if="hasGenerationTaskEntry"
+            size="small"
+            link
+            type="primary"
+            @click="goToSourceTaskDetail">
+            查看来源任务
+          </el-button>
+          <el-button
+            v-if="hasGenerationTaskEntry"
+            size="small"
+            link
+            type="primary"
+            @click="goToSourceResultBatch">
+            查看结果批次
+          </el-button>
+          <el-button
+            v-if="hasProjectEntry"
+            size="small"
+            link
+            type="primary"
+            @click="goToProjectCases">
+            查看项目测试用例
+          </el-button>
+        </div>
+      </div>
     </div>
 
     <div class="card-container" v-if="testcase">
@@ -31,6 +62,7 @@
         </el-descriptions-item>
         <el-descriptions-item :label="$t('testcase.testType')">{{ getTypeText(testcase.test_type) }}</el-descriptions-item>
         <el-descriptions-item label="来源摘要">{{ testcase.source_summary?.label || '来源未记录' }}</el-descriptions-item>
+        <el-descriptions-item label="AI 来源">{{ generationSourceSummary.label }}</el-descriptions-item>
         <el-descriptions-item label="自动化状态">{{ testcase.automation_summary?.label || '待接自动化草稿' }}</el-descriptions-item>
         <el-descriptions-item :label="$t('testcase.project')">{{ testcase.project?.name || $t('testcase.noProject') }}</el-descriptions-item>
         <el-descriptions-item :label="$t('testcase.relatedVersions')" :span="2">
@@ -88,6 +120,29 @@ const returnTarget = computed(() => {
   })
 })
 
+const generationSourceSummary = computed(() => {
+  return testcase.value?.generation_source_summary || {
+    label: 'AI 来源待补齐',
+    task_id: '',
+    project_id: null,
+    project_name: '',
+    detail: '当前仅保留正式资产层的轻量来源位。'
+  }
+})
+
+const hasGenerationTaskEntry = computed(() => Boolean(generationSourceSummary.value?.task_id))
+const hasProjectEntry = computed(() => Boolean(generationSourceSummary.value?.project_id || testcase.value?.project?.id))
+
+const sourceEntryDescription = computed(() => {
+  if (hasGenerationTaskEntry.value) {
+    return generationSourceSummary.value?.detail || '当前正式资产可轻量回到来源任务或结果批次。'
+  }
+  if (hasProjectEntry.value) {
+    return '当前正式资产未记录来源任务，但仍可回到所属项目的测试用例列表。'
+  }
+  return generationSourceSummary.value?.detail || '当前正式资产仅保留来源占位，不强行伪造历史回链。'
+})
+
 const handleReturn = () => {
   if (returnTarget.value?.path) {
     router.push(returnTarget.value.path)
@@ -95,6 +150,59 @@ const handleReturn = () => {
   }
 
   router.back()
+}
+
+const buildSourceQuery = () => ({
+  from: 'detail',
+  fromPath: route.fullPath,
+  fromTitle: route.meta.title || '测试用例详情',
+  fromModule: route.meta.module || 'test-design'
+})
+
+const goToSourceTaskDetail = () => {
+  if (!hasGenerationTaskEntry.value) {
+    return
+  }
+
+  router.push({
+    name: 'TaskDetail',
+    params: { taskId: generationSourceSummary.value.task_id },
+    query: buildSourceQuery()
+  })
+}
+
+const goToSourceResultBatch = () => {
+  if (!hasGenerationTaskEntry.value) {
+    return
+  }
+
+  router.push({
+    path: '/ai-generation/generated-testcases',
+    query: {
+      taskId: generationSourceSummary.value.task_id,
+      project: String(generationSourceSummary.value.project_id || testcase.value?.project?.id || ''),
+      projectName: generationSourceSummary.value.project_name || testcase.value?.project?.name || '',
+      ...buildSourceQuery()
+    }
+  })
+}
+
+const goToProjectCases = () => {
+  const projectId = generationSourceSummary.value.project_id || testcase.value?.project?.id
+  const projectName = generationSourceSummary.value.project_name || testcase.value?.project?.name || ''
+  if (!projectId) {
+    return
+  }
+
+  router.push({
+    path: '/ai-generation/testcases',
+    query: {
+      project: String(projectId),
+      projectName,
+      taskId: generationSourceSummary.value.task_id || '',
+      ...buildSourceQuery()
+    }
+  })
 }
 
 const editTestCase = () => {
@@ -256,7 +364,7 @@ onMounted(() => {
 
 .asset-summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -286,6 +394,12 @@ onMounted(() => {
   font-size: 13px;
   line-height: 1.7;
   color: #475569;
+}
+
+.asset-summary-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 @media screen and (max-width: 1100px) {

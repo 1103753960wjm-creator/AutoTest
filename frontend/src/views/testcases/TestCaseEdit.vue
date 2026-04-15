@@ -13,6 +13,29 @@
         <span class="edit-context-card__label">对象语义</span>
         <strong class="edit-context-card__value">正在编辑测试设计资产</strong>
       </div>
+      <div class="edit-context-card__item">
+        <span class="edit-context-card__label">来源摘要</span>
+        <strong class="edit-context-card__value">{{ sourceSummary.label }}</strong>
+        <span class="edit-context-card__desc">{{ sourceEntryDescription }}</span>
+        <div class="edit-context-card__actions">
+          <el-button
+            v-if="hasGenerationTaskEntry"
+            size="small"
+            link
+            type="primary"
+            @click="goToSourceTaskDetail">
+            查看来源任务
+          </el-button>
+          <el-button
+            v-if="hasProjectEntry"
+            size="small"
+            link
+            type="primary"
+            @click="goToProjectCases">
+            查看项目测试用例
+          </el-button>
+        </div>
+      </div>
     </div>
 
     <div class="card-container" v-if="!loading">
@@ -157,6 +180,7 @@ const loading = ref(true)
 const submitting = ref(false)
 const projects = ref([])
 const projectVersions = ref([])
+const testcaseContext = ref(null)
 const currentProjectName = computed(() => {
   return projects.value.find((item) => item.id === form.project_id)?.name || '未关联项目'
 })
@@ -196,6 +220,36 @@ const returnTarget = computed(() => {
   })
 })
 
+const sourceSummary = computed(() => {
+  return testcaseContext.value?.source_summary || {
+    label: '来源未记录',
+    detail: '当前编辑页只轻量承接正式资产的来源上下文。'
+  }
+})
+
+const generationSourceSummary = computed(() => {
+  return testcaseContext.value?.generation_source_summary || {
+    label: 'AI 来源待补齐',
+    task_id: '',
+    project_id: null,
+    project_name: '',
+    detail: '当前编辑页不伪造历史回链，只展示真实来源摘要。'
+  }
+})
+
+const hasGenerationTaskEntry = computed(() => Boolean(generationSourceSummary.value?.task_id))
+const hasProjectEntry = computed(() => Boolean(generationSourceSummary.value?.project_id || form.project_id))
+
+const sourceEntryDescription = computed(() => {
+  if (hasGenerationTaskEntry.value) {
+    return generationSourceSummary.value?.detail || '当前正式资产仍可轻量回到来源任务。'
+  }
+  if (hasProjectEntry.value) {
+    return '当前编辑页未记录来源任务，但可回到所属项目测试用例列表。'
+  }
+  return sourceSummary.value?.detail || '当前编辑页仅保留正式资产层的来源占位。'
+})
+
 const handleReturn = () => {
   if (returnTarget.value?.path) {
     router.push(returnTarget.value.path)
@@ -229,14 +283,20 @@ const testcaseMetaItems = computed(() => ([
   {
     label: '返回位置',
     value: returnTarget.value?.label || '返回测试用例'
+  },
+  {
+    label: '来源摘要',
+    value: sourceSummary.value.label
   }
 ]))
 
 usePlatformPageHeader(() => ({
   description: '编辑页继续复用统一页面头部，表单与提交逻辑仍由页面主体承接。',
-  helperText: sourceContext.value.fromTitle
-    ? `当前通过 ${sourceContext.value.fromTitle} 进入编辑页，返回动作会优先回到来源。`
-    : '当前仅补齐深链接与回跳规则，不重写表单逻辑。',
+  helperText: hasGenerationTaskEntry.value
+    ? `当前正式资产来自任务 ${generationSourceSummary.value.task_id}，编辑页只轻量承接来源上下文，不扩成强回链页面。`
+    : sourceContext.value.fromTitle
+      ? `当前通过 ${sourceContext.value.fromTitle} 进入编辑页，返回动作会优先回到来源。`
+      : '当前仅补齐深链接与回跳规则，不重写表单逻辑。',
   metaItems: testcaseMetaItems.value,
   actions: [
     {
@@ -247,14 +307,58 @@ usePlatformPageHeader(() => ({
       onClick: handleReturn
     },
     {
+      key: 'view-source-task',
+      label: '查看来源任务',
+      plain: true,
+      onClick: goToSourceTaskDetail,
+      hidden: !hasGenerationTaskEntry.value
+    },
+    {
       key: 'save-testcase',
       label: t('testcase.saveChanges'),
       type: 'primary',
       icon: Check,
       onClick: handleSubmit
     }
-  ]
+  ].filter(action => !action.hidden)
 }))
+
+const buildSourceQuery = () => ({
+  from: 'edit',
+  fromPath: route.fullPath,
+  fromTitle: route.meta.title || '编辑测试用例',
+  fromModule: route.meta.module || 'test-design'
+})
+
+const goToSourceTaskDetail = () => {
+  if (!hasGenerationTaskEntry.value) {
+    return
+  }
+
+  router.push({
+    name: 'TaskDetail',
+    params: { taskId: generationSourceSummary.value.task_id },
+    query: buildSourceQuery()
+  })
+}
+
+const goToProjectCases = () => {
+  const projectId = generationSourceSummary.value.project_id || form.project_id
+  const projectName = generationSourceSummary.value.project_name || currentProjectName.value
+  if (!projectId) {
+    return
+  }
+
+  router.push({
+    path: '/ai-generation/testcases',
+    query: {
+      project: String(projectId),
+      projectName,
+      taskId: generationSourceSummary.value.task_id || '',
+      ...buildSourceQuery()
+    }
+  })
+}
 
 const fetchProjects = async () => {
   try {
@@ -292,6 +396,7 @@ const fetchTestCase = async () => {
   try {
     const response = await api.get(`/testcases/${route.params.id}/`)
     const testcase = response.data
+    testcaseContext.value = testcase
 
     form.title = testcase.title
     form.description = testcase.description
@@ -364,7 +469,7 @@ onMounted(async () => {
 <style scoped>
 .edit-context-card {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   margin-bottom: 16px;
 }
@@ -388,6 +493,18 @@ onMounted(async () => {
 .edit-context-card__value {
   font-size: 16px;
   color: #0f172a;
+}
+
+.edit-context-card__desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #64748b;
+}
+
+.edit-context-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 @media screen and (max-width: 960px) {

@@ -127,6 +127,11 @@
                 {{ row.source_summary?.label || '来源未记录' }}
               </template>
             </el-table-column>
+            <el-table-column label="AI 来源" min-width="180" show-overflow-tooltip>
+              <template #default="{ row }">
+                {{ row.generation_source_summary?.label || 'AI 来源待补齐' }}
+              </template>
+            </el-table-column>
             <el-table-column label="自动化状态" min-width="180" show-overflow-tooltip>
               <template #default="{ row }">
                 {{ row.automation_summary?.label || '待接自动化草稿' }}
@@ -179,6 +184,7 @@ const priorityFilter = ref('')
 const selectedTestCases = ref([])
 const isDeleting = ref(false)
 const sourceProjectName = computed(() => String(route.query.projectName || ''))
+const sourceTaskId = computed(() => String(route.query.taskId || ''))
 const hasLoaded = ref(false)
 const requestState = ref(`${UI_PAGE_STATE.READY}`)
 const requestErrorMessage = ref('')
@@ -206,14 +212,17 @@ const pageState = computed(() => {
 const listMetaItems = computed(() => ([
   { label: '当前列表', value: `${total.value}` },
   { label: '项目筛选', value: projectFilter.value ? '已按项目收敛' : '全部项目' },
+  { label: '来源任务', value: sourceTaskId.value || '未指定' },
   { label: 'AI 来源位', value: '已展示' },
   { label: '自动化状态位', value: '已预留' }
 ]))
 
 usePlatformPageHeader(() => ({
-  helperText: sourceProjectName.value
-    ? `当前从项目 ${sourceProjectName.value} 进入，列表会优先按项目收敛。`
-    : '测试用例已作为测试设计资产对象展示来源摘要和自动化状态位。',
+  helperText: sourceTaskId.value
+    ? `当前从来源任务 ${sourceTaskId.value} 回到正式资产层，列表继续作为测试设计资产列表承接正式用例。`
+    : sourceProjectName.value
+      ? `当前从项目 ${sourceProjectName.value} 进入，列表会优先按项目收敛。`
+      : '测试用例已作为测试设计资产对象展示来源摘要、AI 来源位和自动化状态位。',
   metaItems: listMetaItems.value,
   actions: [
     selectedTestCases.value.length > 0
