@@ -130,8 +130,8 @@ def _build_task_failure_summary(obj):
         return {
             "has_error": False,
             "stage": "",
-            "label": "当前未记录失败信息",
-            "detail": "本轮仅提供轻量失败摘要位，后续再补完整调用留痕与阶段化错误追踪。",
+            "label": "当前无异常记录",
+            "detail": "当前任务未记录异常信息；如任务执行失败，可在此查看失败摘要与原因说明。",
         }
 
     stage = "task_runtime"
@@ -165,17 +165,17 @@ def _build_auto_review_summary(obj):
             "has_record": False,
             "review_id": None,
             "status": "not_triggered",
-            "label": "未触发自动评审",
-            "detail": "当前生成任务尚未触发自动 AI 评审记录。",
+            "label": "尚未生成自动评审记录",
+            "detail": "当前任务尚未生成自动评审记录。",
             "entry_path": f"/ai-generation/reviews/ai-auto?taskId={obj.task_id}",
             "created_at": None,
         }
 
     summary_map = {
-        "reviewing": ("自动评审进行中", "当前任务的自动 AI 评审仍在执行，可进入统一入口继续查看。"),
-        "completed": ("已生成 AI 自动评审", "来自当前生成任务的自动评审记录，可进入统一 AI 评审入口查看。"),
-        "failed": ("自动评审失败", record.failure_message or "自动评审执行失败，可进入统一入口查看失败信息。"),
-        "cancelled": ("自动评审已取消", "自动评审在生成链执行过程中被取消，可进入统一入口查看保留内容。"),
+        "reviewing": ("自动评审进行中", "当前任务的自动评审仍在执行，可进入评审页面继续查看。"),
+        "completed": ("已生成自动评审记录", "当前任务已生成自动评审记录，可进入评审页面查看详细结果。"),
+        "failed": ("自动评审失败", record.failure_message or "自动评审执行失败，可进入评审页面查看失败信息。"),
+        "cancelled": ("自动评审已取消", "自动评审已取消，可进入评审页面查看当前保留内容。"),
     }
     label, detail = summary_map.get(
         record.review_status,
@@ -692,24 +692,24 @@ class TestCaseGenerationTaskSerializer(serializers.ModelSerializer):
         return {
             "is_inferred": True,
             "binding_mode": "analysis_context_only",
-            "label": "当前仅记录来源分析上下文摘要",
-            "detail": "当前任务模型没有 analysis 外键，本轮只展示“来源分析说明”，不伪装成真实分析对象绑定。",
+            "label": "当前任务来源分析摘要",
+            "detail": "当前页面展示任务生成时关联的来源分析摘要信息，用于说明任务生成背景。",
         }
 
     def get_model_source_summary(self, obj):
         return {
             "writer_model_name": obj.writer_model_config.name if obj.writer_model_config else "",
             "reviewer_model_name": obj.reviewer_model_config.name if obj.reviewer_model_config else "",
-            "label": "任务执行模型信息",
-            "detail": "模型信息来自任务对象持有的模型外键，属于任务执行时使用信息。",
+            "label": "任务执行模型配置",
+            "detail": "展示本次任务执行时使用的模型配置，用于记录生成依据。",
         }
 
     def get_prompt_source_summary(self, obj):
         return {
             "writer_prompt_name": obj.writer_prompt_config.name if obj.writer_prompt_config else "",
             "reviewer_prompt_name": obj.reviewer_prompt_config.name if obj.reviewer_prompt_config else "",
-            "label": "任务执行 Prompt 信息",
-            "detail": "Prompt 信息来自任务对象持有的提示词外键，属于任务执行时使用信息。",
+            "label": "任务执行 Prompt 配置",
+            "detail": "展示本次任务执行时使用的提示词配置，用于记录生成依据。",
         }
 
     def get_failure_summary(self, obj):
@@ -720,8 +720,8 @@ class TestCaseGenerationTaskSerializer(serializers.ModelSerializer):
         return {
             "result_count": result_count,
             "has_generated_results": result_count > 0,
-            "label": "下游入口预留到生成结果页",
-            "detail": "2.2 第一阶段仅在任务页预留结果入口位，不在本轮展开结果确认流。",
+            "label": "结果处理统一入口",
+            "detail": "当前页面提供结果预览与跳转入口；结果确认、采纳与弃用等操作请前往结果批次页面完成。",
         }
 
     def create(self, validated_data):

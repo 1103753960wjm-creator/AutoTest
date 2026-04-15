@@ -20,7 +20,7 @@
         <span class="result-object-card__label">当前焦点任务</span>
         <strong class="result-object-card__value">{{ $route.query.taskId || '全部结果批次' }}</strong>
         <span class="result-object-card__desc">
-          {{ $route.query.taskId ? '当前通过来源任务进入，页面继续保持结果批次视角。' : '点击任务详情可继续查看来源任务、配置摘要和结果内容。' }}
+          {{ isTaskScopedView ? '当前通过来源任务进入，页面已按该任务收口结果批次。' : '点击任务详情可继续查看来源任务、配置摘要和结果内容。' }}
         </span>
       </div>
     </div>
@@ -697,6 +697,12 @@ export default {
       const currentProject = this.projects.find((item) => String(item.id) === String(this.selectedProject))
       return currentProject?.name || `项目 #${this.selectedProject}`
     },
+    focusedTaskId() {
+      return String(this.$route.query.taskId || '')
+    },
+    isTaskScopedView() {
+      return Boolean(this.focusedTaskId)
+    },
     // 可用版本列表 - 根据是否选择项目来决定显示哪些版本
     availableVersions() {
       if (this.adoptForm.project_id) {
@@ -725,17 +731,40 @@ export default {
       return this.tasks.length > 0 && this.selectedTasks.length === this.tasks.length
     }
   },
+
+  watch: {
+    '$route.query.taskId'() {
+      this.syncRouteContext()
+      this.loadTasks()
+    },
+    '$route.query.project'() {
+      this.syncRouteContext()
+      this.loadTasks()
+    }
+  },
   
   mounted() {
-    if (this.$route.query.project) {
-      this.selectedProject = String(this.$route.query.project)
-    }
+    this.syncRouteContext()
     this.loadTasks()
     this.fetchProjects()
     this.fetchAllVersions()
   },
   
   methods: {
+    syncRouteContext() {
+      this.selectedProject = this.$route.query.project ? String(this.$route.query.project) : ''
+      this.pagination.currentPage = 1
+    },
+
+    applyTaskScopedStats(task = null) {
+      const taskList = task ? [task] : []
+      this.allStats.total = taskList.length
+      this.allStats.completed = taskList.filter((item) => item.status === 'completed').length
+      this.allStats.running = taskList.filter((item) => ['pending', 'generating', 'reviewing'].includes(item.status)).length
+      this.allStats.failed = taskList.filter((item) => item.status === 'failed').length
+      this.allStats.saved = taskList.filter((item) => item.is_saved_to_records).length
+    },
+
     getStatusTagType(status) {
       const map = {
         pending: 'warning',
@@ -763,6 +792,21 @@ export default {
       this.requestErrorMessage = ''
       let shouldRefetch = false
       try {
+        if (this.isTaskScopedView) {
+          const response = await api.get(`/requirement-analysis/testcase-generation/${this.focusedTaskId}/progress/`)
+          const task = response.data || null
+          const matchesStatus = !this.selectedStatus || task?.status === this.selectedStatus
+          const matchesProject = !this.selectedProject || String(task?.project || '') === String(this.selectedProject)
+          const scopedTask = task && matchesStatus && matchesProject ? task : null
+
+          this.tasks = scopedTask ? [scopedTask] : []
+          this.pagination.total = this.tasks.length
+          this.pagination.currentPage = 1
+          this.hasLoaded = true
+          this.applyTaskScopedStats(scopedTask)
+          return
+        }
+
         let url = '/requirement-analysis/testcase-generation/'
         const params = new URLSearchParams()
         
@@ -943,6 +987,11 @@ export default {
     // 新增方法：获取所有数据的统计信息
     async loadAllStats() {
       try {
+        if (this.isTaskScopedView) {
+          this.applyTaskScopedStats(this.tasks[0] || null)
+          return
+        }
+
         // 构建统计请求URL
         let url = '/requirement-analysis/testcase-generation/'
         const params = new URLSearchParams()

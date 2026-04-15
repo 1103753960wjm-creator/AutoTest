@@ -35,7 +35,7 @@
         v-if="task.task_id"
         class="secondary-btn"
         @click="goToGeneratedResults">
-        前往结果批次页处理
+        进入结果批次页
       </button>
       <button
         v-if="taskStatusAllowsCancel"
@@ -63,33 +63,33 @@
 
     <div class="task-context-grid" v-if="task.task_id">
       <div class="task-context-card">
-        <span class="task-context-card__label">来源分析说明</span>
-        <strong class="task-context-card__value">{{ task.source_analysis_summary?.label || '当前分析上下文摘要' }}</strong>
-        <span class="task-context-card__desc">{{ task.source_analysis_summary?.detail || '本轮仅承接来源分析说明，不包装成已真实绑定 analysis 对象。' }}</span>
+        <span class="task-context-card__label">来源分析摘要</span>
+        <strong class="task-context-card__value">{{ task.source_analysis_summary?.label || '当前任务来源分析摘要' }}</strong>
+        <span class="task-context-card__desc">{{ task.source_analysis_summary?.detail || '当前页面展示任务生成时关联的来源分析摘要信息，用于说明任务生成背景。' }}</span>
       </div>
       <div class="task-context-card">
-        <span class="task-context-card__label">模型来源摘要</span>
-        <strong class="task-context-card__value">{{ task.model_source_summary?.label || '未记录模型来源' }}</strong>
-        <span class="task-context-card__desc">{{ task.model_source_summary?.detail || '优先展示任务记录到的模型信息。' }}</span>
+        <span class="task-context-card__label">模型配置信息</span>
+        <strong class="task-context-card__value">{{ task.model_source_summary?.label || '未记录模型配置' }}</strong>
+        <span class="task-context-card__desc">{{ task.model_source_summary?.detail || '展示本次任务执行时使用的模型配置，用于记录生成依据。' }}</span>
       </div>
       <div class="task-context-card">
-        <span class="task-context-card__label">Prompt 来源摘要</span>
-        <strong class="task-context-card__value">{{ task.prompt_source_summary?.label || '未记录 Prompt 来源' }}</strong>
-        <span class="task-context-card__desc">{{ task.prompt_source_summary?.detail || '本页优先说明生成链上游来源。' }}</span>
+        <span class="task-context-card__label">Prompt 配置信息</span>
+        <strong class="task-context-card__value">{{ task.prompt_source_summary?.label || '未记录 Prompt 配置' }}</strong>
+        <span class="task-context-card__desc">{{ task.prompt_source_summary?.detail || '展示本次任务执行时使用的提示词配置，用于记录生成依据。' }}</span>
       </div>
       <div class="task-context-card">
-        <span class="task-context-card__label">失败信息摘要</span>
-        <strong class="task-context-card__value">{{ task.failure_summary?.label || '当前无失败信息' }}</strong>
-        <span class="task-context-card__desc">{{ task.failure_summary?.detail || '失败信息仅做最少可用表达，本轮不展开治理后台。' }}</span>
+        <span class="task-context-card__label">异常信息摘要</span>
+        <strong class="task-context-card__value">{{ task.failure_summary?.label || '当前无异常记录' }}</strong>
+        <span class="task-context-card__desc">{{ task.failure_summary?.detail || '当前任务未记录异常信息；如任务执行失败，可在此查看失败摘要与原因说明。' }}</span>
       </div>
       <div class="task-context-card">
-        <span class="task-context-card__label">下游入口预留</span>
-        <strong class="task-context-card__value">{{ task.downstream_summary?.label || '结果层入口预留' }}</strong>
-        <span class="task-context-card__desc">{{ task.downstream_summary?.detail || '任务页当前只保留结果批次页和正式资产层入口，不继续扩成主处理战场。' }}</span>
+        <span class="task-context-card__label">结果处理入口</span>
+        <strong class="task-context-card__value">{{ task.downstream_summary?.label || '结果处理统一入口' }}</strong>
+        <span class="task-context-card__desc">{{ task.downstream_summary?.detail || '当前页面提供结果预览与跳转入口；结果确认、采纳与弃用等操作请前往结果批次页面完成。' }}</span>
         <button
           class="asset-btn"
           @click="goToGeneratedResults">
-          前往结果批次页处理
+          进入结果批次页
         </button>
       </div>
       <div class="task-context-card">
@@ -100,7 +100,7 @@
           v-if="autoReviewSummary.has_record"
           class="asset-btn"
           @click="goToAutoReviews">
-          查看 AI 自动评审
+          查看自动评审记录
         </button>
       </div>
     </div>
@@ -141,50 +141,29 @@
     <div v-else class="task-content">
       <div class="result-preview-header" v-if="testCases.length > 0">
         <div>
-          <h3>结果预览区</h3>
-          <p>本区只保留任务下游结果预览与轻量处理，结果层主语义继续收口到结果批次页。</p>
+          <h3>结果预览</h3>
+          <p>本区域展示当前任务生成结果的预览信息，便于快速查看处理状态。</p>
           <p v-if="isResultReadonly" class="result-readonly-hint">{{ resultReadonlyHint }}</p>
         </div>
+        <button class="asset-btn" @click="goToGeneratedResults">
+          进入结果批次页
+        </button>
       </div>
 
-      <!-- 批量操作区域 -->
-      <div class="batch-actions" v-if="testCases.length > 0">
-        <div class="selection-info">
-          <label class="select-all">
-            <input
-              type="checkbox"
-              :checked="isAllSelected"
-              :disabled="isResultReadonly || selectableCases.length === 0 || isBatchAdopting"
-              @change="toggleSelectAll">
-            {{ $t('taskDetail.selectAll') }}
-          </label>
-          <span class="selected-count" v-if="selectedCases.length > 0">
-            {{ $t('taskDetail.selectedCount', { count: selectedCases.length }) }}
-          </span>
-          <span v-if="isBatchAdopting" class="batch-adopting-hint">
-            {{ $t('taskDetail.batchAdoptProcessing', { count: batchAdoptingCount }) }}
-          </span>
+      <div class="result-handoff-card" v-if="testCases.length > 0">
+        <div>
+          <span class="result-handoff-card__title">结果处理请前往结果批次页</span>
+          <p>当前页面保留任务信息、结果预览及相关入口；结果处理操作请在结果批次页统一完成。</p>
         </div>
-        <div class="batch-buttons">
-          <button
-            class="batch-adopt-btn"
-            :disabled="isResultReadonly || selectedCases.length === 0 || isBatchAdopting"
-            @click="batchAdopt">
-            {{ isBatchAdopting ? $t('taskDetail.batchAdopting', { count: batchAdoptingCount }) : $t('taskDetail.batchAdopt', { count: selectedCases.length }) }}
-          </button>
-          <button
-            class="batch-discard-btn"
-            :disabled="isResultReadonly || selectedCases.length === 0 || isBatchAdopting"
-            @click="batchDiscard">
-            {{ $t('taskDetail.batchDiscard', { count: selectedCases.length }) }}
-          </button>
-        </div>
+        <button class="secondary-btn" @click="goToGeneratedResults">
+          进入结果批次页
+        </button>
       </div>
 
       <!-- 测试用例列表 -->
       <div class="testcases-table" v-if="testCases.length > 0">
         <div class="table-header">
-          <div class="header-cell checkbox-cell">{{ $t('taskDetail.tableSelect') }}</div>
+          <div class="header-cell checkbox-cell">处理状态</div>
           <div class="header-cell">{{ $t('taskDetail.tableCaseId') }}</div>
           <div class="header-cell">{{ $t('taskDetail.tableScenario') }}</div>
           <div class="header-cell">{{ $t('taskDetail.tablePrecondition') }}</div>
@@ -200,12 +179,11 @@
             :key="testCase.id || index"
             class="table-row">
             <div class="body-cell checkbox-cell">
-              <input 
-                type="checkbox" 
-                :value="testCase"
-                :disabled="isCaseReadonly(testCase) || isBatchAdopting"
-                v-model="selectedCases"
-                @change="updateSelectAll">
+              <span
+                class="result-status-pill"
+                :class="testCase.result_status || 'pending'">
+                {{ testCase.result_status_label || '待处理' }}
+              </span>
             </div>
             <div class="body-cell">{{ testCase.caseId || `TC${String(index + 1).padStart(3, '0')}` }}</div>
             <div class="body-cell">{{ testCase.scenario }}</div>
@@ -224,16 +202,12 @@
             <div class="body-cell">
               <div class="action-buttons">
                 <button class="view-btn" @click="viewCaseDetail(testCase, index)">{{ $t('taskDetail.viewDetail') }}</button>
-                <span v-if="testCase.result_status === 'adopted'" class="adopted-status">{{ testCase.result_status_label || '已采纳' }}</span>
-                <span v-else-if="testCase.result_status === 'discarded'" class="discarded-status">{{ testCase.result_status_label || '已弃用' }}</span>
                 <button
                   v-if="testCase.result_status === 'adopted' && testCase.adopted_testcase_id"
                   class="asset-btn"
                   @click="goToAdoptedAsset(testCase)">
                   查看资产
                 </button>
-                <button v-if="canMutateSingleCase(testCase)" class="adopt-btn" :disabled="isBatchAdopting" @click="adoptSingleCase(testCase, index)">{{ $t('taskDetail.adopt') }}</button>
-                <button v-if="canMutateSingleCase(testCase)" class="discard-btn" :disabled="isBatchAdopting" @click="discardSingleCase(testCase, index)">{{ $t('taskDetail.discard') }}</button>
               </div>
             </div>
           </div>
@@ -442,8 +416,8 @@ export default {
       return this.task.auto_review_summary || {
         has_record: false,
         status: 'not_triggered',
-        label: '未触发自动评审',
-        detail: '当前任务尚未生成自动 AI 评审记录。'
+        label: '尚未生成自动评审记录',
+        detail: '当前任务尚未生成自动评审记录。'
       }
     },
 
@@ -461,12 +435,12 @@ export default {
 
     resultReadonlyHint() {
       if (this.task?.is_saved_to_records) {
-        return '当前任务结果已全部进入正式测试用例资产，预览区仅保留查看能力。'
+        return '当前任务结果已全部进入正式测试用例资产，本区域仅提供查看功能。'
       }
       if (this.processingSummary.discarded_count > 0 && this.processingSummary.pending_count === 0) {
-        return '当前任务结果已全部处理完成，其中包含已弃用结果，预览区仅保留查看能力。'
+        return '当前任务结果已完成处理，其中包含已弃用结果；本区域仅提供查看功能。'
       }
-      return '当前任务结果暂无可继续处理的待标记项，预览区仅保留查看能力。'
+      return '当前任务结果暂无可继续处理的待标记项，本区域仅提供查看功能。'
     },
 
     selectableCases() {
@@ -1606,6 +1580,26 @@ export default {
   color: #475569;
 }
 
+.result-handoff-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.result-handoff-card__title {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
 .result-readonly-hint {
   margin-top: 8px !important;
   color: #b45309 !important;
@@ -1860,6 +1854,29 @@ export default {
 
 .asset-btn:hover {
   background: #4f46e5;
+}
+
+.result-status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.result-status-pill.adopted {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.result-status-pill.discarded {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 .adopted-status {

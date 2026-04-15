@@ -20,12 +20,14 @@
 - 已新增 `frontend/AGENTS.md`、`backend/AGENTS.md`、`apps/requirement_analysis/AGENTS.md`
 - 已补齐项目记忆体系第一版：`decision_log.md`、`module_memory.md`、`task_handoff.md`
 - 已把记忆回写要求正式写入 `AGENTS.md` 与 `.cursor/workflow_rules.md`
+- 已完成阶段 `2.2` 主链一轮收口修复：`GeneratedTestCaseList` 在任务上下文下改为真实按 `taskId` 收口结果批次，`TaskDetail` 去掉结果处理主战场语义，正式测试资产页明确 `sourceTaskId` 仅作来源提示
 
 ## 3. 当前未完成项
 
 - 现有 `current_phase.md` 内容较大，后续仍可继续收口，降低历史事实、阶段事实与局部事实的混写程度
 - `dialogue_bootstrap.md` 仍可继续压缩为更轻量的“30 秒启动摘要”
 - 其他业务域如 `projects`、`testcases`、`reviews` 未来若形成稳定局部规则，可继续补目录级 `AGENTS.md`
+- `2.2` 当前仍建议补一轮页面级主链复核，重点确认“任务页 -> 结果批次页 -> 正式资产页”在真实点击和请求参数层面已形成闭环，避免文案与真实数据再次脱节
 
 ## 4. 已知风险与阻塞
 

@@ -212,14 +212,14 @@ const pageState = computed(() => {
 const listMetaItems = computed(() => ([
   { label: '当前列表', value: `${total.value}` },
   { label: '项目筛选', value: projectFilter.value ? '已按项目收敛' : '全部项目' },
-  { label: '来源任务', value: sourceTaskId.value || '未指定' },
+  { label: '来源任务上下文', value: sourceTaskId.value ? `${sourceTaskId.value}（仅提示）` : '未指定' },
   { label: 'AI 来源位', value: '已展示' },
   { label: '自动化状态位', value: '已预留' }
 ]))
 
 usePlatformPageHeader(() => ({
   helperText: sourceTaskId.value
-    ? `当前从来源任务 ${sourceTaskId.value} 回到正式资产层，列表继续作为测试设计资产列表承接正式用例。`
+    ? `当前从来源任务 ${sourceTaskId.value} 回到正式资产层，这里继续展示正式测试资产列表，不会按任务结果再次筛选。`
     : sourceProjectName.value
       ? `当前从项目 ${sourceProjectName.value} 进入，列表会优先按项目收敛。`
       : '测试用例已作为测试设计资产对象展示来源摘要、AI 来源位和自动化状态位。',
