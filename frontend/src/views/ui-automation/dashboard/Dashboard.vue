@@ -90,10 +90,10 @@
         <el-col :xs="24" :xl="12">
           <RecentList
             title="风险提醒 / 最近失败"
-            description="若没有稳定失败流接口，则明确保留占位结构，不从脚本页和执行页反向拼接假数据。"
+            description="展示近期风险提醒；当缺少稳定失败数据源时，首页不展示不可靠统计。"
             :items="riskReminders"
             empty-title="暂无风险提醒"
-            empty-description="后续可接 Web 执行中心或统一报告源。"
+            empty-description="后续可接入 Web 执行中心或统一报告数据源。"
           >
             <template #item="{ item }">
               <div class="stream-item">
@@ -267,7 +267,7 @@ const quickActions = computed(() => ([
   {
     key: 'reports',
     title: '测试报告',
-    description: '回看执行结果，为后续风险真实来源预留位置。',
+    description: '查看执行结果与测试报告。',
     badge: '报告',
     icon: DataAnalysis,
     accent: 'blue',
@@ -295,10 +295,10 @@ const riskReminders = computed(() => {
   items.push(
     {
       id: 'web-dashboard-risk-placeholder',
-      type: '占位结构',
+      type: '说明信息',
       tag: '后续接执行中心',
       title: '最近失败执行待接入统一执行中心',
-      description: '当前没有稳定失败流接口，本轮不从脚本页、执行页或报告页回拼不稳定数据。',
+      description: '当前尚未接入稳定的失败数据源，风险提醒暂不基于脚本、执行或报告记录生成。',
       icon: Warning,
       accent: 'orange',
       actionText: '查看执行记录',
@@ -306,7 +306,7 @@ const riskReminders = computed(() => {
     },
     {
       id: 'web-dashboard-report-placeholder',
-      type: '占位结构',
+      type: '说明信息',
       tag: '后续接统一报告源',
       title: '风险摘要后续接测试报告聚合源',
       description: '当前模块首页先保留风险落位，后续等统一报告源稳定后再接入真实失败提醒。',

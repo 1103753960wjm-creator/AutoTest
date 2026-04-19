@@ -503,10 +503,10 @@ export default {
     },
     currentAnalysisDesc() {
       if (this.selectedFile && this.documentTitle) {
-        return '当前分析对象来自上传文档，本轮只先承接输入上下文与任务发起关系。'
+        return '当前分析对象来自上传文档，用于承接输入上下文与生成任务发起关系。'
       }
       if (this.manualInput.title || this.manualInput.description) {
-        return '当前分析对象来自手工需求输入，本轮只记录分析上下文摘要，不伪造真实 analysis 绑定。'
+        return '当前分析对象来自手工需求输入，用于记录分析上下文摘要。'
       }
       return '当前页面用于承接需求输入、分析上下文和生成任务入口。'
     },

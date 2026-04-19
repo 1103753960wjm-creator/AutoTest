@@ -23,36 +23,6 @@
       </div>
     </div>
 
-    <div class="task-action-bar">
-      <button class="secondary-btn" @click="handleReturn">{{ returnTarget.label }}</button>
-      <button
-        v-if="task.project"
-        class="secondary-btn"
-        @click="goToProjectCases">
-        查看项目测试用例
-      </button>
-      <button
-        v-if="task.task_id"
-        class="secondary-btn"
-        @click="goToGeneratedResults">
-        进入结果批次页
-      </button>
-      <button
-        v-if="taskStatusAllowsCancel"
-        class="secondary-btn"
-        @click="cancelGenerationTask">
-        取消生成
-      </button>
-      <button
-        v-if="testCases.length > 0"
-        class="export-btn"
-        @click="exportToExcel"
-        :disabled="isExporting">
-        <span v-if="isExporting">{{ $t('taskDetail.exporting') }}</span>
-        <span v-else>{{ $t('taskDetail.exportBtn') }}</span>
-      </button>
-    </div>
-
     <div class="task-status-row" v-if="task.status">
       <span class="task-id">{{ $t('taskDetail.taskId') }}: {{ taskId }}</span>
       <span class="task-status" :class="task.status">{{ getStatusText(task.status) }}</span>
@@ -86,11 +56,6 @@
         <span class="task-context-card__label">结果处理入口</span>
         <strong class="task-context-card__value">{{ task.downstream_summary?.label || '结果处理统一入口' }}</strong>
         <span class="task-context-card__desc">{{ task.downstream_summary?.detail || '当前页面提供结果预览与跳转入口；结果确认、采纳与弃用等操作请前往结果批次页面完成。' }}</span>
-        <button
-          class="asset-btn"
-          @click="goToGeneratedResults">
-          进入结果批次页
-        </button>
       </div>
       <div class="task-context-card">
         <span class="task-context-card__label">AI 自动评审</span>
@@ -145,19 +110,13 @@
           <p>本区域展示当前任务生成结果的预览信息，便于快速查看处理状态。</p>
           <p v-if="isResultReadonly" class="result-readonly-hint">{{ resultReadonlyHint }}</p>
         </div>
-        <button class="asset-btn" @click="goToGeneratedResults">
-          进入结果批次页
-        </button>
       </div>
 
       <div class="result-handoff-card" v-if="testCases.length > 0">
         <div>
           <span class="result-handoff-card__title">结果处理请前往结果批次页</span>
-          <p>当前页面保留任务信息、结果预览及相关入口；结果处理操作请在结果批次页统一完成。</p>
+          <p>当前页面保留任务信息、结果预览及相关说明；正式处理入口已统一放到页头动作区。</p>
         </div>
-        <button class="secondary-btn" @click="goToGeneratedResults">
-          进入结果批次页
-        </button>
       </div>
 
       <!-- 测试用例列表 -->
@@ -246,86 +205,53 @@
     <div v-if="showCaseDetail" class="case-detail-modal">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h3>{{ isEditing ? $t('taskDetail.modalEditTitle') : $t('taskDetail.modalViewTitle') }}</h3>
+          <h3>{{ $t('taskDetail.modalViewTitle') }}</h3>
           <button class="close-btn" @click="closeCaseDetail">×</button>
         </div>
 
-        <!-- 查看模式 -->
-        <div v-if="!isEditing" class="modal-body">
-          <div class="detail-item">
+        <div class="modal-body">
+          <div class="form-item">
             <label>{{ $t('taskDetail.labelCaseId') }}</label>
-            <span>{{ selectedCase.caseId || `TC${String(selectedCaseIndex + 1).padStart(3, '0')}` }}</span>
+            <span class="readonly-field">{{ selectedCase.caseId || `TC${String(selectedCaseIndex + 1).padStart(3, '0')}` }}</span>
           </div>
-          <div class="detail-item">
+          <div class="form-item">
             <label>{{ $t('taskDetail.labelScenario') }}</label>
             <p v-html="formatMarkdown(selectedCase.scenario)"></p>
           </div>
-          <div class="detail-item">
+          <div class="form-item">
             <label>{{ $t('taskDetail.labelPrecondition') }}</label>
             <p v-html="formatMarkdown(selectedCase.precondition || $t('taskDetail.labelNone'))"></p>
           </div>
-          <div class="detail-item">
+          <div class="form-item">
             <label>{{ $t('taskDetail.labelSteps') }}</label>
             <p class="test-steps" v-html="formatMarkdown(selectedCase.steps)"></p>
           </div>
-          <div class="detail-item">
+          <div class="form-item">
             <label>{{ $t('taskDetail.labelExpected') }}</label>
             <p v-html="formatMarkdown(selectedCase.expected)"></p>
           </div>
-          <div class="detail-item">
+          <div class="form-item">
             <label>{{ $t('taskDetail.labelPriority') }}</label>
             <span class="priority-tag" :class="selectedCase.priority?.toLowerCase()">{{ selectedCase.priority || 'P2' }}</span>
           </div>
-        </div>
-
-        <!-- 编辑模式 -->
-        <div v-else class="modal-body edit-mode">
-          <div class="form-item">
-            <label>{{ $t('taskDetail.labelCaseId') }}</label>
-            <span class="readonly-field">{{ editForm.caseId || `TC${String(selectedCaseIndex + 1).padStart(3, '0')}` }}</span>
-          </div>
-          <div class="form-item">
-            <label>{{ $t('taskDetail.labelScenario') }}</label>
-            <el-input v-model="editForm.scenario" type="textarea" :rows="2" :placeholder="$t('taskDetail.placeholderScenario')" />
-          </div>
-          <div class="form-item">
-            <label>{{ $t('taskDetail.labelPrecondition') }}</label>
-            <el-input v-model="editForm.precondition" type="textarea" :rows="3" :placeholder="$t('taskDetail.placeholderPrecondition')" />
-          </div>
-          <div class="form-item">
-            <label>{{ $t('taskDetail.labelSteps') }}</label>
-            <el-input v-model="editForm.steps" type="textarea" :rows="6" :placeholder="$t('taskDetail.placeholderSteps')" />
-          </div>
-          <div class="form-item">
-            <label>{{ $t('taskDetail.labelExpected') }}</label>
-            <el-input v-model="editForm.expected" type="textarea" :rows="4" :placeholder="$t('taskDetail.placeholderExpected')" />
-          </div>
-          <div class="form-item">
-            <label>{{ $t('taskDetail.labelPriority') }}</label>
-            <el-select v-model="editForm.priority" :placeholder="$t('taskDetail.placeholderPriority')">
-              <el-option label="P0" value="P0"></el-option>
-              <el-option label="P1" value="P1"></el-option>
-              <el-option label="P2" value="P2"></el-option>
-              <el-option label="P3" value="P3"></el-option>
-            </el-select>
+          <div class="detail-handoff-note">
+            当前弹窗只保留结果预览。
+            如需采纳、弃用或调整这条结果，请前往结果批次页统一处理。
           </div>
         </div>
 
         <!-- 底部操作栏 -->
         <div class="modal-footer">
-          <template v-if="!isEditing">
-            <button class="action-btn edit-btn" @click="startEdit">
-              <span>{{ $t('taskDetail.btnEdit') }}</span>
-            </button>
-            <button class="action-btn close-btn-footer" @click="closeCaseDetail">{{ $t('taskDetail.btnClose') }}</button>
-          </template>
-          <template v-else>
-            <button class="action-btn save-btn" @click="saveEdit" :disabled="isSaving">
-              <span v-if="isSaving">{{ $t('taskDetail.btnSaveing') }}</span>
-              <span v-else>{{ $t('taskDetail.btnSave') }}</span>
-            </button>
-            <button class="action-btn cancel-btn" @click="cancelEdit" :disabled="isSaving">{{ $t('taskDetail.btnCancel') }}</button>
-          </template>
+          <button
+            v-if="selectedCase.result_status === 'adopted' && selectedCase.adopted_testcase_id"
+            class="action-btn edit-btn"
+            @click="goToAdoptedAsset(selectedCase)">
+            查看正式资产
+          </button>
+          <button class="action-btn save-btn" @click="goToGeneratedResults">
+            前往结果批次页
+          </button>
+          <button class="action-btn close-btn-footer" @click="closeCaseDetail">{{ $t('taskDetail.btnClose') }}</button>
         </div>
       </div>
     </div>
@@ -333,9 +259,10 @@
 </template>
 
 <script>
+import { computed, getCurrentInstance } from 'vue'
 import api from '@/utils/api'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { DocumentCopy } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { ArrowLeft, DocumentCopy, Download } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import { resolveReturnTarget } from '@/router/deeplink'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
@@ -343,10 +270,66 @@ import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 export default {
   name: 'TaskDetail',
   setup() {
+    const instance = getCurrentInstance()
+    const fallbackReturnTarget = {
+      path: '/ai-generation/generated-testcases',
+      label: '返回AI生成用例'
+    }
+    const headerActions = computed(() => {
+      const vm = instance?.proxy
+      if (!vm) {
+        return []
+      }
+
+      return [
+        {
+          key: 'back-source',
+          label: vm.returnTarget?.label || fallbackReturnTarget.label,
+          type: 'primary',
+          icon: ArrowLeft,
+          onClick: () => vm.handleReturn()
+        },
+        vm.task?.project
+          ? {
+              key: 'view-project-cases',
+              label: '查看项目测试用例',
+              onClick: () => vm.goToProjectCases()
+            }
+          : null,
+        vm.task?.task_id
+          ? {
+              key: 'go-generated-results',
+              label: '进入结果批次页',
+              type: 'primary',
+              plain: true,
+              onClick: () => vm.goToGeneratedResults()
+            }
+          : null,
+        vm.taskStatusAllowsCancel
+          ? {
+              key: 'cancel-generation',
+              label: '取消生成',
+              onClick: () => vm.cancelGenerationTask()
+            }
+          : null,
+        vm.testCases?.length > 0
+          ? {
+              key: 'export-excel',
+              label: vm.isExporting ? vm.$t('taskDetail.exporting') : vm.$t('taskDetail.exportBtn'),
+              plain: true,
+              icon: Download,
+              loading: Boolean(vm.isExporting),
+              onClick: () => vm.exportToExcel()
+            }
+          : null
+      ].filter(Boolean)
+    })
+
     usePlatformPageHeader(() => ({
       title: '生成任务详情',
       description: '围绕任务来源、配置摘要、状态与失败信息组织 AI 生成链核心对象页。',
-      helperText: '本页优先承接任务对象信息，结果区只保留次级承接，不在本轮展开结果确认流。'
+      helperText: '本页聚焦任务对象信息展示，结果区主要用于预览与状态查看；结果处理请前往结果批次页。',
+      actions: headerActions.value
     }))
   },
   data() {
@@ -354,7 +337,6 @@ export default {
       taskId: '',
       task: {},
       testCases: [],
-      selectedCases: [],
       isLoading: true,
       showCaseDetail: false,
       selectedCase: {},
@@ -362,20 +344,7 @@ export default {
       currentPage: 1,
       pageSize: 10,
       isExporting: false,
-      isBatchAdopting: false,
-      batchAdoptingCount: 0,
-      // 编辑相关状态
-      isEditing: false,
-      isSaving: false,
       pollTimer: null,
-      editForm: {
-        caseId: '',
-        scenario: '',
-        precondition: '',
-        steps: '',
-        expected: '',
-        priority: 'P2'
-      }
     }
   },
 
@@ -443,14 +412,6 @@ export default {
       return '当前任务结果暂无可继续处理的待标记项，本区域仅提供查看功能。'
     },
 
-    selectableCases() {
-      return this.testCases.filter(testCase => testCase?.result_status === 'pending')
-    },
-
-    isAllSelected() {
-      return this.selectableCases.length > 0 && this.selectedCases.length === this.selectableCases.length
-    },
-
     totalPages() {
       return Math.ceil(this.testCases.length / this.pageSize)
     },
@@ -495,6 +456,7 @@ export default {
         query: {
           project: String(this.task.project || ''),
           projectName: this.task.project_name || '',
+          taskId: this.task.task_id || this.taskId,
           from: 'detail',
           fromPath: this.$route.fullPath,
           fromTitle: this.$route.meta?.title || '任务详情',
@@ -598,7 +560,6 @@ export default {
         } else {
           this.testCases = []
         }
-        this.selectedCases = []
         if (this.taskStatusAllowsCancel) {
           this.startTaskPolling()
         } else {
@@ -775,176 +736,6 @@ export default {
       return formatted
     },
 
-    toggleSelectAll() {
-      if (this.isBatchAdopting) {
-        return
-      }
-      if (this.processingSummary.pending_count === 0) {
-        return
-      }
-      if (this.isAllSelected) {
-        this.selectedCases = []
-      } else {
-        this.selectedCases = [...this.selectableCases]
-      }
-    },
-
-    updateSelectAll() {
-      this.selectedCases = this.selectedCases.filter(testCase => !this.isCaseReadonly(testCase))
-    },
-
-    canMutateSingleCase(testCase) {
-      return this.taskStatusAllowsResultMutation && testCase?.result_status === 'pending'
-    },
-
-    isCaseReadonly(testCase) {
-      return !this.canMutateSingleCase(testCase)
-    },
-
-    buildCaseSourceTag(testCase, fallbackIndex) {
-      return {
-        source: 'ai_generation_task',
-        task_id: this.taskId,
-        project_id: this.task.project || null,
-        project_name: this.task.project_name || '',
-        case_id: testCase.caseId || testCase.case_id || '',
-        case_index: testCase.index ?? fallbackIndex ?? null,
-        source_label: '由生成任务详情采纳'
-      }
-    },
-
-    async batchAdopt() {
-      if (this.isBatchAdopting) {
-        ElMessage.info(this.$t('taskDetail.batchAdoptProcessing', { count: this.batchAdoptingCount || this.selectedCases.length }))
-        return
-      }
-      if (!this.taskStatusAllowsResultMutation) {
-        ElMessage.warning('当前任务状态不允许继续处理生成结果。')
-        return
-      }
-      if (this.processingSummary.pending_count === 0) {
-        ElMessage.warning('当前任务已无可采纳的待处理结果。')
-        return
-      }
-      const pendingCases = this.selectedCases.filter(testCase => testCase?.result_status === 'pending')
-      if (pendingCases.length === 0) {
-        ElMessage.warning(this.$t('taskDetail.pleaseSelectFirst', { action: this.$t('taskDetail.adopt') }))
-        return
-      }
-
-      try {
-        await ElMessageBox.confirm(
-          this.$t('taskDetail.confirmAdopt', { count: pendingCases.length }),
-          this.$t('taskDetail.confirmAdoptTitle'),
-          {
-            confirmButtonText: this.$t('taskDetail.btnConfirm'),
-            cancelButtonText: this.$t('taskDetail.btnCancelOperation'),
-            type: 'success'
-          }
-        )
-      } catch {
-        return
-      }
-
-      this.isBatchAdopting = true
-      this.batchAdoptingCount = pendingCases.length
-      ElMessage.info(this.$t('taskDetail.batchAdoptSubmitting', { count: pendingCases.length }))
-
-      try {
-        const casesData = pendingCases.map((testCase, index) => ({
-          title: testCase.scenario || `Test Case ${index + 1}`,
-          description: testCase.scenario || '',
-          project_id: this.task.project || null,
-          preconditions: testCase.precondition || '',
-          steps: testCase.steps || '',
-          expected_result: testCase.expected || '',
-          priority: this.mapPriority(testCase.priority),
-          test_type: 'functional',
-          status: 'draft',
-          case_id: testCase.caseId || testCase.case_id || '',
-          case_index: testCase.index ?? index + 1,
-          tags: [
-            {
-              ...this.buildCaseSourceTag(testCase, index + 1),
-              source_label: '由生成任务详情批量采纳'
-            }
-          ]
-        }))
-
-        const response = await api.post(`/requirement-analysis/testcase-generation/${this.taskId}/batch-adopt-selected/`, {
-          test_cases: casesData
-        })
-
-        ElMessage.success(this.$t('taskDetail.adoptSuccess', { count: response.data?.handled_count || pendingCases.length }))
-        await this.loadTaskDetail()
-
-      } catch (error) {
-        console.error('Batch adopt failed:', error)
-        if (error.response?.status === 400) {
-          await this.loadTaskDetail()
-        }
-        ElMessage.error(this.$t('taskDetail.batchAdoptFailed') + ': ' + (error.response?.data?.message || error.response?.data?.error || error.message))
-      } finally {
-        this.isBatchAdopting = false
-        this.batchAdoptingCount = 0
-      }
-    },
-
-    async batchDiscard() {
-      if (this.isBatchAdopting) {
-        ElMessage.info(this.$t('taskDetail.batchAdoptProcessing', { count: this.batchAdoptingCount || this.selectedCases.length }))
-        return
-      }
-      if (!this.taskStatusAllowsResultMutation) {
-        ElMessage.warning('当前任务状态不允许继续处理生成结果。')
-        return
-      }
-      if (this.processingSummary.pending_count === 0) {
-        ElMessage.warning('当前任务已无可弃用的待处理结果。')
-        return
-      }
-      const pendingCases = this.selectedCases.filter(testCase => testCase?.result_status === 'pending')
-      if (pendingCases.length === 0) {
-        ElMessage.warning(this.$t('taskDetail.pleaseSelectFirst', { action: this.$t('taskDetail.discard') }))
-        return
-      }
-
-      try {
-        await ElMessageBox.confirm(
-          this.$t('taskDetail.confirmDiscard', { count: pendingCases.length }),
-          this.$t('taskDetail.confirmDiscardTitle'),
-          {
-            confirmButtonText: this.$t('taskDetail.btnConfirm'),
-            cancelButtonText: this.$t('taskDetail.btnCancelOperation'),
-            type: 'warning',
-            confirmButtonClass: 'el-button--danger'
-          }
-        )
-      } catch {
-        return
-      }
-
-      try {
-        const caseIndices = pendingCases
-          .map(selectedCase => selectedCase?.index)
-          .filter(index => Number.isFinite(index))
-
-        const response = await api.post(`/requirement-analysis/testcase-generation/${this.taskId}/discard-selected-cases/`, {
-          case_indices: caseIndices
-        })
-
-        ElMessage.success(this.$t('taskDetail.discardSuccess', { count: response.data.discarded_count || pendingCases.length }))
-        await this.loadTaskDetail()
-
-      } catch (error) {
-        console.error('Batch discard failed:', error)
-        if (error.response?.status === 400) {
-          await this.loadTaskDetail()
-        }
-        ElMessage.error(this.$t('taskDetail.batchDiscardFailed') + ': ' + (error.response?.data?.error || error.message))
-      }
-    },
-
     viewCaseDetail(testCase, index) {
       this.selectedCase = testCase
       this.selectedCaseIndex = index
@@ -954,206 +745,6 @@ export default {
     closeCaseDetail() {
       this.showCaseDetail = false
       this.selectedCase = {}
-      this.isEditing = false
-      this.editForm = {
-        caseId: '',
-        scenario: '',
-        precondition: '',
-        steps: '',
-        expected: '',
-        priority: 'P2'
-      }
-    },
-
-    // 开始编辑
-    startEdit() {
-      if (this.isCaseReadonly(this.selectedCase)) {
-        ElMessage.info('当前结果已进入只读状态，请前往正式测试用例资产页继续编辑。')
-        return
-      }
-      this.isEditing = true
-
-      this.editForm = {
-        caseId: this.selectedCase.caseId || '',
-        scenario: this.selectedCase.scenario || '',
-        // 将<br>转换为换行符以便编辑
-        precondition: this.convertBrToNewline(this.selectedCase.precondition || ''),
-        steps: this.convertBrToNewline(this.selectedCase.steps || ''),
-        expected: this.convertBrToNewline(this.selectedCase.expected || ''),
-        // 直接使用原始优先级值，不转换
-        priority: this.selectedCase.priority || 'P2'
-      }
-    },
-
-    // 取消编辑
-    cancelEdit() {
-      this.isEditing = false
-      this.editForm = {
-        caseId: '',
-        scenario: '',
-        precondition: '',
-        steps: '',
-        expected: '',
-        priority: 'P2'
-      }
-    },
-
-    // 保存编辑
-    async saveEdit() {
-      if (!this.taskStatusAllowsResultMutation) {
-        ElMessage.warning('当前任务状态不允许继续编辑生成结果。')
-        return
-      }
-      // 简单验证
-      if (!this.editForm.scenario?.trim()) {
-        ElMessage.warning(this.$t('taskDetail.enterScenario'))
-        return
-      }
-
-      this.isSaving = true
-
-      try {
-        // 将换行符转换回<br>
-        const updatedCase = {
-          ...this.selectedCase,
-          scenario: this.editForm.scenario,
-          precondition: this.convertNewlineToBr(this.editForm.precondition),
-          steps: this.convertNewlineToBr(this.editForm.steps),
-          expected: this.convertNewlineToBr(this.editForm.expected),
-          priority: this.editForm.priority
-        }
-
-        // 更新本地数组中的数据
-        const index = this.testCases.findIndex(tc => tc === this.selectedCase)
-        if (index !== -1) {
-          this.testCases[index] = updatedCase
-          this.selectedCase = updatedCase
-        }
-
-        // 重新生成表格格式的测试用例字符串
-        const updatedTestCases = this.generateTestCasesString()
-
-        // 调用后端API保存（使用自定义action接口）
-        await api.post(`/requirement-analysis/testcase-generation/${this.taskId}/update-test-cases/`, {
-          final_test_cases: updatedTestCases
-        })
-
-        // 更新内存中的task数据
-        this.task.final_test_cases = updatedTestCases
-
-        ElMessage.success(this.$t('taskDetail.updateSuccess'))
-        this.isEditing = false
-      } catch (error) {
-        console.error('Update failed:', error)
-        ElMessage.error(this.$t('taskDetail.updateFailed') + ': ' + (error.response?.data?.error || error.message))
-      } finally {
-        this.isSaving = false
-      }
-    },
-
-    // 将testCases数组重新生成为表格格式的字符串
-    generateTestCasesString() {
-      if (this.testCases.length === 0) return ''
-
-      // 表头
-      const headers = [
-        this.$t('taskDetail.tableCaseId'),
-        this.$t('taskDetail.tableScenario'),
-        this.$t('taskDetail.tablePrecondition'),
-        this.$t('taskDetail.tableSteps'),
-        this.$t('taskDetail.tableExpected'),
-        this.$t('taskDetail.tablePriority')
-      ]
-      let result = headers.join(' | ') + '\n'
-      result += '|'.repeat(headers.length) + '\n'
-
-      // 数据行
-      this.testCases.forEach((testCase, index) => {
-        const row = [
-          testCase.caseId || `TC${String(index + 1).padStart(3, '0')}`,
-          testCase.scenario || '',
-          testCase.precondition || '',
-          testCase.steps || '',
-          testCase.expected || '',
-          testCase.priority || 'P2'
-        ]
-        result += row.join(' | ') + '\n'
-      })
-
-      return result
-    },
-
-    // 将HTML的<br>标签转换为换行符
-    convertBrToNewline(text) {
-      if (!text) return ''
-      return text.replace(/<br\s*\/?>/gi, '\n')
-    },
-
-    // 将换行符转换为HTML的<br>标签
-    convertNewlineToBr(text) {
-      if (!text) return ''
-      return text.replace(/\n/g, '<br>')
-    },
-
-    async adoptSingleCase(testCase, index) {
-      if (this.isBatchAdopting) {
-        ElMessage.info(this.$t('taskDetail.batchAdoptProcessing', { count: this.batchAdoptingCount || this.selectedCases.length }))
-        return
-      }
-      if (!this.taskStatusAllowsResultMutation) {
-        ElMessage.warning('当前任务状态不允许继续处理生成结果。')
-        return
-      }
-      if (this.processingSummary.pending_count === 0) {
-        ElMessage.warning('当前任务已无可采纳的待处理结果。')
-        return
-      }
-      if (testCase?.is_adopted) {
-        ElMessage.info('该生成结果已采纳，请直接查看正式测试资产。')
-        return
-      }
-      if (testCase?.result_status === 'discarded') {
-        ElMessage.info('该生成结果已弃用，当前不支持继续采纳。')
-        return
-      }
-      try {
-        await ElMessageBox.confirm(
-          this.$t('taskDetail.confirmAdoptSingle', { scenario: testCase.scenario }),
-          this.$t('taskDetail.confirmAdoptTitle'),
-          {
-            confirmButtonText: this.$t('taskDetail.btnConfirm'),
-            cancelButtonText: this.$t('taskDetail.btnCancelOperation'),
-            type: 'success'
-          }
-        )
-      } catch {
-        return
-      }
-
-      try {
-        const caseData = {
-          title: testCase.scenario || `测试用例${index + 1}`,
-          description: testCase.scenario || '',
-          project_id: this.task.project || null,
-          preconditions: testCase.precondition || '',
-          steps: testCase.steps || '',
-          expected_result: testCase.expected || '',
-          priority: this.mapPriority(testCase.priority),
-          test_type: 'functional',
-          status: 'draft',
-          tags: [
-            this.buildCaseSourceTag(testCase, testCase.index ?? index + 1)
-          ]
-        }
-
-        const response = await api.post('/testcases/', caseData)
-        ElMessage.success(response.data?.deduplicated ? '该结果已采纳，已返回现有测试用例。' : this.$t('taskDetail.adoptSuccess', { count: 1 }))
-        await this.loadTaskDetail()
-
-      } catch (error) {
-        console.error('Adopt case failed:', error)
-        ElMessage.error(this.$t('taskDetail.adoptFailed') + ': ' + (error.response?.data?.message || error.message))
-      }
     },
 
     goToAdoptedAsset(testCase) {
@@ -1170,85 +761,6 @@ export default {
           fromModule: this.$route.meta?.module || 'test-design'
         }
       })
-    },
-
-    async discardSingleCase(testCase, index) {
-      if (this.isBatchAdopting) {
-        ElMessage.info(this.$t('taskDetail.batchAdoptProcessing', { count: this.batchAdoptingCount || this.selectedCases.length }))
-        return
-      }
-      if (!this.taskStatusAllowsResultMutation) {
-        ElMessage.warning('当前任务状态不允许继续处理生成结果。')
-        return
-      }
-      if (this.processingSummary.pending_count === 0) {
-        ElMessage.warning('当前任务已无可弃用的待处理结果。')
-        return
-      }
-      if (testCase?.result_status === 'adopted') {
-        ElMessage.info('已采纳结果不能再弃用。')
-        return
-      }
-      if (testCase?.result_status === 'discarded') {
-        ElMessage.info('该生成结果已弃用。')
-        return
-      }
-      try {
-        await ElMessageBox.confirm(
-          this.$t('taskDetail.confirmDiscardSingle', { scenario: testCase.scenario }),
-          this.$t('taskDetail.confirmDiscardTitle'),
-          {
-            confirmButtonText: this.$t('taskDetail.btnConfirm'),
-            cancelButtonText: this.$t('taskDetail.btnCancelOperation'),
-            type: 'warning',
-            confirmButtonClass: 'el-button--danger'
-          }
-        )
-      } catch {
-        return
-      }
-
-      try {
-        const caseIndex = testCase?.index ?? ((this.currentPage - 1) * this.pageSize + index + 1)
-        const response = await api.post(`/requirement-analysis/testcase-generation/${this.taskId}/discard-single-case/`, {
-          case_index: caseIndex
-        })
-
-        ElMessage.success(response.data?.discarded_count ? this.$t('taskDetail.caseDiscardedSuccess') : '该结果已弃用。')
-        await this.loadTaskDetail()
-
-      } catch (error) {
-        console.error('Discard case failed:', error)
-        if (error.response?.status === 400) {
-          await this.loadTaskDetail()
-        }
-        ElMessage.error(this.$t('taskDetail.discardFailed') + ': ' + (error.response?.data?.error || error.message))
-      }
-    },
-
-    mapPriority(priority) {
-      const priorityMap = {
-        '最高': 'critical',
-        '高': 'high',
-        '中': 'medium',
-        '低': 'low',
-        'P0': 'critical',
-        'P1': 'high',
-        'P2': 'medium',
-        'P3': 'low'
-      }
-      return priorityMap[priority] || 'medium'
-    },
-
-    // 将英文优先级转换为本地化显示
-    priorityToChinese(priority) {
-      const priorityMap = {
-        'critical': this.$t('generatedTestCases.priorityCritical'),
-        'high': this.$t('generatedTestCases.priorityHigh'),
-        'medium': this.$t('generatedTestCases.priorityMedium'),
-        'low': this.$t('generatedTestCases.priorityLow')
-      }
-      return priorityMap[priority] || this.$t('generatedTestCases.priorityMedium')
     },
 
     // 导出到Excel

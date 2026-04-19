@@ -14,7 +14,7 @@
       <div class="config-source-card">
         <span class="config-source-card__label">来源语义</span>
         <strong class="config-source-card__value">上游提示词层</strong>
-        <span class="config-source-card__desc">本页用于维护生成链上游 Prompt 来源，不在本轮重构后台流程。</span>
+        <span class="config-source-card__desc">本页用于维护生成任务使用的 Prompt 配置。</span>
       </div>
       <div class="config-source-card">
         <span class="config-source-card__label">活跃配置数</span>

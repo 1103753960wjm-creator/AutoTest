@@ -4,36 +4,37 @@ import { useProductivityStore } from '@/stores/productivity'
 import { usePlatformSearchStore } from '@/stores/platform-search'
 import { createRouteMeta, getDocumentTitle } from './route-meta'
 
-import Login from '@/views/auth/Login.vue'
-import Register from '@/views/auth/Register.vue'
 import Layout from '@/layout/index.vue'
-import ProjectList from '@/views/projects/ProjectList.vue'
-import Home from '@/views/Home.vue'
-import DataFactory from '@/views/data-factory/DataFactory.vue'
-import ApiDashboard from '@/views/api-testing/Dashboard.vue'
-import ApiProjectManagement from '@/views/api-testing/ProjectManagement.vue'
-import ApiInterfaceManagement from '@/views/api-testing/InterfaceManagement.vue'
-import ApiAutomationTesting from '@/views/api-testing/AutomationTesting.vue'
-import ApiRequestHistory from '@/views/api-testing/RequestHistory.vue'
-import ApiEnvironmentManagement from '@/views/api-testing/EnvironmentManagement.vue'
-import ApiReportView from '@/views/api-testing/ReportView.vue'
-import ApiScheduledTasks from '@/views/api-testing/ScheduledTasks.vue'
-import ApiAIServiceConfig from '@/views/api-testing/AIServiceConfig.vue'
-import NotificationLogs from '@/views/notification/NotificationLogs.vue'
-import UiDashboard from '@/views/ui-automation/dashboard/Dashboard.vue'
-import UiProjectList from '@/views/ui-automation/projects/ProjectList.vue'
-import UiElementManagerEnhanced from '@/views/ui-automation/elements/ElementManagerEnhanced.vue'
-import UiTestCaseManager from '@/views/ui-automation/test-cases/TestCaseManager.vue'
-import UiScriptEditorEnhanced from '@/views/ui-automation/scripts/ScriptEditorEnhanced.vue'
-import UiScriptList from '@/views/ui-automation/scripts/ScriptList.vue'
-import UiSuiteList from '@/views/ui-automation/suites/SuiteList.vue'
-import UiExecutionList from '@/views/ui-automation/executions/ExecutionList.vue'
-import UiReportList from '@/views/ui-automation/reports/ReportList.vue'
-import UiScheduledTasks from '@/views/ui-automation/scheduled-tasks/ScheduledTasks.vue'
-import UiNotificationLogs from '@/views/ui-automation/notification/NotificationLogs.vue'
-import UiAITesting from '@/views/ui-automation/ai/AITesting.vue'
-import UiAICaseList from '@/views/ui-automation/ai/AICaseList.vue'
-import UiAIExecutionRecords from '@/views/ui-automation/ai/AIExecutionRecords.vue'
+
+const Login = () => import('@/views/auth/Login.vue')
+const Register = () => import('@/views/auth/Register.vue')
+const ProjectList = () => import('@/views/projects/ProjectList.vue')
+const Home = () => import('@/views/Home.vue')
+const DataFactory = () => import('@/views/data-factory/DataFactory.vue')
+const ApiDashboard = () => import('@/views/api-testing/Dashboard.vue')
+const ApiProjectManagement = () => import('@/views/api-testing/ProjectManagement.vue')
+const ApiInterfaceManagement = () => import('@/views/api-testing/InterfaceManagement.vue')
+const ApiAutomationTesting = () => import('@/views/api-testing/AutomationTesting.vue')
+const ApiRequestHistory = () => import('@/views/api-testing/RequestHistory.vue')
+const ApiEnvironmentManagement = () => import('@/views/api-testing/EnvironmentManagement.vue')
+const ApiReportView = () => import('@/views/api-testing/ReportView.vue')
+const ApiScheduledTasks = () => import('@/views/api-testing/ScheduledTasks.vue')
+const ApiAIServiceConfig = () => import('@/views/api-testing/AIServiceConfig.vue')
+const NotificationLogs = () => import('@/views/notification/NotificationLogs.vue')
+const UiDashboard = () => import('@/views/ui-automation/dashboard/Dashboard.vue')
+const UiProjectList = () => import('@/views/ui-automation/projects/ProjectList.vue')
+const UiElementManagerEnhanced = () => import('@/views/ui-automation/elements/ElementManagerEnhanced.vue')
+const UiTestCaseManager = () => import('@/views/ui-automation/test-cases/TestCaseManager.vue')
+const UiScriptEditorEnhanced = () => import('@/views/ui-automation/scripts/ScriptEditorEnhanced.vue')
+const UiScriptList = () => import('@/views/ui-automation/scripts/ScriptList.vue')
+const UiSuiteList = () => import('@/views/ui-automation/suites/SuiteList.vue')
+const UiExecutionList = () => import('@/views/ui-automation/executions/ExecutionList.vue')
+const UiReportList = () => import('@/views/ui-automation/reports/ReportList.vue')
+const UiScheduledTasks = () => import('@/views/ui-automation/scheduled-tasks/ScheduledTasks.vue')
+const UiNotificationLogs = () => import('@/views/ui-automation/notification/NotificationLogs.vue')
+const UiAITesting = () => import('@/views/ui-automation/ai/AITesting.vue')
+const UiAICaseList = () => import('@/views/ui-automation/ai/AICaseList.vue')
+const UiAIExecutionRecords = () => import('@/views/ui-automation/ai/AIExecutionRecords.vue')
 
 /** @type {import('vue-router').RouteRecordRaw[]} */
 const routes = [
@@ -165,7 +166,7 @@ const routes = [
         component: () => import('@/views/testcases/TestCaseList.vue'),
         meta: createRouteMeta({
           title: '测试用例',
-          description: '统一管理测试设计资产，并查看来源、优先级和自动化预留状态。',
+          description: '统一管理测试设计资产，并查看来源、优先级和自动化状态。',
           module: 'test-design',
           pageType: 'list',
           icon: 'document'
@@ -332,7 +333,7 @@ const routes = [
         component: () => import('@/views/executions/ExecutionDetailView.vue'),
         meta: createRouteMeta({
           title: '执行详情',
-          description: '查看测试执行结果，并预留设计来源与自动化来源展示位。',
+          description: '查看测试执行结果，并展示设计来源与自动化来源信息。',
           module: 'test-design',
           pageType: 'detail-result',
           icon: 'data-analysis',

@@ -252,8 +252,13 @@ import { ref, watch, nextTick, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Loading, VideoPlay, Download } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import * as echarts from 'echarts'
+import { use, init } from 'echarts/core'
+import { PieChart, BarChart } from 'echarts/charts'
+import { TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
 import { getAIExecutionReport, exportAIExecutionReportPDF } from '@/api/ui_automation'
+
+use([PieChart, BarChart, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer])
 
 const { t } = useI18n()
 
@@ -381,7 +386,7 @@ const initPieChart = () => {
     pieChart.dispose()
   }
 
-  pieChart = echarts.init(pieChartRef.value)
+  pieChart = init(pieChartRef.value)
 
   const stats = reportData.value.statistics
   const option = {
@@ -446,7 +451,7 @@ const initBarChart = () => {
     barChart.dispose()
   }
 
-  barChart = echarts.init(barChartRef.value)
+  barChart = init(barChartRef.value)
 
   const distribution = reportData.value.action_distribution
   const data = [

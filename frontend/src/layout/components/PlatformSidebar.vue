@@ -30,7 +30,7 @@
             <div class="platform-sidebar__menu-title">
               <span>{{ item.title }}</span>
               <span v-if="item.status === futureMoveStatus && !collapsed" class="platform-sidebar__tag">迁移中</span>
-              <span v-if="item.status === reservedStatus && !collapsed" class="platform-sidebar__tag is-muted">预留</span>
+              <span v-if="item.status === reservedStatus && !collapsed" class="platform-sidebar__tag is-muted">规划中</span>
             </div>
           </template>
         </el-menu-item>

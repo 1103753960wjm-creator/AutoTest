@@ -14,7 +14,7 @@
       <div class="config-source-card">
         <span class="config-source-card__label">AI 评审开关</span>
         <strong class="config-source-card__value">{{ activeGenerationConfig?.enable_auto_review ? '开启' : '关闭' }}</strong>
-        <span class="config-source-card__desc">决定任务链是否进入评审阶段，但本轮不展开完整结果确认流。</span>
+        <span class="config-source-card__desc">用于控制生成任务是否进入自动评审阶段。</span>
       </div>
       <div class="config-source-card">
         <span class="config-source-card__label">来源边界</span>

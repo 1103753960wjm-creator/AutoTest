@@ -19,7 +19,7 @@
         </div>
         <div class="summary-card">
           <span class="summary-card__label">自动化挂接</span>
-          <strong class="summary-card__value">预留</strong>
+          <strong class="summary-card__value">待接入</strong>
           <span class="summary-card__desc">{{ project.automation_summary?.label }}</span>
         </div>
       </div>
@@ -269,7 +269,7 @@ usePlatformPageHeader(() => ({
   statusTags: headerStatusTag.value,
   updateText: project.value?.updated_at ? `最近更新 ${formatDate(project.value.updated_at)}` : '',
   helperText: project.value
-    ? `项目 ID：${project.value.id}，当前已收口为测试设计源头对象页，可继续跳转需求分析、生成结果和测试用例。`
+    ? `项目 ID：${project.value.id}，当前页面展示项目概览，并可继续查看需求分析、生成结果和测试用例。`
     : '详情内容仍在页面主体中承接。',
   metaItems: headerMetaItems.value,
   actions: [

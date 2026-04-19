@@ -46,7 +46,7 @@
     </div>
 
     <div class="summary-tip">
-      默认仅展示每个任务最新一条自动评审记录。本轮列表不展开历史记录，但每条记录可展开查看完整评审内容。
+      当前默认展示每个任务最新的一条自动评审记录；如需查看详情，可展开对应记录。
     </div>
 
     <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />

@@ -12,6 +12,7 @@
 - 只记录对后续开发持续有帮助的边界、风险与经验
 - 若本文与实际代码冲突，以实际代码为准，并及时回写本文
 - 规则红线仍以 `AGENTS.md` 与 `.cursor/*.md` 为准
+- 已证明会重复出现的跨模块错误模式统一沉淀到 `docs/project-memory/error_prevention_log.md`
 
 ## 2. frontend
 

@@ -90,7 +90,7 @@
         <el-col :xs="24" :xl="12">
           <RecentList
             title="风险提醒 / 最近失败"
-            description="优先展示最近执行中的真实失败项；若当前没有稳定失败记录，则退回明确占位。"
+            description="优先展示最近执行中的真实失败项；如当前缺少稳定失败记录，则显示说明信息。"
             :items="riskReminders"
             empty-title="暂无风险提醒"
             empty-description="后续可继续接执行中心和统一报告源。"
@@ -304,10 +304,10 @@ const riskReminders = computed(() => {
   if (!failedExecutionItems.value.length) {
     items.push({
       id: 'app-dashboard-risk-placeholder',
-      type: '占位结构',
+      type: '说明信息',
       tag: '后续接统一报告源',
       title: '最近失败摘要将在统一执行中心稳定后补齐',
-      description: '当前优先展示真实最近执行；当失败流和报告聚合稳定后，再补充更完整的风险提示。',
+      description: '当前优先展示最近执行中的真实失败项；待统一报告数据稳定后，将补充更完整的风险提示。',
       icon: Lock,
       accent: 'slate',
       actionText: '查看执行记录',
@@ -346,7 +346,7 @@ usePlatformPageHeader(() => ({
     }
   ],
   updateText: lastLoadedAt.value ? `最近刷新 ${formatHeaderTime(lastLoadedAt.value)}` : '',
-  helperText: '风险提醒优先展示最近执行中的真实失败项，失败流为空时再退回明确占位。',
+  helperText: '风险提醒优先展示最近执行中的真实失败项；如当前缺少稳定失败记录，则显示说明信息。',
   metaItems: [
     { label: '设备池', value: `${statistics.value.devices.total} 台` },
     { label: '最近执行', value: `${recentExecutions.value.length} 条` }

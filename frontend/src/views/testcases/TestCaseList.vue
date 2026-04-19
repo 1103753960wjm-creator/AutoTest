@@ -160,12 +160,12 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Download, Delete } from '@element-plus/icons-vue'
+import { Plus, Search, Download, Delete, ArrowLeft } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 import * as XLSX from 'xlsx'
-import { buildDeeplinkLocation } from '@/router/deeplink'
+import { buildDeeplinkLocation, resolveReturnTarget } from '@/router/deeplink'
 import { UnifiedListTable } from '@/components/platform-shared'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
@@ -214,8 +214,18 @@ const listMetaItems = computed(() => ([
   { label: '项目筛选', value: projectFilter.value ? '已按项目收敛' : '全部项目' },
   { label: '来源任务上下文', value: sourceTaskId.value ? `${sourceTaskId.value}（仅提示）` : '未指定' },
   { label: 'AI 来源位', value: '已展示' },
-  { label: '自动化状态位', value: '已预留' }
+  { label: '自动化状态', value: '待接入' }
 ]))
+
+const returnTarget = computed(() => resolveReturnTarget({ route }))
+
+const handleReturn = () => {
+  if (returnTarget.value?.path) {
+    router.push(returnTarget.value.path)
+    return
+  }
+  router.back()
+}
 
 usePlatformPageHeader(() => ({
   helperText: sourceTaskId.value
@@ -225,6 +235,15 @@ usePlatformPageHeader(() => ({
       : '测试用例已作为测试设计资产对象展示来源摘要、AI 来源位和自动化状态位。',
   metaItems: listMetaItems.value,
   actions: [
+    returnTarget.value?.path
+      ? {
+          key: 'back-source',
+          label: returnTarget.value.label || '返回上一步',
+          type: 'primary',
+          icon: ArrowLeft,
+          onClick: handleReturn
+        }
+      : null,
     selectedTestCases.value.length > 0
       ? {
           key: 'delete-selected',

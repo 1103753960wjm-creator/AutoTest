@@ -147,8 +147,13 @@ import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Collection, Document, CircleCheck, Warning, Download } from '@element-plus/icons-vue'
-import * as echarts from 'echarts'
+import { use, init, graphic } from 'echarts/core'
+import { PieChart, LineChart, BarChart } from 'echarts/charts'
+import { TooltipComponent, LegendComponent, GridComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
 import api from '@/utils/api'
+
+use([PieChart, LineChart, BarChart, TooltipComponent, LegendComponent, GridComponent, CanvasRenderer])
 
 const { t } = useI18n()
 
@@ -199,11 +204,11 @@ const fetchDashboardData = async () => {
 
 // 初始化图表
 const initCharts = () => {
-  if (statusChartRef.value) statusChart = echarts.init(statusChartRef.value)
-  if (trendChartRef.value) trendChart = echarts.init(trendChartRef.value)
-  if (defectChartRef.value) defectChart = echarts.init(defectChartRef.value)
-  if (aiEfficiencyChartRef.value) aiEfficiencyChart = echarts.init(aiEfficiencyChartRef.value)
-  if (workloadChartRef.value) workloadChart = echarts.init(workloadChartRef.value)
+  if (statusChartRef.value) statusChart = init(statusChartRef.value)
+  if (trendChartRef.value) trendChart = init(trendChartRef.value)
+  if (defectChartRef.value) defectChart = init(defectChartRef.value)
+  if (aiEfficiencyChartRef.value) aiEfficiencyChart = init(aiEfficiencyChartRef.value)
+  if (workloadChartRef.value) workloadChart = init(workloadChartRef.value)
   
   window.addEventListener('resize', handleResize)
 }
@@ -268,7 +273,7 @@ const loadChartsData = async () => {
         type: 'line',
         stack: 'Total',
         smooth: true,
-        areaStyle: { opacity: 0.3, color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#409EFF' }, { offset: 1, color: '#fff' }]) },
+        areaStyle: { opacity: 0.3, color: new graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#409EFF' }, { offset: 1, color: '#fff' }]) },
         itemStyle: { color: '#409EFF' },
         data: counts
       }]

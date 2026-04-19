@@ -120,7 +120,7 @@ def _build_generation_config_summary(config):
         "is_inferred": True,
         "source_type": "active_config_inference",
         "label": f"当前活跃配置：{config.name}" if config else "未找到当前活跃生成配置",
-        "detail": "当前任务模型未持久化任务级生成配置，本轮仅展示当前活跃配置推断摘要，不等于任务执行真实快照。",
+        "detail": "当前任务未保存独立的生成配置快照，页面展示当前活跃配置作为参考信息。",
         "executed_with_snapshot": False,
     }
 
@@ -305,7 +305,7 @@ class RequirementAnalysisSerializer(serializers.ModelSerializer):
         return {
             "is_inferred": True,
             "label": "可从当前分析上下文继续发起生成任务",
-            "detail": "当前分析对象与生成任务尚未形成 analysis 外键绑定，本轮仅保留“来源分析说明”语义位。",
+            "detail": "当前分析对象与生成任务尚未建立直接关联，页面展示来源分析摘要以说明生成背景。",
         }
 
 
@@ -555,7 +555,7 @@ class PromptConfigSerializer(serializers.ModelSerializer):
         return {
             "prompt_type": obj.prompt_type,
             "label": role_label,
-            "detail": "提示词配置在 2.2 第一阶段作为生成链上游来源层展示，不在本轮重构其后台流程。",
+            "detail": "当前展示该提示词配置在生成链路中的用途与来源信息。",
         }
 
     def get_activation_summary(self, obj):

@@ -15,6 +15,7 @@
 - 已冻结决策以 `docs/project-memory/decision_log.md` 为准。
 - 模块局部记忆以 `docs/project-memory/module_memory.md` 为准。
 - 最近任务交接以 `docs/project-memory/task_handoff.md` 为准。
+- 已沉淀错误模式与防复发规则以 `docs/project-memory/error_prevention_log.md` 为准。
 
 ## 2. 30 秒项目摘要
 
@@ -41,3 +42,4 @@
 - 决策日志：`docs/project-memory/decision_log.md`
 - 模块记忆：`docs/project-memory/module_memory.md`
 - 任务交接：`docs/project-memory/task_handoff.md`
+- 错误模式库：`docs/project-memory/error_prevention_log.md`

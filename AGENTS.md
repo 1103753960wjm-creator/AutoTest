@@ -27,7 +27,8 @@
 8. `docs/project-memory/decision_log.md`（如存在，用于查看已冻结决策）
 9. `docs/project-memory/module_memory.md`（如存在，用于查看模块局部记忆）
 10. `docs/project-memory/task_handoff.md`（如存在，用于查看最近任务交接）
-11. `docs/project-memory/dialogue_bootstrap.md`（如存在，仅用于快速进入上下文）
+11. `docs/project-memory/error_prevention_log.md`（如存在，用于查看已沉淀的错误模式与防复发规则）
+12. `docs/project-memory/dialogue_bootstrap.md`（如存在，仅用于快速进入上下文）
 
 ## 3. 项目基线
 
@@ -107,5 +108,6 @@
 - 已确认的关键取舍、冻结口径、不可回退决策：更新 `docs/project-memory/decision_log.md`
 - 模块级边界、局部风险、开发注意事项变化：更新 `docs/project-memory/module_memory.md`
 - 一轮任务完成后的最近进展、未完成项、阻塞项与下一步建议：更新 `docs/project-memory/task_handoff.md`
+- 已证明会重复出现的错误模式、根因分析、防复发规则与最低验证动作：更新 `docs/project-memory/error_prevention_log.md`
 - 对话启动摘要变化：更新 `docs/project-memory/dialogue_bootstrap.md`
 - 显著规则、功能或文档变更：更新 `更新日志.md`

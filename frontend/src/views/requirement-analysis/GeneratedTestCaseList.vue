@@ -9,7 +9,7 @@
       <div class="result-object-card">
         <span class="result-object-card__label">结果批次</span>
         <strong class="result-object-card__value">{{ pagination.total }}</strong>
-        <span class="result-object-card__desc">任务列表已收口为生成结果批次入口。</span>
+        <span class="result-object-card__desc">当前列表展示 AI 生成结果批次。</span>
       </div>
       <div class="result-object-card">
         <span class="result-object-card__label">已保存</span>
@@ -20,7 +20,7 @@
         <span class="result-object-card__label">当前焦点任务</span>
         <strong class="result-object-card__value">{{ $route.query.taskId || '全部结果批次' }}</strong>
         <span class="result-object-card__desc">
-          {{ isTaskScopedView ? '当前通过来源任务进入，页面已按该任务收口结果批次。' : '点击任务详情可继续查看来源任务、配置摘要和结果内容。' }}
+          {{ isTaskScopedView ? '当前页面按来源任务查看对应的结果批次。' : '点击任务详情可继续查看来源任务、配置摘要和结果内容。' }}
         </span>
       </div>
     </div>
@@ -610,15 +610,52 @@
 </template>
 
 <script>
+import { computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowLeft } from '@element-plus/icons-vue'
 import { UnifiedListTable } from '@/components/platform-shared'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
+import { resolveReturnTarget } from '@/router/deeplink'
 
 export default {
   name: 'GeneratedTestCaseList',
   components: { ArrowDown, UnifiedListTable, StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty },
+  setup() {
+    const route = useRoute()
+    const router = useRouter()
+
+    const returnTarget = computed(() => resolveReturnTarget({ route }))
+
+    const handleReturn = () => {
+      if (returnTarget.value?.path) {
+        router.push(returnTarget.value.path)
+        return
+      }
+      router.back()
+    }
+
+    usePlatformPageHeader(() => ({
+      helperText: route.query.fromTitle
+        ? `当前通过 ${route.query.fromTitle} 进入结果批次页，返回动作会优先回到来源页面。`
+        : route.query.taskId
+          ? `当前按来源任务查看结果批次，可继续前往正式资产页查看已保存内容。`
+          : '当前页面按结果批次查看 AI 生成结果、处理状态与保存情况。',
+      actions: [
+        returnTarget.value?.path
+          ? {
+              key: 'back-source',
+              label: returnTarget.value.label || '返回上一步',
+              type: 'primary',
+              icon: ArrowLeft,
+              onClick: handleReturn
+            }
+          : null
+      ].filter(Boolean)
+    }))
+  },
   data() {
     return {
       uiPageState: UI_PAGE_STATE,

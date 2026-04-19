@@ -314,8 +314,8 @@ const handleSidebarNavigate = (item) => {
 
 const handlePlaceholderAction = (type) => {
   const messages = {
-    'project-context': '项目上下文切换将在阶段 1.2 后补齐，本轮先保留平台壳入口。',
-    notifications: '平台级消息中心属于后续能力，本轮先保留入口占位。'
+    'project-context': '项目上下文切换功能暂未开放，请先通过当前页面和模块入口访问相关内容。',
+    notifications: '消息中心功能暂未开放，当前不支持查看平台级通知。'
   }
 
   ElMessage.info(messages[type] || '该入口将在后续阶段补齐。')

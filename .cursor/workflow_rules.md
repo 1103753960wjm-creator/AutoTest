@@ -97,6 +97,7 @@
 | 已确认的关键取舍、冻结口径、不可回退决策 | `docs/project-memory/decision_log.md` |
 | 模块级边界、局部风险、开发注意事项变化 | `docs/project-memory/module_memory.md` |
 | 一轮任务完成后的最近进展、未完成项、阻塞项与下一步建议 | `docs/project-memory/task_handoff.md` |
+| 已证明会重复出现的错误模式、根因分析、防复发规则与最低验证动作 | `docs/project-memory/error_prevention_log.md` |
 | 对话启动摘要变化 | `docs/project-memory/dialogue_bootstrap.md` |
 | 显著规则、功能或文档变更 | `更新日志.md` |
 
@@ -109,6 +110,7 @@
 - 明确某个模块的局部红线、局部风险或高频开发注意事项
 - 本轮任务做到一半需要暂停，必须给下一轮留下清晰交接入口
 - 修复会改变后续实现口径的重要 bug 或兼容问题
+- 同类错误第二次出现，或已经可以稳定归纳出可复用的防复发规则与最低验证动作
 
 默认映射关系如下：
 
@@ -116,4 +118,5 @@
 - 决策冻结：`decision_log.md`
 - 模块经验：`module_memory.md`
 - 本轮收尾与交接：`task_handoff.md`
+- 错误模式沉淀：`error_prevention_log.md`
 - 新会话启动摘要：`dialogue_bootstrap.md`

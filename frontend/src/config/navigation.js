@@ -8,7 +8,7 @@ export const NAV_ENTRY_STATUS = Object.freeze({
   KEEP: '保留入口',
   HIDE: '隐藏入口',
   FUTURE_MOVE: '未来迁移入口',
-  RESERVED: '预留'
+  RESERVED: '规划中'
 })
 
 export const NAV_FREEZE_VERSION = '2026-03-11'
@@ -53,14 +53,14 @@ export const TOP_LEVEL_NAVIGATION = [
     key: 'cloud-device',
     title: '云真机',
     route: '',
-    status: '预留',
+    status: '规划中',
     description: '统一设备池、预约和远控能力。'
   },
   {
     key: 'execution-center',
     title: '执行中心',
     route: '',
-    status: '预留',
+    status: '规划中',
     description: '平台级调度、执行、报告和通知日志。'
   },
   {
@@ -81,7 +81,7 @@ export const TOP_LEVEL_NAVIGATION = [
     key: 'system-management',
     title: '系统管理',
     route: '',
-    status: '预留',
+    status: '规划中',
     description: '用户、角色、权限、个人资料和系统运维入口。'
   }
 ]
@@ -216,7 +216,7 @@ export const NAVIGATION_MODULES = [
     pathPrefixes: [],
     noNewRules: [
       '在正式落地前，不再新增新的跨模块执行聚合页面到业务模块里。',
-      '新增平台级报告、调度和通知日志能力应优先预留到本模块。'
+      '新增平台级报告、调度和通知日志能力应优先归入本模块。'
     ],
     children: [
       { title: '执行总览', path: '', status: NAV_ENTRY_STATUS.RESERVED },

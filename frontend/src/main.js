@@ -1,7 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import 'element-plus/dist/index.css'
+import { ElLoading } from 'element-plus'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 import axios from 'axios'
 import { useUserStore } from '@/stores/user'
@@ -37,11 +36,10 @@ async function init() {
   app.use(router)
   app.use(i18n)
 
-  // Element Plus 语言由 App.vue 的 el-config-provider 动态配置
-  app.use(ElementPlus)
+  // 页面组件改为按需引入，仅保留全局 loading 指令
+  app.use(ElLoading)
 
   app.mount('#app')
 }
 
 init()
-

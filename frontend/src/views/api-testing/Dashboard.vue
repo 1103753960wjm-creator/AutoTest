@@ -89,10 +89,10 @@
         <el-col :xs="24" :xl="12">
           <RecentList
             title="风险提醒 / 最近失败"
-            description="当前仅保留稳定落位；若没有统一失败流接口，不在首页硬拼假数据。"
+            description="展示近期风险提醒；当缺少稳定失败数据源时，首页不展示不可靠统计。"
             :items="riskReminders"
             empty-title="暂无风险提醒"
-            empty-description="后续可接执行中心或统一报告源。"
+            empty-description="后续可接入执行中心或统一报告数据源。"
           >
             <template #item="{ item }">
               <div class="stream-item">
@@ -282,10 +282,10 @@ const riskReminders = computed(() => {
   items.push(
     {
       id: 'api-dashboard-risk-placeholder',
-      type: '占位结构',
+      type: '说明信息',
       tag: '后续接执行中心',
       title: '最近失败执行待接入统一报告源',
-      description: '当前没有稳定失败流接口，本轮只保留风险提醒落位，不从请求历史中硬拼失败视图。',
+      description: '当前尚未接入稳定的失败数据源，风险提醒暂不基于请求历史生成。',
       icon: Warning,
       accent: 'orange',
       actionText: '查看请求历史',
@@ -293,7 +293,7 @@ const riskReminders = computed(() => {
     },
     {
       id: 'api-dashboard-env-placeholder',
-      type: '占位结构',
+      type: '说明信息',
       tag: '后续接环境检查',
       title: '环境变更提醒后续接统一配置核查',
       description: '当环境差异、失效配置有稳定来源后，再回填这里的真实风险提示。',
@@ -335,7 +335,7 @@ usePlatformPageHeader(() => ({
     }
   ],
   updateText: lastLoadedAt.value ? `最近刷新 ${formatHeaderTime(lastLoadedAt.value)}` : '',
-  helperText: '测试报告、定时任务和通知日志后续将向执行中心收口，本轮不再作为当前模块正式入口。',
+  helperText: '当前首页聚焦接口测试核心入口；测试报告、定时任务和通知日志可通过对应功能页查看。',
   metaItems: [
     { label: '概览范围', value: '项目 / 接口 / 套件 / 请求历史' },
     { label: '最近动态', value: `${operationLogs.value.length} 条` }

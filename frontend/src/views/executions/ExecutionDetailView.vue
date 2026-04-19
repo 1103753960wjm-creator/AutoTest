@@ -15,13 +15,13 @@
         </span>
       </div>
       <p class="execution-summary-card__description">
-        执行进度、用例状态和历史记录继续由页面主体承接，本轮只补齐统一头部和回跳动作。
+        当前页面展示执行进度、用例状态和历史记录，并提供统一头部与回跳操作。
       </p>
       <div class="execution-source-strip">
         <div class="execution-source-card">
           <span class="execution-source-card__label">设计来源</span>
           <strong class="execution-source-card__value">{{ executionSourceSummary.projectLabel }}</strong>
-          <span class="execution-source-card__desc">当前仅展示来源项目与设计资产预留位，不重做执行链路。</span>
+          <span class="execution-source-card__desc">当前展示来源项目与设计资产关联信息，用于辅助定位执行来源。</span>
         </div>
         <div class="execution-source-card">
           <span class="execution-source-card__label">关联用例</span>
@@ -30,8 +30,8 @@
         </div>
         <div class="execution-source-card">
           <span class="execution-source-card__label">自动化来源</span>
-          <strong class="execution-source-card__value">预留</strong>
-          <span class="execution-source-card__desc">后续自动化草稿与自动化资产回链将在执行对象继续挂接。</span>
+          <strong class="execution-source-card__value">待补充</strong>
+          <span class="execution-source-card__desc">自动化来源信息将在后续版本中补充展示。</span>
         </div>
       </div>
     </div>
