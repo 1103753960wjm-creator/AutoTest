@@ -10,28 +10,28 @@
 
       <div class="filters">
         <el-row :gutter="20">
-          <el-col :span="6">
-            <el-select v-model="filters.task_type" :placeholder="$t('apiTesting.scheduledTask.taskType')" clearable>
+          <el-col :span="8">
+            <el-select v-model="filters.task_type" :placeholder="$t('apiTesting.scheduledTask.taskType')" clearable style="width: 100%">
               <el-option :label="$t('apiTesting.scheduledTask.taskTypes.testSuite')" value="TEST_SUITE" />
               <el-option :label="$t('apiTesting.scheduledTask.taskTypes.apiRequest')" value="API_REQUEST" />
             </el-select>
           </el-col>
-          <el-col :span="6">
-            <el-select v-model="filters.trigger_type" :placeholder="$t('apiTesting.scheduledTask.triggerType')" clearable>
+          <el-col :span="8">
+            <el-select v-model="filters.trigger_type" :placeholder="$t('apiTesting.scheduledTask.triggerType')" clearable style="width: 100%">
               <el-option :label="$t('apiTesting.scheduledTask.triggerTypes.cron')" value="CRON" />
               <el-option :label="$t('apiTesting.scheduledTask.triggerTypes.interval')" value="INTERVAL" />
               <el-option :label="$t('apiTesting.scheduledTask.triggerTypes.once')" value="ONCE" />
             </el-select>
           </el-col>
-          <el-col :span="6">
-            <el-select v-model="filters.status" :placeholder="$t('apiTesting.scheduledTask.taskStatus')" clearable>
+          <el-col :span="8">
+            <el-select v-model="filters.status" :placeholder="$t('apiTesting.scheduledTask.taskStatus')" clearable style="width: 100%">
               <el-option :label="$t('apiTesting.scheduledTask.status.active')" value="ACTIVE" />
               <el-option :label="$t('apiTesting.scheduledTask.status.paused')" value="PAUSED" />
               <el-option :label="$t('apiTesting.scheduledTask.status.completed')" value="COMPLETED" />
               <el-option :label="$t('apiTesting.scheduledTask.status.failed')" value="FAILED" />
             </el-select>
           </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <el-button @click="resetFilters">{{ $t('apiTesting.common.reset') }}</el-button>
             <el-button type="primary" @click="loadTasks">{{ $t('apiTesting.common.search') }}</el-button>
           </el-col>

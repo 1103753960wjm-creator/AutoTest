@@ -1,6 +1,6 @@
 # TestHub 错误模式库与防复发手册
 
-更新时间：2026-04-19
+更新时间：2026-05-31
 
 ## 1. 文件职责
 
@@ -153,3 +153,73 @@
   - `frontend/src/layout/usePlatformPageHeader.js`
   - `frontend/src/views/requirement-analysis/TaskDetail.vue`
   - `frontend/src/views/testcases/TestCaseList.vue`
+
+### 007. Vue 3 `<router-view>` 插槽内 `v-if` 引发组件卸载时上下文丢失报错
+
+- 发生时间：2026-05-30
+- 错误类型：框架底层崩溃类
+- 触发场景：在 `<router-view v-slot="{ Component }">` 内，为了按需缓存组件，使用了 `v-if="keepAlive"` 与 `v-if="!keepAlive"` 分别包裹 `<keep-alive>` 与非缓存容器。当路由切换时抛出 `TypeError: Cannot read properties of null (reading 'exposed')` 或 `reading 'parentNode'`，导致整个页面失去响应卡死。
+- 根因分析：此为 Vue 3 核心已知缺陷（Bug #6222）。在 router-view 插槽中由于路由切换触发 VNode 重新 patched 时，若使用了 `v-if` 条件渲染销毁了组件所在的容器节点，将导致被销毁节点内部（特别是包含 `ref="xxx"` 字符串引用的 Element Plus 组件如 `el-table` 或表单）在执行 `setRef(null)` 释放引用时，由于父上下文 `vnode.component` 已经丢失（null），强行访问其 `.exposed` 属性抛出致命异常。
+- 防复发规则：
+  - **绝对禁止**在 `<router-view>` 插槽内使用 `v-if` 动态包裹 `<keep-alive>` 容器。
+  - 按需缓存必须且只能使用 `<keep-alive :include="cachedViewsArray">` 的标准白名单模式。
+  - 对于组件频繁挂载卸载的场景，彻底废弃模版字符串引用（如 `ref="tableRef"`），必须改为函数式引用（如 `:ref="(el) => tableRef.value = el"`），可天然免疫销毁时的组件上下文空指针异常。
+- 最低验证动作：
+  - 点击左侧侧边栏高频切换拥有表格和表单的不同路由模块。
+  - 观察控制台无任何 `reading 'exposed'` 和 `reading 'parentNode'` 红错。
+  - 确保页面正常渲染，滚动重置等基于 `nextTick()` 的后续逻辑未被异常打断。
+- 关联文件：
+  - `frontend/src/layout/index.vue`
+  - `frontend/src/components/platform-shared/UnifiedListTable.vue`
+
+### 008. Vue 3 Props 验证抛出 `Cannot convert object to primitive value`
+
+- 发生时间：2026-05-30
+- 错误类型：组件类型验证类
+- 触发场景：切换含有特定通用组件（如 `UnifiedListTable`）的页面时，控制台抛出 `TypeError: Cannot convert object to primitive value` 且附带组件 Prop 验证栈。
+- 根因分析：在定义 Vue 3 组件的 `props` 时，将 `null` 直接放入了 `type` 数组中（例如 `type: [String, Number, null]`）。Vue 的底层 Prop 验证器 `_validator` 会遍历 `type` 数组并尝试将其作为构造器调用（或通过内置类型检查机制执行）。由于 `null` 并不是一个合法的类型构造器，从而抛出致命报错打断渲染。
+- 防复发规则：
+  - **绝对禁止**在 Vue 组件的 `props` 声明中将 `null` 放入 `type` 数组。
+  - 若需要允许传入 `null` 或 `undefined`，只需声明合法的基本类型构造器（如 `type: [String, Number]`），然后通过设置 `default: null` 或 `required: false`，Vue 会自动允许空值，不需要显式指定 `null` 类型。
+- 最低验证动作：
+  - 审计通用组件（尤其是跨页面复用组件）的 Prop 类型声明。
+  - 页面初次挂载及数据被置空时，控制台无任何 Prop Validator 报错红错。
+- 关联文件：
+  - `frontend/src/components/platform-shared/UnifiedListTable.vue`
+
+### 009. router-view key 使用 fullPath 导致全局导航失灵
+
+- 发生时间：2026-05-31
+- 错误类型：框架底层交互类
+- 触发场景：在 `<router-view>` 中对 `<component>` 绑定 `:key="currentRoute.fullPath"` 时，同一路由名下只要 query 参数变化就触发组件销毁重建。配合 `keep-alive` 使用时，include 白名单基于组件 name 匹配，但 key 基于 fullPath 不断创建新实例，导致缓存实例堆积、Vue 内部事件系统异常，最终表现为侧边栏和按钮点击后无响应，需要页面重载才能恢复。
+- 根因分析：`keep-alive` 的 `include` 匹配维度（组件 name）与 `router-view` 的 `:key` 维度（fullPath）不一致，导致同名组件被认为"可缓存"但 key 不同又触发重建，形成缓存与重建互相冲突的死循环。
+- 防复发规则：
+  - `router-view` 内 `component` 的 `:key` 必须与 `keep-alive` 的 `include` 匹配维度一致，推荐使用 `currentRoute.name || currentRoute.path`
+  - query 变化应由组件内部 `watch(route.query)` 自行处理，不应通过外层 key 变化触发组件销毁重建
+  - 禁止使用 `currentRoute.fullPath` 作为 key，除非明确不使用 keep-alive
+- 最低验证动作：
+  - 快速多次点击侧边栏不同菜单项，确认无卡死
+  - 在同一路由下修改 query 参数，确认组件未被销毁重建
+  - 确认 keep-alive 缓存的页面返回后状态保持
+- 关联文件：
+  - `frontend/src/layout/index.vue`
+
+### 010. 列表页筛选控件在 flex 布局下宽度塌缩
+
+- 发生时间：2026-05-31
+- 错误类型：页面结构类
+- 触发场景：`ListShell` 的 `#filters` 插槽内使用 `el-row` + `el-col` 布局筛选控件时，`el-select` 和 `el-input` 未设置 `width: 100%`，且 `el-col` 的 span 分配过小（如 3/4/5），导致控件宽度塌缩为内容最小宽度，看起来像空矩形或微型输入框。
+- 根因分析：`shell-filters` 容器是 flex 布局，`el-row` 在 flex 容器中需要明确宽度才能正确展开。`el-select` 默认不会自动撑满父容器宽度，需要显式设置 `width: 100%`。
+- 防复发规则：
+  - 在 `ListShell` 的 `#filters` 插槽中使用 `el-row` 布局时，所有 `el-select` 和 `el-input` 必须设置 `style="width: 100%"`
+  - `el-col` 的 span 分配应参考评审列表的标准样式（每列 span 8），不应小于 6
+  - 新增列表页筛选区时，必须与评审列表 `ReviewList.vue` 对齐样式口径
+- 最低验证动作：
+  - 检查筛选控件是否正确撑满列宽
+  - 检查 placeholder 文字是否完整显示
+  - 与评审列表页面对比视觉一致性
+- 关联文件：
+  - `frontend/src/views/testcases/TestCaseList.vue`
+  - `frontend/src/views/versions/VersionList.vue`
+  - `frontend/src/views/reviews/ReviewList.vue`（标准参考）
+  - `frontend/src/components/page-shells/ListShell.vue`

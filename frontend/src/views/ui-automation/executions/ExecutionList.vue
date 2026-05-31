@@ -1,144 +1,139 @@
 <template>
-  <div class="page-container">
-    <div class="page-header">
-      <h1 class="page-title">{{ $t('uiAutomation.execution.title') }}</h1>
-      <el-select v-model="projectId" :placeholder="$t('uiAutomation.common.selectProject')" style="width: 200px; margin-right: 15px" @change="onProjectChange">
-        <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
-      </el-select>
+  <ListShell>
+    <!-- 1. 搜索筛选区 -->
+    <div class="filters">
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-select v-model="projectId" :placeholder="$t('uiAutomation.common.selectProject')" style="width: 100%" clearable @change="onProjectChange">
+            <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+          </el-select>
+        </el-col>
+        <el-col :span="8">
+          <el-input
+            v-model="queryParams.search"
+            :placeholder="$t('uiAutomation.execution.searchPlaceholder')"
+            clearable
+            @keyup.enter="handleSearch"
+           style="width: 100%">
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </el-col>
+        <el-col :span="8">
+          <el-select v-model="queryParams.status" :placeholder="$t('uiAutomation.execution.statusFilter')" clearable style="width: 100%" @change="handleSearch">
+            <el-option :label="$t('uiAutomation.status.pending')" value="pending" />
+            <el-option :label="$t('uiAutomation.status.running')" value="running" />
+            <el-option :label="$t('uiAutomation.status.passed')" value="passed" />
+            <el-option :label="$t('uiAutomation.status.failed')" value="failed" />
+            <el-option :label="$t('uiAutomation.status.error')" value="error" />
+          </el-select>
+        </el-col>
+        <el-col :span="8">
+          <el-select v-model="queryParams.browser" :placeholder="$t('uiAutomation.execution.browserFilter')" clearable style="width: 100%" @change="handleSearch">
+            <el-option label="Chrome" value="chrome" />
+            <el-option label="Firefox" value="firefox" />
+            <el-option label="Safari" value="safari" />
+            <el-option label="Edge" value="edge" />
+          </el-select>
+        </el-col>
+        <el-col :span="8" class="filter-buttons">
+          <el-button @click="resetQuery">{{ $t('common.reset') }}</el-button>
+        </el-col>
+      </el-row>
     </div>
 
-    <div class="card-container">
-      <div class="filter-bar">
-        <el-form :inline="true" :model="queryParams" class="demo-form-inline">
-          <el-form-item :label="$t('uiAutomation.common.search')">
-            <el-input
-              v-model="queryParams.search"
-              :placeholder="$t('uiAutomation.execution.searchPlaceholder')"
-              clearable
-              @keyup.enter="handleSearch"
-            >
-              <template #prefix>
-                <el-icon><Search /></el-icon>
-              </template>
-            </el-input>
-          </el-form-item>
-          <el-form-item :label="$t('uiAutomation.common.status')">
-            <el-select v-model="queryParams.status" :placeholder="$t('uiAutomation.execution.statusFilter')" clearable>
-              <el-option :label="$t('uiAutomation.status.pending')" value="pending" />
-              <el-option :label="$t('uiAutomation.status.running')" value="running" />
-              <el-option :label="$t('uiAutomation.status.passed')" value="passed" />
-              <el-option :label="$t('uiAutomation.status.failed')" value="failed" />
-              <el-option :label="$t('uiAutomation.status.error')" value="error" />
-            </el-select>
-          </el-form-item>
-          <el-form-item :label="$t('uiAutomation.execution.browserFilter')">
-            <el-select v-model="queryParams.browser" :placeholder="$t('uiAutomation.execution.browserFilter')" clearable>
-              <el-option label="Chrome" value="chrome" />
-              <el-option label="Firefox" value="firefox" />
-              <el-option label="Safari" value="safari" />
-              <el-option label="Edge" value="edge" />
-            </el-select>
-          </el-form-item>
-          <el-form-item>
-            <el-button type="primary" @click="handleSearch">{{ $t('uiAutomation.common.query') }}</el-button>
-            <el-button @click="resetQuery">{{ $t('uiAutomation.common.reset') }}</el-button>
-            <el-button
-              type="danger"
-              :disabled="selectedIds.length === 0"
-              @click="handleBatchDelete"
-            >
-              {{ $t('uiAutomation.common.batchDelete') }}
-            </el-button>
-          </el-form-item>
-        </el-form>
-      </div>
+    <!-- 2. 统一页面状态机联动 -->
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="loadExecutions"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="resetQuery"
+    />
+    <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
 
-      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
-      <StateForbidden
-        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
-        compact
-        :primary-action-text="$t('common.uiState.actions.goHome')"
-        @primary-action="router.push('/home')"
-      />
-      <StateError
-        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
-        compact
-        :description="requestErrorMessage || $t('common.uiState.error.description')"
-        @primary-action="loadExecutions"
-      />
-      <StateSearchEmpty
-        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
-        compact
-        :primary-action-text="$t('common.uiState.actions.clearFilters')"
-        @primary-action="resetQuery"
-      />
-      <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
-
-      <div v-else class="table-container">
-      <UnifiedListTable
-        v-model:currentPage="pagination.currentPage"
-        v-model:pageSize="pagination.pageSize"
-        :page-sizes="[10, 20, 50, 100]"
-        :total="total"
-        :data="executions"
-        :loading="loading"
-        row-key="id"
-        selection-mode="multi"
-        :actions="{ view: false, edit: false, delete: false }"
-        :action-column-width="180"
-        @selection-change="handleSelectionChange"
-        @page-change="loadExecutions">
-        <el-table-column prop="id" label="ID" width="80" align="center" />
-        <el-table-column prop="test_case_name" :label="$t('uiAutomation.execution.caseName')" min-width="200">
-          <template #default="{ row }">
-            <el-link @click="viewExecutionDetail(row)" type="primary">
-              {{ row.test_case_name }}
-            </el-link>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('uiAutomation.execution.relatedObject')" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag v-if="!row.test_suite" type="info" size="small">{{ $t('uiAutomation.execution.case') }}</el-tag>
-            <el-tag v-else type="warning" size="small">{{ $t('uiAutomation.execution.suiteTag') }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" :label="$t('uiAutomation.execution.statusFilter')" width="100" align="center">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small">{{ getStatusText(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="engine" :label="$t('uiAutomation.execution.testEngine')" width="120" align="center">
-          <template #default="{ row }">
-            {{ getEngineText(row.engine) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="headless" :label="$t('uiAutomation.execution.executionMode')" width="100" align="center">
-          <template #default="{ row }">
-            {{ row.headless ? $t('uiAutomation.execution.headlessMode') : $t('uiAutomation.execution.headedMode') }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="browser" :label="$t('uiAutomation.execution.browserFilter')" width="100" align="center">
-          <template #default="{ row }">
-            {{ getBrowserText(row.browser) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_by_name" :label="$t('uiAutomation.execution.executor')" width="120" align="center" />
-        <el-table-column prop="started_at" :label="$t('uiAutomation.execution.startTime')" width="180" align="center">
-          <template #default="{ row }">
-            {{ formatDateTime(row.started_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="finished_at" :label="$t('uiAutomation.execution.endTime')" width="180" align="center">
-          <template #default="{ row }">
-            {{ formatDateTime(row.finished_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('uiAutomation.execution.duration')" width="120" align="center">
-          <template #default="{ row }">
-            {{ formatDuration(row.execution_time) }}
-          </template>
-        </el-table-column>
-        <template #actions="{ row }">
+    <!-- 3. 标准表格展示 -->
+    <template v-else>
+      <div class="table-container">
+        <UnifiedListTable
+          v-model:currentPage="pagination.currentPage"
+          v-model:pageSize="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          :data="executions"
+          :loading="loading"
+          row-key="id"
+          selection-mode="multi"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="180"
+          @selection-change="handleSelectionChange"
+          @row-dblclick="viewExecutionDetail"
+          @page-change="loadExecutions"
+        >
+          <el-table-column prop="id" label="ID" width="80" align="center" />
+          <el-table-column prop="test_case_name" :label="$t('uiAutomation.execution.caseName')" min-width="200">
+            <template #default="{ row }">
+              <el-link @click="viewExecutionDetail(row)" type="primary">
+                {{ row.test_case_name }}
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('uiAutomation.execution.relatedObject')" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag v-if="!row.test_suite" type="info" size="small">{{ $t('uiAutomation.execution.case') }}</el-tag>
+              <el-tag v-else type="warning" size="small">{{ $t('uiAutomation.execution.suiteTag') }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" :label="$t('uiAutomation.execution.statusFilter')" width="100" align="center">
+            <template #default="{ row }">
+              <el-tag :type="getStatusType(row.status)" size="small">{{ getStatusText(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="engine" :label="$t('uiAutomation.execution.testEngine')" width="120" align="center">
+            <template #default="{ row }">
+              {{ getEngineText(row.engine) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="headless" :label="$t('uiAutomation.execution.executionMode')" width="100" align="center">
+            <template #default="{ row }">
+              {{ row.headless ? $t('uiAutomation.execution.headlessMode') : $t('uiAutomation.execution.headedMode') }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="browser" :label="$t('uiAutomation.execution.browserFilter')" width="100" align="center">
+            <template #default="{ row }">
+              {{ getBrowserText(row.browser) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_by_name" :label="$t('uiAutomation.execution.executor')" width="120" align="center" />
+          <el-table-column prop="started_at" :label="$t('uiAutomation.execution.startTime')" width="180" align="center">
+            <template #default="{ row }">
+              {{ formatDateTime(row.started_at) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="finished_at" :label="$t('uiAutomation.execution.endTime')" width="180" align="center">
+            <template #default="{ row }">
+              {{ formatDateTime(row.finished_at) }}
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('uiAutomation.execution.duration')" width="120" align="center">
+            <template #default="{ row }">
+              {{ formatDuration(row.execution_time) }}
+            </template>
+          </el-table-column>
+          <template #actions="{ row }">
             <el-button size="small" type="primary" link @click="viewExecutionDetail(row)">
               <el-icon><View /></el-icon>
               {{ $t('uiAutomation.common.details') }}
@@ -160,10 +155,10 @@
             >
               {{ $t('uiAutomation.common.delete') }}
             </el-button>
-        </template>
-      </UnifiedListTable>
+          </template>
+        </UnifiedListTable>
       </div>
-    </div>
+    </template>
 
     <!-- 执行详情对话框 -->
     <el-dialog v-model="showDetailDialog" :title="$t('uiAutomation.execution.executionDetail')" width="900px">
@@ -278,7 +273,7 @@
         <el-button type="primary" @click="handleRerun" :loading="rerunning">{{ $t('uiAutomation.execution.confirmRerun') }}</el-button>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
@@ -295,10 +290,25 @@ import {
   runTestCase
 } from '@/api/ui_automation'
 import { UnifiedListTable } from '@/components/platform-shared'
+import { ListShell } from '@/components/page-shells'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 
 const { t } = useI18n()
 const router = useRouter()
+
+// Header actions configuration
+usePlatformPageHeader({
+  title: computed(() => t('uiAutomation.execution.title')),
+  actions: computed(() => [
+    {
+      label: t('uiAutomation.common.batchDelete'),
+      type: 'danger',
+      handler: handleBatchDelete,
+      disabled: selectedIds.value.length === 0
+    }
+  ])
+})
 
 // 项目和执行数据
 const projects = ref([])
@@ -675,50 +685,30 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.page-container {
-  padding: 20px;
-  height: 100%;
-  overflow-y: auto;
-  background: #f5f5f5;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  background: white;
-  padding: 20px;
-  border-radius: 4px;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 24px;
-  color: #303133;
-}
-
-.card-container {
-  background-color: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.filter-bar {
-  margin-bottom: 20px;
-}
-
-.pagination-container {
-  display: none;
-}
-
 .table-container {
+  flex: 1;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 
   :deep(.unified-list-table) {
     display: flex;
     flex-direction: column;
+    height: 100%;
+  }
+
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
   }
 }
 

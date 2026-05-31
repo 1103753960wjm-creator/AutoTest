@@ -1,6 +1,6 @@
 # TestHub 模块记忆
 
-更新时间：2026-04-15
+更新时间：2026-05-31
 
 ## 1. 文件职责
 
@@ -32,12 +32,16 @@
 - route meta、导航守卫、全局布局壳变更
 - 超大 `page_size` 或一次性全量拉取
 - token、登录、退出、401 刷新链路
+- `router-view` 的 `:key` 与 `keep-alive` 的 `include` 匹配维度不一致
+- `platform-route-wrapper` 的 overflow/height 内联样式影响子页面滚动
 
 ### 2.4 开发注意事项
 
 - 首屏数据优先通过单一 `refresh/load` 收口
 - 轮询必须具备最小间隔、终态停止、失焦暂停或降频、同对象去重
 - 新增 route meta 字段时同步更新 `frontend/src/types/router-meta.d.ts`
+- `router-view` 的 `:key` 必须使用 `currentRoute.name || currentRoute.path`，禁止使用 `fullPath`
+- 在 `ListShell` 的 `#filters` 插槽中，所有 `el-select` 和 `el-input` 必须设置 `width: 100%`，`el-col` span 参考评审列表（每列 span 8）
 
 ## 3. backend
 

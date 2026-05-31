@@ -45,6 +45,7 @@
 - 详情页：负责对象主信息、摘要、入口和轻量关联展示
 - 编辑页：负责输入、校验、提交和必要的上下文回填
 - 结果批次页：负责结果对象、处理状态和批量动作，不伪装为任务对象主页面
+- 前端样式 UI 一致化：所有包含搜索/筛选区、操作按钮和数据表格的页面，其搜索/筛选组件、操作按钮的排版、对齐方式、位置及样式必须与平台已有的标准页面（如 ProjectManagement.vue）保持完全一致。统一采用标准的网格系统对齐（如 el-row :gutter=16/18），放置在列表表格上方、页面主壳（或 ListShell）中，保持一致的间距与布局顺序，不得随意设计新布局。具体组件级与代码级开发范本可参考规范文档 [unified-table-template-spec.md](file:///e:/testhub_platform-main/testhub_platform-main/docs/unified-table-template-spec.md)。
 
 ## 7. 编码与中文规则
 

@@ -1,11 +1,12 @@
 <template>
-  <div class="page-container">
-    <div class="card-container">
-      <div class="filter-bar">
-        <el-row :gutter="20">
-          <el-col :span="5">
+  <ListShell>
+    <template #filters>
+      <div class="filter-bar-content">
+        <el-row :gutter="16">
+          <el-col :span="8">
             <el-input
               v-model="searchText"
+              style="width: 100%"
               :placeholder="$t('testcase.searchPlaceholder')"
               clearable
               @input="handleSearch"
@@ -15,8 +16,8 @@
               </template>
             </el-input>
           </el-col>
-          <el-col :span="4">
-            <el-select v-model="projectFilter" :placeholder="$t('testcase.relatedProject')" clearable @change="handleFilter">
+          <el-col :span="8">
+            <el-select v-model="projectFilter" style="width: 100%" :placeholder="$t('testcase.relatedProject')" clearable @change="handleFilter">
               <el-option
                 v-for="project in projects"
                 :key="project.id"
@@ -25,8 +26,8 @@
               />
             </el-select>
           </el-col>
-          <el-col :span="3">
-            <el-select v-model="priorityFilter" :placeholder="$t('testcase.priorityFilter')" clearable @change="handleFilter">
+          <el-col :span="8">
+            <el-select v-model="priorityFilter" style="width: 100%" :placeholder="$t('testcase.priorityFilter')" clearable @change="handleFilter">
               <el-option :label="$t('testcase.low')" value="low" />
               <el-option :label="$t('testcase.medium')" value="medium" />
               <el-option :label="$t('testcase.high')" value="high" />
@@ -35,33 +36,34 @@
           </el-col>
         </el-row>
       </div>
-      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
-      <StateForbidden
-        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
-        compact
-        :primary-action-text="$t('common.uiState.actions.goHome')"
-        @primary-action="router.push('/home')"
-      />
-      <StateError
-        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
-        compact
-        :description="requestErrorMessage || $t('common.uiState.error.description')"
-        @primary-action="fetchTestCases"
-      />
-      <StateSearchEmpty
-        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
-        compact
-        :primary-action-text="$t('common.uiState.actions.clearFilters')"
-        @primary-action="resetFilters"
-      />
-      <StateEmpty
-        v-else-if="pageState === UI_PAGE_STATE.EMPTY"
-        compact
-        :primary-action-text="$t('testcase.newCase')"
-        @primary-action="() => router.push('/ai-generation/testcases/create')"
-      />
-      <template v-else>
-        <div class="table-container">
+    </template>
+
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="fetchTestCases"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="resetFilters"
+    />
+    <StateEmpty
+      v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+      compact
+      :primary-action-text="$t('testcase.newCase')"
+      @primary-action="() => router.push('/ai-generation/testcases/create')"
+    />
+    <template v-else>
           <UnifiedListTable
             v-model:currentPage="currentPage"
             v-model:pageSize="pageSize"
@@ -149,10 +151,8 @@
               </template>
             </el-table-column>
           </UnifiedListTable>
-        </div>
       </template>
-    </div>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
@@ -166,6 +166,7 @@ import dayjs from 'dayjs'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 import * as XLSX from 'xlsx'
 import { buildDeeplinkLocation, resolveReturnTarget } from '@/router/deeplink'
+import { ListShell } from '@/components/page-shells'
 import { UnifiedListTable } from '@/components/platform-shared'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
@@ -613,84 +614,12 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.page-container {
+.filter-bar-content {
   display: flex;
-  flex-direction: column;
-  height: 100vh;
-  padding: 20px;
-  box-sizing: border-box;
-  overflow: hidden;
+  width: 100%;
 }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-shrink: 0;
-}
 
-.page-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.card-container {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow: hidden;
-  background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-.filter-bar {
-  padding: 20px;
-  border-bottom: 1px solid #ebeef5;
-  flex-shrink: 0;
-}
-
-.table-container {
-  flex: 1;
-  overflow: hidden;
-  padding: 0 20px;
-
-  :deep(.unified-list-table) {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-
-  :deep(.unified-list-table__table) {
-    flex: 1;
-    min-height: 0;
-  }
-  
-  :deep(.el-table) {
-    height: 100% !important;
-  }
-  
-  :deep(.el-table__body-wrapper) {
-    overflow-y: auto !important;
-  }
-}
-
-.pagination-container {
-  padding: 20px;
-  border-top: 1px solid #ebeef5;
-  display: flex;
-  justify-content: center;
-  flex-shrink: 0;
-}
 
 .priority-tag {
   &.low { color: #67c23a; }
@@ -715,45 +644,7 @@ onMounted(() => {
   font-style: italic;
 }
 
-@media (max-width: 1200px) {
-  .page-container {
-    height: auto;
-    min-height: 100vh;
-    overflow-y: auto;
-  }
-  
-  .card-container {
-    min-height: 600px;
-  }
-  
-  .table-container {
-    min-height: 400px;
-  }
-}
 
-@media (max-width: 768px) {
-  .page-container {
-    padding: 10px;
-  }
-  
-  .page-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 15px;
-  }
-  
-  .header-actions {
-    width: 100%;
-  }
-  
-  .filter-bar {
-    padding: 15px;
-  }
-  
-  .pagination-container {
-    padding: 15px;
-  }
-}
 
 .step-content {
   min-height: 200px;

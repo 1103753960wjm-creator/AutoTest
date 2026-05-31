@@ -1,70 +1,83 @@
 <template>
-  <div class="list-page">
-    <div class="list-page__panel">
-      <FilterBar>
-        <div class="project-filter-grid">
+  <ListShell>
+    <!-- 1. 搜索筛选区 -->
+    <div class="filters">
+      <el-row :gutter="16">
+        <el-col :span="8">
           <el-input
             v-model="searchText"
             :placeholder="$t('uiAutomation.project.searchPlaceholder')"
             clearable
             @input="handleSearch"
-          >
+           style="width: 100%">
             <template #prefix>
               <el-icon><Search /></el-icon>
             </template>
           </el-input>
+        </el-col>
+        <el-col :span="8">
           <el-select
             v-model="statusFilter"
             :placeholder="$t('uiAutomation.project.statusFilter')"
             clearable
+            style="width: 100%"
             @change="handleFilter"
           >
             <el-option :label="$t('uiAutomation.status.notStarted')" value="NOT_STARTED" />
             <el-option :label="$t('uiAutomation.status.inProgress')" value="IN_PROGRESS" />
             <el-option :label="$t('uiAutomation.status.completed')" value="COMPLETED" />
           </el-select>
-        </div>
-        <template #actions>
+        </el-col>
+        <el-col :span="8" class="filter-buttons">
           <el-button @click="resetFilters">{{ $t('common.reset') }}</el-button>
-        </template>
-      </FilterBar>
+        </el-col>
+      </el-row>
+    </div>
 
-      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
-      <StateForbidden
-        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
-        compact
-        :primary-action-text="$t('common.uiState.actions.goHome')"
-        @primary-action="router.push('/home')"
-      />
-      <StateError
-        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
-        compact
-        :description="requestErrorMessage || $t('common.uiState.error.description')"
-        @primary-action="loadProjects"
-      />
-      <StateSearchEmpty
-        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
-        compact
-        :primary-action-text="$t('common.uiState.actions.clearFilters')"
-        @primary-action="resetFilters"
-      />
-      <StateEmpty
-        v-else-if="pageState === UI_PAGE_STATE.EMPTY"
-        compact
-        :primary-action-text="$t('uiAutomation.project.newProject')"
-        @primary-action="openCreateDialog"
-      />
-      <template v-else>
-        <div class="list-page__toolbar">
-          <div class="list-page__summary">
-            <span class="list-page__summary-main">共 {{ total }} 个项目</span>
-            <span class="list-page__summary-sub">
-              {{ hasActiveFilter ? '当前为筛选结果' : '当前为全部项目' }}
-            </span>
-          </div>
-        </div>
+    <!-- 2. 统一页面状态机联动 -->
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="loadProjects"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="resetFilters"
+    />
+    <StateEmpty
+      v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+      compact
+      :primary-action-text="$t('uiAutomation.project.newProject')"
+      @primary-action="openCreateDialog"
+    />
 
-        <el-table :data="projects" v-loading="loading" style="width: 100%">
+    <!-- 3. 标准表格展示 -->
+    <template v-else>
+      <div class="table-container">
+        <UnifiedListTable
+          v-model:currentPage="pagination.currentPage"
+          v-model:pageSize="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          :data="projects"
+          :loading="loading"
+          row-key="id"
+          selection-mode="none"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="200"
+          @row-dblclick="(row) => goToProjectDetail(row.id)"
+          @page-change="loadProjects"
+        >
           <el-table-column prop="name" :label="$t('uiAutomation.project.projectName')" min-width="200">
             <template #default="{ row }">
               <el-link type="primary" @click="goToProjectDetail(row.id)">
@@ -90,37 +103,19 @@
               {{ formatDateTime(row.updated_at) }}
             </template>
           </el-table-column>
-          <el-table-column :label="$t('uiAutomation.common.operation')" width="180" fixed="right">
-            <template #default="{ row }">
-              <el-button size="small" type="primary" @click="goToProjectDetail(row.id)">
-                <el-icon><View /></el-icon>
-                {{ $t('uiAutomation.common.view') }}
-              </el-button>
-              <el-button size="small" @click="openEditDialog(row)">
-                <el-icon><Edit /></el-icon>
-                {{ $t('uiAutomation.common.edit') }}
-              </el-button>
-              <el-button size="small" type="danger" @click="deleteProject(row.id)">
-                <el-icon><Delete /></el-icon>
-                {{ $t('uiAutomation.common.delete') }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div class="list-page__pagination">
-          <el-pagination
-            v-model:current-page="pagination.currentPage"
-            v-model:page-size="pagination.pageSize"
-            :page-sizes="[10, 20, 50, 100]"
-            layout="total, sizes, prev, pager, next, jumper"
-            :total="total"
-            @size-change="handleSizeChange"
-            @current-change="handleCurrentChange"
-          />
-        </div>
-      </template>
-    </div>
+          <template #actions="{ row }">
+            <el-button link type="primary" size="small" @click="openEditDialog(row)">
+              <el-icon><Edit /></el-icon>
+              {{ $t('uiAutomation.common.edit') }}
+            </el-button>
+            <el-button link type="danger" size="small" @click="deleteProject(row.id)">
+              <el-icon><Delete /></el-icon>
+              {{ $t('uiAutomation.common.delete') }}
+            </el-button>
+          </template>
+        </UnifiedListTable>
+      </div>
+    </template>
 
     <el-dialog
       v-model="showCreateDialog"
@@ -128,7 +123,7 @@
       width="500px"
       :close-on-click-modal="false"
     >
-      <el-form ref="createFormRef" :model="createForm" :rules="formRules" label-width="80px">
+      <el-form :ref="setCreateFormRef" :model="createForm" :rules="formRules" label-width="80px">
         <el-form-item :label="$t('uiAutomation.project.projectName')" prop="name">
           <el-input v-model="createForm.name" :placeholder="$t('uiAutomation.project.rules.nameRequired')" />
         </el-form-item>
@@ -166,7 +161,7 @@
       width="500px"
       :close-on-click-modal="false"
     >
-      <el-form ref="editFormRef" :model="editForm" :rules="formRules" label-width="80px">
+      <el-form :ref="setEditFormRef" :model="editForm" :rules="formRules" label-width="80px">
         <el-form-item :label="$t('uiAutomation.project.projectName')" prop="name">
           <el-input v-model="editForm.name" :placeholder="$t('uiAutomation.project.rules.nameRequired')" />
         </el-form-item>
@@ -237,7 +232,7 @@
         </span>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
@@ -248,7 +243,8 @@ import { Delete, Edit, Plus, Search, View } from '@element-plus/icons-vue'
 import router from '@/router'
 import { useUserStore } from '@/stores/user'
 import { createUiProject, deleteUiProject, getUiProjects, updateUiProject } from '@/api/ui_automation'
-import { FilterBar } from '@/components/platform-shared'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { ListShell } from '@/components/page-shells'
 import {
   StateEmpty,
   StateError,
@@ -281,6 +277,14 @@ const showEditDialog = ref(false)
 const showDetailDialog = ref(false)
 const createFormRef = ref(null)
 const editFormRef = ref(null)
+
+function setCreateFormRef(el) {
+  createFormRef.value = el
+}
+function setEditFormRef(el) {
+  editFormRef.value = el
+}
+
 const currentEditId = ref(null)
 const currentProjectDetail = ref(null)
 
@@ -609,52 +613,31 @@ onMounted(() => {
 </script>
 
 <style scoped lang="scss">
-.list-page {
+.table-container {
+  flex: 1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
+  min-height: 0;
 
-.list-page__panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
 
-.list-page__toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.list-page__summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: center;
-}
-
-.list-page__summary-main {
-  font-size: 14px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.list-page__summary-sub {
-  font-size: 13px;
-  color: #64748b;
-}
-
-.project-filter-grid {
-  display: grid;
-  grid-template-columns: minmax(260px, 1.4fr) minmax(180px, 220px);
-  gap: 16px;
-}
-
-.list-page__pagination {
-  display: flex;
-  justify-content: center;
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
+  }
 }
 
 .dialog-footer {
@@ -668,37 +651,7 @@ onMounted(() => {
   text-align: center;
 }
 
-@media (max-width: 1024px) {
-  .project-filter-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .list-page__toolbar {
-    align-items: flex-start;
-  }
-
-  .list-page__pagination :deep(.el-pagination) {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
-}
-
 @media (max-width: 768px) {
-  .list-page__panel {
-    gap: 14px;
-  }
-
-  .list-page__summary {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-
-  .list-page__pagination :deep(.el-pagination__sizes),
-  .list-page__pagination :deep(.el-pagination__jump) {
-    display: none;
-  }
-
   :deep(.el-dialog) {
     width: 95% !important;
     margin: 0 auto;

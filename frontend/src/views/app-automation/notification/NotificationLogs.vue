@@ -3,23 +3,23 @@
     <!-- 搜索栏 -->
     <div class="filters">
       <el-row :gutter="20">
-        <el-col :span="6">
-          <el-input v-model="searchForm.taskName" placeholder="搜索任务名称" clearable @clear="handleSearch" @keyup.enter="handleSearch">
+        <el-col :span="8">
+          <el-input v-model="searchForm.taskName" placeholder="搜索任务名称" clearable @clear="handleSearch" @keyup.enter="handleSearch" style="width: 100%">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
         </el-col>
-        <el-col :span="6">
-          <el-date-picker v-model="searchForm.dateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleSearch" />
+        <el-col :span="8">
+          <el-date-picker v-model="searchForm.dateRange" type="daterange" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" value-format="YYYY-MM-DD" @change="handleSearch" style="width: 100%" />
         </el-col>
-        <el-col :span="6">
-          <el-select v-model="searchForm.status" placeholder="发送状态" clearable @change="handleSearch">
+        <el-col :span="8">
+          <el-select v-model="searchForm.status" placeholder="发送状态" clearable @change="handleSearch" style="width: 100%">
             <el-option label="全部" value="" />
             <el-option label="发送成功" value="success" />
             <el-option label="发送失败" value="failed" />
             <el-option label="待发送" value="pending" />
           </el-select>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="8">
           <el-button type="primary" @click="handleSearch"><el-icon><Search /></el-icon>查询</el-button>
           <el-button @click="handleReset">重置</el-button>
         </el-col>

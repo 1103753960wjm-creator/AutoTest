@@ -1,104 +1,121 @@
 <template>
-  <div class="report-view">
-    <div class="header">
-      <h3>{{ $t('uiAutomation.report.title') }}</h3>
-      <div class="actions">
-        <el-select v-model="selectedProject" :placeholder="$t('uiAutomation.common.selectProject')" style="width: 200px; margin-right: 15px" @change="onProjectChange">
-          <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
-        </el-select>
-        <el-button type="primary" @click="refreshReports">
-          <el-icon><Refresh /></el-icon>
-          {{ $t('uiAutomation.report.refreshReport') }}
-        </el-button>
-      </div>
+  <ListShell>
+    <div class="filters">
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-select
+            v-model="selectedProject"
+            :placeholder="$t('uiAutomation.common.selectProject')"
+            clearable
+            style="width: 100%"
+            @change="onProjectChange"
+          >
+            <el-option
+              v-for="project in projects"
+              :key="project.id"
+              :label="project.name"
+              :value="project.id"
+            />
+          </el-select>
+        </el-col>
+        <el-col :span="8" class="filter-buttons">
+          <el-button type="primary" @click="loadReports">
+            {{ $t('uiAutomation.common.search') }}
+          </el-button>
+          <el-button @click="clearProjectFilter">
+            {{ $t('uiAutomation.common.reset') }}
+          </el-button>
+        </el-col>
+      </el-row>
     </div>
 
-    <div class="content">
-      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
-      <StateForbidden
-        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
-        compact
-        :primary-action-text="$t('common.uiState.actions.goHome')"
-        @primary-action="router.push('/home')"
-      />
-      <StateError
-        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
-        compact
-        :description="requestErrorMessage || $t('common.uiState.error.description')"
-        @primary-action="loadReports"
-      />
-      <StateSearchEmpty
-        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
-        compact
-        :primary-action-text="$t('common.uiState.actions.clearFilters')"
-        @primary-action="clearProjectFilter"
-      />
-      <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="loadReports"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="clearProjectFilter"
+    />
+    <StateEmpty v-else-if="pageState === UI_PAGE_STATE.EMPTY" compact />
 
-      <div v-else class="table-container">
-      <UnifiedListTable
-        v-model:currentPage="pagination.currentPage"
-        v-model:pageSize="pagination.pageSize"
-        :page-sizes="[10, 20, 50, 100]"
-        :total="total"
-        :data="reports"
-        :loading="loading"
-        row-key="id"
-        selection-mode="none"
-        :actions="{ view: false, edit: false, delete: false }"
-        :action-column-width="200"
-        @page-change="loadReports">
-        <el-table-column prop="id" label="ID" width="80" />
-        <el-table-column prop="test_suite_name" :label="$t('uiAutomation.report.testSuite')" min-width="200" />
-        <el-table-column prop="status" :label="$t('uiAutomation.common.status')" width="120">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
-              {{ getStatusText(row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('uiAutomation.report.testEngine')" width="120">
-          <template #default="{ row }">
-            <el-tag size="small">{{ getEngineText(row.engine) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('uiAutomation.report.browser')" width="100">
-          <template #default="{ row }">
-            {{ getBrowserText(row.browser) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="total_cases" :label="$t('uiAutomation.report.totalCases')" width="100" />
-        <el-table-column prop="passed_cases" :label="$t('uiAutomation.report.passedCases')" width="100">
-          <template #default="{ row }">
-            <span style="color: #67c23a; font-weight: bold;">{{ row.passed_cases }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="failed_cases" :label="$t('uiAutomation.report.failedCases')" width="100">
-          <template #default="{ row }">
-            <span style="color: #f56c6c; font-weight: bold;">{{ row.failed_cases }}</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('uiAutomation.report.passRate')" width="100">
-          <template #default="{ row }">
-            <el-progress
-              :percentage="row.pass_rate"
-              :color="getProgressColor(row.pass_rate)"
-              :stroke-width="16"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('uiAutomation.report.duration')" width="120">
-          <template #default="{ row }">
-            {{ formatDuration(row.duration) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="executed_by_name" :label="$t('uiAutomation.report.executor')" width="120" />
-        <el-table-column prop="created_at" :label="$t('uiAutomation.report.executionTime')" width="180">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
-        </el-table-column>
-        <template #actions="{ row }">
+    <template v-else>
+      <div class="table-container">
+        <UnifiedListTable
+          v-model:currentPage="pagination.currentPage"
+          v-model:pageSize="pagination.pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="total"
+          :data="reports"
+          :loading="loading"
+          row-key="id"
+          selection-mode="none"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="200"
+          @row-dblclick="viewReportDetail"
+          @page-change="loadReports"
+        >
+          <el-table-column prop="test_suite_name" :label="$t('uiAutomation.report.testSuite')" min-width="200" />
+          <el-table-column prop="status" :label="$t('uiAutomation.common.status')" width="120">
+            <template #default="{ row }">
+              <el-tag :type="getStatusType(row.status)">
+                {{ getStatusText(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('uiAutomation.report.testEngine')" width="120">
+            <template #default="{ row }">
+              <el-tag size="small">{{ getEngineText(row.engine) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('uiAutomation.report.browser')" width="100">
+            <template #default="{ row }">
+              {{ getBrowserText(row.browser) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="total_cases" :label="$t('uiAutomation.report.totalCases')" width="100" />
+          <el-table-column prop="passed_cases" :label="$t('uiAutomation.report.passedCases')" width="100">
+            <template #default="{ row }">
+              <span style="color: #67c23a; font-weight: bold;">{{ row.passed_cases }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="failed_cases" :label="$t('uiAutomation.report.failedCases')" width="100">
+            <template #default="{ row }">
+              <span style="color: #f56c6c; font-weight: bold;">{{ row.failed_cases }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('uiAutomation.report.passRate')" width="100">
+            <template #default="{ row }">
+              <el-progress
+                :percentage="row.pass_rate"
+                :color="getProgressColor(row.pass_rate)"
+                :stroke-width="16"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('uiAutomation.report.duration')" width="120">
+            <template #default="{ row }">
+              {{ formatDuration(row.duration) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="executed_by_name" :label="$t('uiAutomation.report.executor')" width="120" />
+          <el-table-column prop="created_at" :label="$t('uiAutomation.report.executionTime')" width="180">
+            <template #default="{ row }">
+              {{ formatDate(row.created_at) }}
+            </template>
+          </el-table-column>
+          <template #actions="{ row }">
             <el-button link type="primary" size="small" @click="viewReportDetail(row)">
               <el-icon><Document /></el-icon>
               {{ $t('uiAutomation.report.viewDetail') }}
@@ -107,12 +124,11 @@
               <el-icon><Delete /></el-icon>
               {{ $t('uiAutomation.common.delete') }}
             </el-button>
-        </template>
-      </UnifiedListTable>
+          </template>
+        </UnifiedListTable>
       </div>
-    </div>
+    </template>
 
-    <!-- 鎶ュ憡璇︽儏瀵硅瘽妗?-->
     <el-dialog
       v-model="showDetailDialog"
       :title="$t('uiAutomation.report.reportDetail')"
@@ -160,50 +176,32 @@
             </el-col>
             <el-col :span="6">
               <div class="stat-card warning">
-                <div class="stat-label">{{ $t('uiAutomation.report.skippedCases') }}</div>
-                <div class="stat-value">{{ currentReport.skipped_cases }}</div>
+                <div class="stat-label">{{ $t('uiAutomation.report.passRate') }}</div>
+                <div class="stat-value">{{ currentReport.pass_rate }}%</div>
               </div>
             </el-col>
           </el-row>
-
-          <div class="pass-rate-chart">
-            <h5>{{ $t('uiAutomation.report.passRate') }}: {{ currentReport.pass_rate }}%</h5>
-            <el-progress
-              :percentage="currentReport.pass_rate"
-              :color="getProgressColor(currentReport.pass_rate)"
-              :stroke-width="20"
-            />
-          </div>
         </div>
 
-        <div class="result-section">
-          <h4>{{ $t('uiAutomation.report.executionResultDetail') }}</h4>
-          <el-table
-            :data="getCaseExecutionList(currentReport)"
-            border
-            style="margin-top: 15px;"
-          >
-            <el-table-column type="index" :label="$t('uiAutomation.report.sequence')" width="60" />
-            <el-table-column prop="test_case_name" :label="$t('uiAutomation.report.testCase')" min-width="200" />
-            <el-table-column :label="$t('uiAutomation.report.executionStatus')" width="100" align="center">
+        <div class="result-section" v-if="currentReport.result_data && currentReport.result_data.test_cases && currentReport.result_data.test_cases.length > 0">
+          <h4>{{ $t('uiAutomation.report.testCases') }}</h4>
+          <el-table :data="getCaseExecutionList(currentReport)" border style="width: 100%">
+            <el-table-column prop="test_case_name" :label="$t('uiAutomation.report.caseName')" min-width="150" />
+            <el-table-column prop="status" :label="$t('uiAutomation.common.status')" width="100">
               <template #default="{ row }">
                 <el-tag :type="row.status === 'passed' ? 'success' : 'danger'">
-                  {{ row.status === 'passed' ? $t('uiAutomation.report.casePassed') : $t('uiAutomation.report.caseFailed') }}
+                  {{ row.status === 'passed' ? $t('uiAutomation.report.statusSuccess') : $t('uiAutomation.report.statusFailed') }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column :label="$t('uiAutomation.report.stepCount')" width="100" align="center">
+            <el-table-column prop="duration" :label="$t('uiAutomation.report.duration')" width="120">
               <template #default="{ row }">
-                {{ row.steps ? row.steps.length : 0 }}
+                {{ formatDuration(row.duration) }}
               </template>
             </el-table-column>
             <el-table-column :label="$t('uiAutomation.common.operation')" width="120" align="center">
               <template #default="{ row }">
-                <el-button
-                  type="primary"
-                  link
-                  @click="viewCaseDetail(row)"
-                >
+                <el-button type="primary" link @click="viewCaseDetail(row)">
                   {{ $t('uiAutomation.report.viewDetail') }}
                 </el-button>
               </template>
@@ -227,7 +225,6 @@
       </template>
     </el-dialog>
 
-    <!-- 鐢ㄤ緥璇︽儏瀵硅瘽妗?-->
     <el-dialog
       v-model="showCaseDetailDialog"
       :title="`${$t('uiAutomation.report.caseDetail')} - ${currentCase?.test_case_name || ''}`"
@@ -235,7 +232,6 @@
       :close-on-click-modal="false"
     >
       <div v-if="currentCase" class="case-detail">
-        <!-- 鐢ㄤ緥鎵ц鎴愬姛 - 鍙樉绀烘墽琛屾棩蹇?-->
         <div v-if="currentCase.status === 'passed'">
           <h4>{{ $t('uiAutomation.report.executionLogs') }}</h4>
           <div class="log-container">
@@ -255,10 +251,8 @@
           </div>
         </div>
 
-        <!-- 鐢ㄤ緥鎵ц澶辫触 - 鏄剧ず鎵ц鏃ュ織銆佸け璐ユ埅鍥俱€侀敊璇俊鎭笁涓猼ab -->
         <div v-else>
           <el-tabs v-model="activeTab" type="border-card">
-            <!-- 鎵ц鏃ュ織 Tab -->
             <el-tab-pane :label="$t('uiAutomation.report.executionLogs')" name="logs">
               <div class="log-container">
                 <div v-for="(step, index) in currentCase.steps" :key="index" class="log-item">
@@ -277,7 +271,6 @@
               </div>
             </el-tab-pane>
 
-            <!-- 澶辫触鎴浘 Tab -->
             <el-tab-pane :label="$t('uiAutomation.report.failedScreenshots')" name="screenshots">
               <div v-if="currentCase.screenshots && currentCase.screenshots.length > 0" class="screenshot-container">
                 <div v-for="(screenshot, index) in currentCase.screenshots" :key="index" class="screenshot-item">
@@ -289,7 +282,6 @@
               <el-empty v-else :description="$t('uiAutomation.report.noScreenshots')" />
             </el-tab-pane>
 
-            <!-- 閿欒淇℃伅 Tab -->
             <el-tab-pane :label="$t('uiAutomation.report.errorInfo')" name="error">
               <div class="errors-container">
                 <div v-if="currentCase.error" class="error-item">
@@ -307,7 +299,7 @@
         <el-button @click="showCaseDetailDialog = false">{{ $t('uiAutomation.common.close') }}</el-button>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
@@ -322,6 +314,8 @@ import {
   deleteTestExecution
 } from '@/api/ui_automation'
 import { UnifiedListTable } from '@/components/platform-shared'
+import { ListShell } from '@/components/page-shells'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const { t } = useI18n()
@@ -356,14 +350,21 @@ const pageState = computed(() => {
   return state
 })
 
-// 璇︽儏瀵硅瘽妗?const showDetailDialog = ref(false)
+// 详情对话框
 const showDetailDialog = ref(false)
 const currentReport = ref(null)
 
-// 鐢ㄤ緥璇︽儏瀵硅瘽妗?const showCaseDetailDialog = ref(false)
+// 用例详情对话框
 const showCaseDetailDialog = ref(false)
 const currentCase = ref(null)
 const activeTab = ref('logs')
+
+// 注册页头
+usePlatformPageHeader({
+  title: t('uiAutomation.report.title'),
+  showRefresh: true,
+  onRefresh: () => refreshReports()
+})
 
 // 鍔犺浇椤圭洰鍒楄〃
 const loadProjects = async () => {
@@ -573,53 +574,30 @@ onMounted(async () => {
 </script>
 
 <style scoped lang="scss">
-.report-view {
-  padding: 20px;
-  height: 100%;
+.table-container {
+  flex: 1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: #f5f5f5;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  background: white;
-  padding: 20px;
-  border-radius: 4px;
-
-  h3 {
-    margin: 0;
-    color: #303133;
-    font-size: 24px;
-  }
-
-  .actions {
-    display: flex;
-    align-items: center;
-  }
-}
-
-.content {
-  flex: 1;
-  overflow: auto;
-  background: white;
-  padding: 20px;
-  border-radius: 4px;
-}
-
-.pagination-container {
-  display: none;
-}
-
-.table-container {
-  overflow: hidden;
+  min-height: 0;
 
   :deep(.unified-list-table) {
     display: flex;
     flex-direction: column;
+    height: 100%;
+  }
+
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
   }
 }
 

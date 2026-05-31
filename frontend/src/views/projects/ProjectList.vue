@@ -143,7 +143,7 @@
       width="600px"
       @close="handleDialogClose"
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+      <el-form :ref="setFormRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item :label="$t('project.projectName')" prop="name">
           <el-input v-model="form.name" :placeholder="$t('project.projectNamePlaceholder')" />
         </el-form-item>
@@ -196,6 +196,10 @@ const submitting = ref(false)
 const showCreateDialog = ref(false)
 const isEdit = ref(false)
 const formRef = ref()
+
+function setFormRef(el) {
+  formRef.value = el
+}
 
 const projects = ref([])
 const currentPage = ref(1)

@@ -1,7 +1,7 @@
 <template>
   <div class="unified-list-table">
     <el-table
-      ref="tableRef"
+      :ref="setTableRef"
       class="unified-list-table__table"
       :data="data"
       :row-key="rowKey"
@@ -154,7 +154,7 @@ const props = defineProps({
     default: 'multi',
     validator: (value) => ['none', 'single', 'multi'].includes(String(value))
   },
-  selectedKey: { type: [String, Number, null], default: null },
+  selectedKey: { type: [String, Number], default: null },
 
   showIndex: { type: Boolean, default: true },
   currentPage: { type: Number, default: 1 },
@@ -177,7 +177,7 @@ const props = defineProps({
   },
   toggleOnRowClick: { type: Boolean, default: true },
   deleteName: { type: [String, Function], default: '' },
-  deletingKey: { type: [String, Number, null], default: null }
+  deletingKey: { type: [String, Number], default: null }
 })
 
 const emit = defineEmits([
@@ -195,6 +195,11 @@ const emit = defineEmits([
 ])
 
 const tableRef = ref()
+
+function setTableRef(el) {
+  tableRef.value = el
+}
+
 const slots = useSlots()
 
 const hasActions = computed(() => {

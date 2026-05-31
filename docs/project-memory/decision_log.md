@@ -67,3 +67,11 @@
 - 决策内容：页面和组件不得绕过 `frontend/src/api/*` 直接请求后端；认证头、token 刷新和 401 处理统一通过 `frontend/src/utils/api.js`
 - 影响范围：前端所有页面、全局认证链路、分页与轮询行为
 - 不再采用的替代方案：在页面组件内直接写裸请求或重复处理认证逻辑
+
+### 3.6 Vue 3 路由缓存架构禁止在容器层混用 v-if
+
+- 决策时间：2026-05-30
+- 背景：侧边栏在含有表格/表单的复杂页面高频切换时，发生了严重崩溃 Cannot read properties of null (reading 'parentNode'/'exposed')。
+- 决策内容：彻底废弃在 `<router-view>` 插槽内通过 `v-if` 条件渲染来切换缓存与非缓存容器。按需缓存必须且只能使用基于路由白名单的 `<keep-alive :include="cachedViews">` 模式，确保渲染器与组件卸载流程不受上层容器频繁销毁的影响。
+- 影响范围：全局平台壳层 (`frontend/src/layout/index.vue`)，以及所有涉及动态渲染路由出口的子组件。
+- 不再采用的替代方案：在缓存插槽层动态组合 div 容器与 `<keep-alive>`。

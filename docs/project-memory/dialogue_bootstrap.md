@@ -1,6 +1,6 @@
 # TestHub 对话启动记忆
 
-更新时间：2026-04-15
+更新时间：2026-05-26
 
 ## 1. 文件职责
 
@@ -42,4 +42,5 @@
 - 决策日志：`docs/project-memory/decision_log.md`
 - 模块记忆：`docs/project-memory/module_memory.md`
 - 任务交接：`docs/project-memory/task_handoff.md`
+- 统一表格与状态模板规范：[unified-table-template-spec.md](file:///e:/testhub_platform-main/testhub_platform-main/docs/unified-table-template-spec.md)
 - 错误模式库：`docs/project-memory/error_prevention_log.md`

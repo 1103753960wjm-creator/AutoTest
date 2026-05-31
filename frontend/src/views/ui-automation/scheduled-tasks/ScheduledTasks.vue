@@ -1,136 +1,156 @@
 <template>
-  <div class="scheduled-tasks">
-    <div class="header">
-      <h3>{{ $t('uiAutomation.scheduledTask.title') }}</h3>
-      <el-button type="primary" @click="handleCreateClick">
-        <el-icon><Plus /></el-icon>
-        {{ $t('uiAutomation.scheduledTask.newTask') }}
-      </el-button>
-    </div>
-
-    <!-- 筛选条件 -->
+  <ListShell>
+    <!-- 1. 搜索筛选区 -->
     <div class="filters">
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <el-select v-model="filters.task_type" :placeholder="$t('uiAutomation.scheduledTask.taskType')" clearable>
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-select v-model="filters.task_type" :placeholder="$t('uiAutomation.scheduledTask.taskType')" clearable @change="handleFilter" style="width: 100%">
             <el-option :label="$t('uiAutomation.scheduledTask.taskTypes.testSuite')" value="TEST_SUITE" />
             <el-option :label="$t('uiAutomation.scheduledTask.taskTypes.testCase')" value="TEST_CASE" />
           </el-select>
         </el-col>
-        <el-col :span="6">
-          <el-select v-model="filters.trigger_type" :placeholder="$t('uiAutomation.scheduledTask.triggerType')" clearable>
+        <el-col :span="8">
+          <el-select v-model="filters.trigger_type" :placeholder="$t('uiAutomation.scheduledTask.triggerType')" clearable @change="handleFilter" style="width: 100%">
             <el-option :label="$t('uiAutomation.scheduledTask.triggerTypes.cron')" value="CRON" />
             <el-option :label="$t('uiAutomation.scheduledTask.triggerTypes.interval')" value="INTERVAL" />
             <el-option :label="$t('uiAutomation.scheduledTask.triggerTypes.once')" value="ONCE" />
           </el-select>
         </el-col>
-        <el-col :span="6">
-          <el-select v-model="filters.status" :placeholder="$t('uiAutomation.scheduledTask.status')" clearable>
+        <el-col :span="8">
+          <el-select v-model="filters.status" :placeholder="$t('uiAutomation.scheduledTask.status')" clearable @change="handleFilter" style="width: 100%">
             <el-option :label="$t('uiAutomation.scheduledTask.statusTypes.active')" value="ACTIVE" />
             <el-option :label="$t('uiAutomation.scheduledTask.statusTypes.paused')" value="PAUSED" />
             <el-option :label="$t('uiAutomation.scheduledTask.statusTypes.completed')" value="COMPLETED" />
             <el-option :label="$t('uiAutomation.scheduledTask.statusTypes.failed')" value="FAILED" />
           </el-select>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="8" class="filter-buttons">
           <el-button @click="resetFilters">{{ $t('uiAutomation.common.reset') }}</el-button>
           <el-button type="primary" @click="loadTasks">{{ $t('uiAutomation.common.search') }}</el-button>
         </el-col>
       </el-row>
     </div>
 
-    <!-- 任务列表 -->
-    <div class="task-list">
-      <el-table :data="tasks" v-loading="loading">
-        <el-table-column prop="name" :label="$t('uiAutomation.scheduledTask.taskName')" min-width="200" />
-        <el-table-column prop="task_type" :label="$t('uiAutomation.scheduledTask.taskType')" width="120">
-          <template #default="scope">
-            <el-tag :type="scope.row.task_type === 'TEST_SUITE' ? 'success' : 'primary'">
-              {{ scope.row.task_type === 'TEST_SUITE' ? $t('uiAutomation.scheduledTask.taskTypes.testSuiteShort') : $t('uiAutomation.scheduledTask.taskTypes.testCaseShort') }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="notification_type_display" :label="$t('uiAutomation.scheduledTask.notificationType')" width="130">
-          <template #default="scope">
-            <el-tag v-if="scope.row.notification_type_display && scope.row.notification_type_display !== '-'"
-                    :type="getNotificationTypeTagType(scope.row.notification_type_display)"
-                    size="small">
-              {{ getNotificationTypeText(scope.row.notification_type) }}
-            </el-tag>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="trigger_type" :label="$t('uiAutomation.scheduledTask.triggerType')" width="120">
-          <template #default="scope">
-            <el-tag>
-              {{ getTriggerTypeText(scope.row.trigger_type) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" :label="$t('uiAutomation.scheduledTask.status')" width="100">
-          <template #default="scope">
-            <el-tag :type="scope.row.status === 'ACTIVE' ? 'success' : scope.row.status === 'PAUSED' ? 'warning' : 'info'">
-              {{ getStatusText(scope.row.status) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="engine" :label="$t('uiAutomation.scheduledTask.executionEngine')" width="120">
-          <template #default="scope">
-            <el-tag size="small" type="info">
-              {{ scope.row.engine === 'playwright' ? 'Playwright' : 'Selenium' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="browser" :label="$t('uiAutomation.scheduledTask.browser')" width="100">
-          <template #default="scope">
-            {{ scope.row.browser || 'chrome' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="next_run_time" :label="$t('uiAutomation.scheduledTask.nextRunTime')" width="180">
-          <template #default="scope">
-            {{ formatDateTime(scope.row.next_run_time) }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="last_run_time" :label="$t('uiAutomation.scheduledTask.lastRunTime')" width="180">
-          <template #default="scope">
-            {{ formatDateTime(scope.row.last_run_time) }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('uiAutomation.common.operation')" width="200" fixed="right">
-          <template #default="scope">
-            <el-button size="small" @click="runTaskNow(scope.row)" :loading="scope.row.running">
-              {{ $t('uiAutomation.scheduledTask.runNow') }}
-            </el-button>
-            <el-dropdown @command="(command) => handleTaskAction(command, scope.row)">
-              <el-button size="small">
-                {{ $t('uiAutomation.scheduledTask.more') }}<el-icon><arrow-down /></el-icon>
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="edit">{{ $t('uiAutomation.scheduledTask.actions.edit') }}</el-dropdown-item>
-                  <el-dropdown-item command="pause" v-if="scope.row.status === 'ACTIVE'">{{ $t('uiAutomation.scheduledTask.actions.pause') }}</el-dropdown-item>
-                  <el-dropdown-item command="resume" v-if="scope.row.status === 'PAUSED'">{{ $t('uiAutomation.scheduledTask.actions.resume') }}</el-dropdown-item>
-                  <el-dropdown-item command="delete" divided>{{ $t('uiAutomation.scheduledTask.actions.delete') }}</el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </template>
-        </el-table-column>
-      </el-table>
-    </div>
+    <!-- 2. 统一页面状态机联动 -->
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="loadTasks"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="resetFilters"
+    />
+    <StateEmpty
+      v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+      compact
+      :primary-action-text="$t('uiAutomation.scheduledTask.newTask')"
+      @primary-action="handleCreateClick"
+    />
 
-    <!-- 分页 -->
-    <div class="pagination">
-      <el-pagination
-        v-model:current-page="pagination.current"
-        v-model:page-size="pagination.size"
-        :total="pagination.total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="loadTasks"
-        @current-change="loadTasks"
-      />
-    </div>
+    <!-- 3. 标准表格与分页展示 -->
+    <template v-else>
+      <div class="table-container">
+        <UnifiedListTable
+          v-model:currentPage="pagination.page"
+          v-model:pageSize="pagination.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          :data="tasks"
+          :loading="loading"
+          row-key="id"
+          selection-mode="none"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="200"
+          @page-change="loadTasks"
+        >
+          <el-table-column prop="name" :label="$t('uiAutomation.scheduledTask.taskName')" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="task_type" :label="$t('uiAutomation.scheduledTask.taskType')" width="120">
+            <template #default="{ row }">
+              <el-tag :type="row.task_type === 'TEST_SUITE' ? 'success' : 'primary'">
+                {{ row.task_type === 'TEST_SUITE' ? $t('uiAutomation.scheduledTask.taskTypes.testSuiteShort') : $t('uiAutomation.scheduledTask.taskTypes.testCaseShort') }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="notification_type_display" :label="$t('uiAutomation.scheduledTask.notificationType')" width="130">
+            <template #default="{ row }">
+              <el-tag v-if="row.notification_type_display && row.notification_type_display !== '-'"
+                      :type="getNotificationTypeTagType(row.notification_type_display)"
+                      size="small">
+                {{ getNotificationTypeText(row.notification_type) }}
+              </el-tag>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="trigger_type" :label="$t('uiAutomation.scheduledTask.triggerType')" width="120">
+            <template #default="{ row }">
+              <el-tag type="info">
+                {{ getTriggerTypeText(row.trigger_type) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" :label="$t('uiAutomation.scheduledTask.status')" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'ACTIVE' ? 'success' : row.status === 'PAUSED' ? 'warning' : 'info'">
+                {{ getStatusText(row.status) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="engine" :label="$t('uiAutomation.scheduledTask.executionEngine')" width="120">
+            <template #default="{ row }">
+              <el-tag size="small" type="info">
+                {{ row.engine === 'playwright' ? 'Playwright' : 'Selenium' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="browser" :label="$t('uiAutomation.scheduledTask.browser')" width="100">
+            <template #default="{ row }">
+              {{ row.browser || 'chrome' }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="next_run_time" :label="$t('uiAutomation.scheduledTask.nextRunTime')" width="180">
+            <template #default="{ row }">
+              {{ formatDateTime(row.next_run_time) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="last_run_time" :label="$t('uiAutomation.scheduledTask.lastRunTime')" width="180">
+            <template #default="{ row }">
+              {{ formatDateTime(row.last_run_time) }}
+            </template>
+          </el-table-column>
+          <template #actions="{ row }">
+            <div class="table-actions">
+              <el-button link type="primary" @click="runTaskNow(row)" :loading="row.running">
+                {{ $t('uiAutomation.scheduledTask.runNow') }}
+              </el-button>
+              <el-dropdown @command="(command) => handleTaskAction(command, row)">
+                <el-button link type="primary">
+                  {{ $t('uiAutomation.scheduledTask.more') }}<el-icon class="el-icon--right"><arrow-down /></el-icon>
+                </el-button>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="edit">{{ $t('uiAutomation.scheduledTask.actions.edit') }}</el-dropdown-item>
+                    <el-dropdown-item command="pause" v-if="row.status === 'ACTIVE'">{{ $t('uiAutomation.scheduledTask.actions.pause') }}</el-dropdown-item>
+                    <el-dropdown-item command="resume" v-if="row.status === 'PAUSED'">{{ $t('uiAutomation.scheduledTask.actions.resume') }}</el-dropdown-item>
+                    <el-dropdown-item command="delete" divided class="text-danger">{{ $t('uiAutomation.scheduledTask.actions.delete') }}</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
+          </template>
+        </UnifiedListTable>
+      </div>
+    </template>
 
     <!-- 创建/编辑对话框 -->
     <el-dialog
@@ -293,18 +313,24 @@
       <template #footer>
         <el-button @click="showCreateDialog = false">{{ $t('uiAutomation.common.cancel') }}</el-button>
         <el-button type="primary" @click="submitTaskForm" :loading="submitting">
-          {{ editingTask ? $t('uiAutomation.messages.success.update') : $t('uiAutomation.messages.success.create') }}
+          {{ editingTask ? $t('uiAutomation.common.save') : $t('uiAutomation.common.confirm') }}
         </el-button>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
-import { useI18n } from 'vue-i18n'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
+import { ListShell } from '@/components/page-shells'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
+
 import {
   getScheduledTasks,
   createScheduledTask,
@@ -319,6 +345,7 @@ import {
   getUiUsers
 } from '@/api/ui_automation.js'
 
+const router = useRouter()
 const { t, locale } = useI18n()
 
 // 数据状态
@@ -328,6 +355,9 @@ const testSuites = ref([])
 const testCases = ref([])
 const users = ref([])
 const loading = ref(false)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
 const submitting = ref(false)
 const showCreateDialog = ref(false)
 const editingTask = ref(null)
@@ -341,7 +371,7 @@ const filters = reactive({
 
 // 分页配置
 const pagination = reactive({
-  current: 1,
+  page: 1,
   size: 10,
   total: 0
 })
@@ -366,6 +396,40 @@ const taskForm = reactive({
   notification_type: '',
   notify_emails: []
 })
+
+const hasActiveFilter = computed(() => {
+  return Boolean(filters.task_type || filters.trigger_type || filters.status)
+})
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (tasks.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
+
+usePlatformPageHeader(() => ({
+  helperText: t('uiAutomation.scheduledTask.helperText', '管理 UI 自动化定时任务，支持测试套件与测试用例的定时自动运行与通知配置。'),
+  metaItems: [
+    { label: t('uiAutomation.scheduledTask.totalCount', '任务总数'), value: `${pagination.total}` }
+  ],
+  actions: [
+    {
+      key: 'new-task-btn',
+      label: t('uiAutomation.scheduledTask.newTask'),
+      type: 'primary',
+      icon: Plus,
+      onClick: handleCreateClick
+    }
+  ]
+}))
 
 // 获取触发器类型文本
 const getTriggerTypeText = (type) => {
@@ -408,20 +472,48 @@ onMounted(() => {
 // 加载任务列表
 const loadTasks = async () => {
   loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
+
   try {
     const params = {
-      page: pagination.current,
+      page: pagination.page,
       page_size: pagination.size,
       ...filters
     }
+    Object.keys(params).forEach(key => params[key] === '' && delete params[key])
+
     const response = await getScheduledTasks(params)
     tasks.value = response.data.results
     pagination.total = response.data.count
+
+    const maxPage = Math.max(1, Math.ceil((pagination.total || 0) / pagination.size || 1))
+    if (pagination.page > maxPage) {
+      pagination.page = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(t('uiAutomation.scheduledTask.messages.loadFailed'))
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
   } finally {
-    loading.value = false
+    if (!shouldRefetch) {
+      loading.value = false
+    }
   }
+
+  if (shouldRefetch) {
+    await loadTasks()
+  }
+}
+
+const handleFilter = () => {
+  pagination.page = 1
+  loadTasks()
 }
 
 // 加载项目列表
@@ -438,7 +530,6 @@ const loadProjects = async () => {
 const loadUsers = async () => {
   try {
     const response = await getUiUsers()
-    // 处理分页数据结构
     const usersData = response.data.results || response.data
     users.value = usersData.map(user => ({
       ...user,
@@ -509,6 +600,7 @@ const resetFilters = () => {
     trigger_type: '',
     status: ''
   })
+  pagination.page = 1
   loadTasks()
 }
 
@@ -709,37 +801,54 @@ const deleteTask = async (task) => {
 }
 </script>
 
-<style scoped>
-.scheduled-tasks {
-  padding: 20px;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
+<style lang="scss" scoped>
 .filters {
-  margin-bottom: 20px;
-  background: #f8f9fa;
-  padding: 20px;
+  background: #ffffff;
+  padding: 18px 24px;
   border-radius: 8px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  margin-bottom: 16px;
+  
+  .filter-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
 }
 
-.task-list {
+.table-container {
   flex: 1;
   overflow: hidden;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px 24px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
+  }
 }
 
-.pagination {
-  margin-top: 20px;
+.table-actions {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .cron-help {
@@ -750,5 +859,9 @@ const deleteTask = async (task) => {
 .unit {
   margin-left: 8px;
   color: #606266;
+}
+
+.text-danger {
+  color: var(--el-color-danger) !important;
 }
 </style>

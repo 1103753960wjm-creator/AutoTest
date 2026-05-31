@@ -17,36 +17,36 @@
               clearable
               @clear="handleFilterChange"
               @keyup.enter="handleFilterChange"
-            >
+             style="width: 100%">
               <template #prefix>
                 <el-icon><Search /></el-icon>
               </template>
             </el-input>
           </el-col>
-          <el-col :span="5">
+          <el-col :span="8">
             <el-select
               v-model="statusFilter"
               clearable
               :placeholder="$t('apiTesting.project.selectStatus')"
               @change="handleFilterChange"
-            >
+             style="width: 100%">
               <el-option :label="$t('apiTesting.project.status.notStarted')" value="NOT_STARTED" />
               <el-option :label="$t('apiTesting.project.status.inProgress')" value="IN_PROGRESS" />
               <el-option :label="$t('apiTesting.project.status.completed')" value="COMPLETED" />
             </el-select>
           </el-col>
-          <el-col :span="5">
+          <el-col :span="8">
             <el-select
               v-model="projectTypeFilter"
               clearable
               :placeholder="$t('apiTesting.project.projectType')"
               @change="handleFilterChange"
-            >
+             style="width: 100%">
               <el-option label="HTTP" value="HTTP" />
               <el-option label="WebSocket" value="WEBSOCKET" />
             </el-select>
           </el-col>
-          <el-col :span="6" class="filters__actions">
+          <el-col :span="8" class="filters__actions">
             <el-button type="primary" @click="handleFilterChange">
               {{ $t('apiTesting.common.search') }}
             </el-button>

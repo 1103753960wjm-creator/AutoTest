@@ -1,58 +1,63 @@
 <template>
-  <div class="page-container">
-    <div class="page-header">
-      <h1 class="page-title">{{ $t('uiAutomation.ai.caseList.title') }}</h1>
+  <ListShell>
+    <div class="filters">
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-input
+            v-model="searchText"
+            :placeholder="$t('uiAutomation.ai.caseList.searchPlaceholder')"
+            clearable
+            @input="handleSearch"
+           style="width: 100%">
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </el-col>
+      </el-row>
     </div>
 
-    <div class="card-container">
-      <div class="filter-bar">
-        <el-input
-          v-model="searchText"
-          :placeholder="$t('uiAutomation.ai.caseList.searchPlaceholder')"
-          clearable
-          @input="handleSearch"
-          style="width: 300px;"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
+    <div class="table-container">
+      <UnifiedListTable
+        v-model:currentPage="pagination.currentPage"
+        v-model:pageSize="pagination.pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="total"
+        :data="cases"
+        :loading="loading"
+        row-key="id"
+        selection-mode="multi"
+        :actions="{ view: false, edit: false, delete: false }"
+        :action-column-width="240"
+        @page-change="loadCases"
+        @selection-change="handleSelectionChange"
+        @row-dblclick="row => editCase(row)"
+      >
+        <el-table-column prop="name" :label="$t('uiAutomation.ai.caseList.caseName')" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            <el-link @click="editCase(row)" type="primary">
+              {{ row.name }}
+            </el-link>
           </template>
-        </el-input>
-      </div>
-
-      <el-table :data="cases" v-loading="loading" style="width: 100%">
-        <el-table-column prop="name" :label="$t('uiAutomation.ai.caseList.caseName')" min-width="200" show-overflow-tooltip />
+        </el-table-column>
         <el-table-column prop="description" :label="$t('uiAutomation.common.description')" min-width="200" show-overflow-tooltip />
         <el-table-column prop="task_description" :label="$t('uiAutomation.ai.caseList.taskDescription')" min-width="300" show-overflow-tooltip />
         <el-table-column prop="created_at" :label="$t('uiAutomation.common.createTime')" width="180" :formatter="formatDate" />
-        <el-table-column :label="$t('uiAutomation.common.operation')" width="200" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" type="success" @click="runCase(row)">
-              <el-icon><VideoPlay /></el-icon>
-              {{ $t('uiAutomation.common.run') }}
-            </el-button>
-            <el-button size="small" type="primary" @click="editCase(row)">
-              <el-icon><Edit /></el-icon>
-              {{ $t('uiAutomation.common.edit') }}
-            </el-button>
-            <el-button size="small" type="danger" @click="deleteCase(row.id)">
-              <el-icon><Delete /></el-icon>
-              {{ $t('uiAutomation.common.delete') }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="pagination.currentPage"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          :total="total"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
-      </div>
+        <template #actions="{ row }">
+          <el-button size="small" type="success" link @click="runCase(row)">
+            <el-icon><VideoPlay /></el-icon>
+            {{ $t('uiAutomation.common.run') }}
+          </el-button>
+          <el-button size="small" type="primary" link @click="editCase(row)">
+            <el-icon><Edit /></el-icon>
+            {{ $t('uiAutomation.common.edit') }}
+          </el-button>
+          <el-button size="small" type="danger" link @click="deleteCase(row.id)">
+            <el-icon><Delete /></el-icon>
+            {{ $t('uiAutomation.common.delete') }}
+          </el-button>
+        </template>
+      </UnifiedListTable>
     </div>
 
     <!-- 编辑对话框 -->
@@ -80,7 +85,7 @@
         </span>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
@@ -95,8 +100,16 @@ import {
   deleteAICase,
   runAICase
 } from '@/api/ui_automation'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { ListShell } from '@/components/page-shells'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 
 const { t } = useI18n()
+
+// Header actions configuration
+usePlatformPageHeader({
+  title: computed(() => t('uiAutomation.ai.caseList.title'))
+})
 const router = useRouter()
 const cases = ref([])
 const loading = ref(false)
@@ -109,6 +122,11 @@ const pagination = reactive({
 
 const showEditDialog = ref(false)
 const saving = ref(false)
+const selectedIds = ref([])
+
+const handleSelectionChange = (selection) => {
+  selectedIds.value = selection.map(item => item.id)
+}
 const currentCaseId = ref(null)
 const editForm = reactive({
   name: '',
@@ -239,37 +257,30 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.page-container {
-  padding: 20px;
-}
-
-.page-header {
+.table-container {
+  flex: 1;
+  overflow: hidden;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
+  flex-direction: column;
+  min-height: 0;
 
-  .page-title {
-    font-size: 20px;
-    font-weight: 600;
-    margin: 0;
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
   }
-}
 
-.card-container {
-  background-color: #fff;
-  border-radius: 4px;
-  padding: 20px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-.filter-bar {
-  margin-bottom: 20px;
-}
-
-.pagination-container {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
+  }
 }
 </style>

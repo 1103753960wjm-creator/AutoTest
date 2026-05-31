@@ -1,29 +1,12 @@
 <template>
-  <div class="page-container">
-    <div class="page-header">
-      <h1 class="page-title">{{ $t('version.title') }}</h1>
-      <div class="header-actions">
-        <el-button
-          v-if="selectedVersions.length > 0"
-          type="danger"
-          :disabled="isDeleting"
-          @click="batchDeleteVersions"
-        >
-          批量删除 ({{ selectedVersions.length }})
-        </el-button>
-        <el-button type="primary" @click="createVersion">
-          <el-icon><Plus /></el-icon>
-          {{ $t('version.newVersion') }}
-        </el-button>
-      </div>
-    </div>
-
-    <div class="card-container">
-      <div class="filter-bar">
-        <el-row :gutter="20">
-          <el-col :span="6">
+  <ListShell>
+    <template #filters>
+      <div class="filter-bar-content">
+        <el-row :gutter="16">
+          <el-col :span="8">
             <el-input
               v-model="searchText"
+              style="width: 100%"
               :placeholder="$t('version.searchPlaceholder')"
               clearable
               @input="handleSearch"
@@ -33,8 +16,8 @@
               </template>
             </el-input>
           </el-col>
-          <el-col :span="4">
-            <el-select v-model="projectFilter" :placeholder="$t('version.relatedProject')" clearable @change="handleFilter">
+          <el-col :span="8">
+            <el-select v-model="projectFilter" style="width: 100%" :placeholder="$t('version.relatedProject')" clearable @change="handleFilter">
               <el-option
                 v-for="project in projects"
                 :key="project.id"
@@ -43,41 +26,42 @@
               />
             </el-select>
           </el-col>
-          <el-col :span="3">
-            <el-select v-model="baselineFilter" :placeholder="$t('version.versionType')" clearable @change="handleFilter">
+          <el-col :span="8">
+            <el-select v-model="baselineFilter" style="width: 100%" :placeholder="$t('version.versionType')" clearable @change="handleFilter">
               <el-option :label="$t('version.baselineVersion')" :value="true" />
               <el-option :label="$t('version.normalVersion')" :value="false" />
             </el-select>
           </el-col>
         </el-row>
       </div>
-      <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
-      <StateForbidden
-        v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
-        compact
-        :primary-action-text="$t('common.uiState.actions.goHome')"
-        @primary-action="router.push('/home')"
-      />
-      <StateError
-        v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
-        compact
-        :description="requestErrorMessage || $t('common.uiState.error.description')"
-        @primary-action="fetchVersions"
-      />
-      <StateSearchEmpty
-        v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
-        compact
-        :primary-action-text="$t('common.uiState.actions.clearFilters')"
-        @primary-action="resetFilters"
-      />
-      <StateEmpty
-        v-else-if="pageState === UI_PAGE_STATE.EMPTY"
-        compact
-        :primary-action-text="$t('version.newVersion')"
-        @primary-action="createVersion"
-      />
-      <template v-else>
-        <div class="table-container">
+    </template>
+
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="fetchVersions"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="resetFilters"
+    />
+    <StateEmpty
+      v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+      compact
+      :primary-action-text="$t('version.newVersion')"
+      @primary-action="createVersion"
+    />
+    <template v-else>
           <UnifiedListTable
             v-model:currentPage="currentPage"
             v-model:pageSize="pageSize"
@@ -141,9 +125,7 @@
               </template>
             </el-table-column>
           </UnifiedListTable>
-        </div>
       </template>
-    </div>
     
     <!-- 版本表单对话框 -->
     <el-dialog
@@ -152,7 +134,7 @@
       width="600px"
       :close-on-click-modal="false"
     >
-      <el-form :model="versionForm" :rules="versionRules" ref="versionFormRef" label-width="120px">
+      <el-form :model="versionForm" :rules="versionRules" :ref="setVersionFormRef" label-width="120px">
         <el-form-item :label="$t('version.versionName')" prop="name">
           <el-input v-model="versionForm.name" :placeholder="$t('version.versionNamePlaceholder')" />
         </el-form-item>
@@ -192,7 +174,7 @@
         <el-button type="primary" @click="saveVersion" :loading="saving">{{ $t('common.save') }}</el-button>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
@@ -200,9 +182,11 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search } from '@element-plus/icons-vue'
+import { Plus, Search, Delete } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
+import { ListShell } from '@/components/page-shells'
 import { UnifiedListTable } from '@/components/platform-shared'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
@@ -244,8 +228,35 @@ const pageState = computed(() => {
   return state
 })
 
+usePlatformPageHeader(() => ({
+  actions: [
+    selectedVersions.value.length > 0
+      ? {
+          key: 'delete-selected',
+          label: `批量删除 (${selectedVersions.value.length})`,
+          type: 'danger',
+          icon: Delete,
+          onClick: batchDeleteVersions,
+          disabled: isDeleting.value
+        }
+      : null,
+    {
+      key: 'create-version',
+      label: t('version.newVersion'),
+      type: 'primary',
+      icon: Plus,
+      onClick: createVersion
+    }
+  ].filter(Boolean)
+}))
+
 const versionDialogVisible = ref(false)
 const versionFormRef = ref()
+
+function setVersionFormRef(el) {
+  versionFormRef.value = el
+}
+
 const saving = ref(false)
 const isEdit = ref(false)
 const editingVersionId = ref(null)
@@ -464,75 +475,9 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
-.page-container {
+.filter-bar-content {
   display: flex;
-  flex-direction: column;
-  height: 100vh;
-  padding: 20px;
-  box-sizing: border-box;
-  overflow: hidden;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-shrink: 0;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 24px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.card-container {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow: hidden;
-  background: #fff;
-  border-radius: 4px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-}
-
-.filter-bar {
-  padding: 20px;
-  border-bottom: 1px solid #ebeef5;
-  flex-shrink: 0;
-}
-
-.table-container {
-  flex: 1;
-  overflow: hidden;
-  padding: 0 20px;
-
-  :deep(.unified-list-table) {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-  }
-
-  :deep(.unified-list-table__table) {
-    flex: 1;
-    min-height: 0;
-  }
-
-  :deep(.el-table) {
-    height: 100% !important;
-  }
-
-  :deep(.el-table__body-wrapper) {
-    overflow-y: auto !important;
-  }
-}
-
-.header-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  width: 100%;
 }
 
 .version-name {

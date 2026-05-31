@@ -1,36 +1,45 @@
 <template>
-  <div class="page-container">
-    <div class="page-header">
-      <h1 class="page-title">{{ $t('uiAutomation.suite.title') }}</h1>
-      <el-select v-model="projectId" :placeholder="$t('uiAutomation.common.selectProject')" style="width: 200px; margin-right: 15px" @change="onProjectChange">
-        <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
-      </el-select>
-      <el-button type="primary" @click="handleNewSuite">
-        <el-icon><Plus /></el-icon>
-        {{ $t('uiAutomation.suite.newSuite') }}
-      </el-button>
+  <ListShell>
+    <!-- 1. 搜索筛选区 -->
+    <div class="filters">
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-select v-model="projectId" :placeholder="$t('uiAutomation.common.selectProject')" style="width: 100%" clearable @change="onProjectChange">
+            <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+          </el-select>
+        </el-col>
+        <el-col :span="8">
+          <el-input
+            v-model="searchText"
+            :placeholder="$t('uiAutomation.suite.searchPlaceholder')"
+            clearable
+            @input="handleSearch"
+           style="width: 100%">
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </el-col>
+      </el-row>
     </div>
 
-    <div class="card-container">
-      <div class="filter-bar">
-        <el-row :gutter="20">
-          <el-col :span="6">
-            <el-input
-              v-model="searchText"
-              :placeholder="$t('uiAutomation.suite.searchPlaceholder')"
-              clearable
-              @input="handleSearch"
-            >
-              <template #prefix>
-                <el-icon><Search /></el-icon>
-              </template>
-            </el-input>
-          </el-col>
-        </el-row>
-      </div>
-
-      <el-table :data="suites" v-loading="loading" style="width: 100%">
-        <el-table-column type="selection" width="55" />
+    <!-- 2. 标准表格展示 -->
+    <div class="table-container">
+      <UnifiedListTable
+        v-model:currentPage="pagination.currentPage"
+        v-model:pageSize="pagination.pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="total"
+        :data="suites"
+        :loading="loading"
+        row-key="id"
+        selection-mode="multi"
+        :actions="{ view: false, edit: false, delete: false }"
+        :action-column-width="240"
+        @page-change="loadSuites"
+        @selection-change="handleSelectionChange"
+        @row-dblclick="row => editSuite(row.id)"
+      >
         <el-table-column prop="name" :label="$t('uiAutomation.suite.suiteName')" min-width="200">
           <template #default="{ row }">
             <el-link @click="editSuite(row.id)" type="primary">
@@ -63,35 +72,21 @@
         </el-table-column>
         <el-table-column prop="created_at" :label="$t('uiAutomation.common.createTime')" width="180" :formatter="formatDate" />
         <el-table-column prop="updated_at" :label="$t('uiAutomation.common.updateTime')" width="180" :formatter="formatDate" />
-        <el-table-column :label="$t('uiAutomation.common.operation')" width="240" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" type="primary" @click="editSuite(row.id)">
-              <el-icon><Edit /></el-icon>
-              {{ $t('uiAutomation.common.edit') }}
-            </el-button>
-            <el-button size="small" type="success" @click="runSuite(row)">
-              <el-icon><RefreshRight /></el-icon>
-              {{ $t('uiAutomation.common.run') }}
-            </el-button>
-            <el-button size="small" type="danger" @click="deleteSuite(row.id)">
-              <el-icon><Delete /></el-icon>
-              {{ $t('uiAutomation.common.delete') }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="pagination.currentPage"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          :total="total"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
-      </div>
+        <template #actions="{ row }">
+          <el-button size="small" type="primary" link @click="editSuite(row.id)">
+            <el-icon><Edit /></el-icon>
+            {{ $t('uiAutomation.common.edit') }}
+          </el-button>
+          <el-button size="small" type="success" link @click="runSuite(row)">
+            <el-icon><RefreshRight /></el-icon>
+            {{ $t('uiAutomation.common.run') }}
+          </el-button>
+          <el-button size="small" type="danger" link @click="deleteSuite(row.id)">
+            <el-icon><Delete /></el-icon>
+            {{ $t('uiAutomation.common.delete') }}
+          </el-button>
+        </template>
+      </UnifiedListTable>
     </div>
 
     <!-- 创建/编辑套件对话框 -->
@@ -254,7 +249,7 @@
         </span>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
@@ -278,8 +273,24 @@ import {
   runTestSuite
 } from '@/api/ui_automation'
 import { useI18n } from 'vue-i18n'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { ListShell } from '@/components/page-shells'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 
 const { t } = useI18n()
+
+// Header actions configuration
+usePlatformPageHeader({
+  title: computed(() => t('uiAutomation.suite.title')),
+  actions: computed(() => [
+    {
+      label: t('uiAutomation.suite.newSuite'),
+      type: 'primary',
+      icon: Plus,
+      handler: handleNewSuite
+    }
+  ])
+})
 
 // 响应式数据
 const projects = ref([])
@@ -292,6 +303,11 @@ const pagination = reactive({
   currentPage: 1,
   pageSize: 20
 })
+const selectedIds = ref([])
+
+const handleSelectionChange = (selection) => {
+  selectedIds.value = selection.map(item => item.id)
+}
 
 // 对话框控制
 const showCreateDialog = ref(false)
@@ -764,41 +780,31 @@ const handleNewSuite = async () => {
 </script>
 
 <style scoped lang="scss">
-.page-container {
-  padding: 20px;
-  background: #f5f5f5;
-  min-height: 100vh;
-}
-
-.page-header {
+.table-container {
+  flex: 1;
+  overflow: hidden;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  background: white;
-  padding: 20px;
-  border-radius: 4px;
-}
+  flex-direction: column;
+  min-height: 0;
 
-.page-title {
-  margin: 0;
-  font-size: 24px;
-}
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
 
-.card-container {
-  background: white;
-  padding: 20px;
-  border-radius: 4px;
-}
-
-.filter-bar {
-  margin-bottom: 20px;
-}
-
-.pagination-container {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
+  }
 }
 
 // 测试用例选择器样式

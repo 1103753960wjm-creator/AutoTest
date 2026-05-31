@@ -1,46 +1,55 @@
 <template>
-  <div class="page-container">
-    <div class="page-header" style="display: flex; align-items: center;">
-      <h1 class="page-title" style="margin-right: 20px; margin-bottom: 0;">{{ $t('uiAutomation.element.title') }}</h1>
-      <el-select v-model="projectId" :placeholder="$t('uiAutomation.common.selectProject')" style="width: 200px; margin-right: 15px" @change="onProjectChange">
-        <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
-      </el-select>
-      <el-button type="primary" @click="handleShowCreateDialog">
-        <el-icon><Plus /></el-icon>
-        {{ $t('uiAutomation.element.newElement') }}
-      </el-button>
+  <ListShell>
+    <!-- 1. 搜索筛选区 -->
+    <div class="filters">
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-select v-model="projectId" :placeholder="$t('uiAutomation.common.selectProject')" style="width: 100%" clearable @change="onProjectChange">
+            <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
+          </el-select>
+        </el-col>
+        <el-col :span="8">
+          <el-input
+            v-model="searchText"
+            :placeholder="$t('uiAutomation.element.searchPlaceholder')"
+            clearable
+            @input="handleSearch"
+           style="width: 100%">
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </el-col>
+        <el-col :span="8">
+          <el-select v-model="strategyFilter" :placeholder="$t('uiAutomation.element.strategyFilter')" clearable @change="handleFilter" style="width: 100%">
+            <el-option v-for="strategy in strategies" :key="strategy.id" :label="strategy.name" :value="strategy.id" />
+          </el-select>
+        </el-col>
+        <el-col :span="8">
+          <el-select v-model="pageFilter" :placeholder="$t('uiAutomation.element.pageFilter')" clearable @change="handleFilter" style="width: 100%">
+            <el-option v-for="page in pages" :key="page" :label="page" :value="page" />
+          </el-select>
+        </el-col>
+      </el-row>
     </div>
     
-    <div class="card-container">
-      <div class="filter-bar">
-        <el-row :gutter="20">
-          <el-col :span="6">
-            <el-input
-              v-model="searchText"
-              :placeholder="$t('uiAutomation.element.searchPlaceholder')"
-              clearable
-              @input="handleSearch"
-            >
-              <template #prefix>
-                <el-icon><Search /></el-icon>
-              </template>
-            </el-input>
-          </el-col>
-          <el-col :span="4">
-            <el-select v-model="strategyFilter" :placeholder="$t('uiAutomation.element.strategyFilter')" clearable @change="handleFilter">
-              <el-option v-for="strategy in strategies" :key="strategy.id" :label="strategy.name" :value="strategy.id" />
-            </el-select>
-          </el-col>
-          <el-col :span="4">
-            <el-select v-model="pageFilter" :placeholder="$t('uiAutomation.element.pageFilter')" clearable @change="handleFilter">
-              <el-option v-for="page in pages" :key="page" :label="page" :value="page" />
-            </el-select>
-          </el-col>
-        </el-row>
-      </div>
-      
-      <el-table :data="elements" v-loading="loading" style="width: 100%">
-        <el-table-column type="selection" width="55" />
+    <!-- 2. 标准表格展示 -->
+    <div class="table-container">
+      <UnifiedListTable
+        v-model:currentPage="pagination.currentPage"
+        v-model:pageSize="pagination.pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :total="total"
+        :data="elements"
+        :loading="loading"
+        row-key="id"
+        selection-mode="multi"
+        :actions="{ view: false, edit: false, delete: false }"
+        :action-column-width="240"
+        @page-change="loadElements"
+        @selection-change="handleSelectionChange"
+        @row-dblclick="row => showElementDetail(row.id)"
+      >
         <el-table-column prop="name" :label="$t('uiAutomation.element.elementName')" min-width="150">
           <template #default="{ row }">
             <el-link @click="showElementDetail(row.id)" type="primary">
@@ -58,35 +67,21 @@
         <el-table-column prop="locator_value" :label="$t('uiAutomation.element.locatorValue')" min-width="200" show-overflow-tooltip />
         <el-table-column prop="created_at" :label="$t('uiAutomation.common.createTime')" width="180" :formatter="formatDate" />
         <el-table-column prop="updated_at" :label="$t('uiAutomation.common.updateTime')" width="180" :formatter="formatDate" />
-        <el-table-column :label="$t('uiAutomation.common.operation')" width="180" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" type="primary" @click="showElementDetail(row.id)">
-              <el-icon><View /></el-icon>
-              {{ $t('uiAutomation.common.view') }}
-            </el-button>
-            <el-button size="small" @click="editElement(row)">
-              <el-icon><Edit /></el-icon>
-              {{ $t('uiAutomation.common.edit') }}
-            </el-button>
-            <el-button size="small" type="danger" @click="handleDeleteElement(row.id)">
-              <el-icon><Delete /></el-icon>
-              {{ $t('uiAutomation.common.delete') }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-      
-      <div class="pagination-container">
-        <el-pagination
-          v-model:current-page="pagination.currentPage"
-          v-model:page-size="pagination.pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next, jumper"
-          :total="total"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
-      </div>
+        <template #actions="{ row }">
+          <el-button size="small" type="primary" link @click="showElementDetail(row.id)">
+            <el-icon><View /></el-icon>
+            {{ $t('uiAutomation.common.view') }}
+          </el-button>
+          <el-button size="small" type="primary" link @click="editElement(row)">
+            <el-icon><Edit /></el-icon>
+            {{ $t('uiAutomation.common.edit') }}
+          </el-button>
+          <el-button size="small" type="danger" link @click="handleDeleteElement(row.id)">
+            <el-icon><Delete /></el-icon>
+            {{ $t('uiAutomation.common.delete') }}
+          </el-button>
+        </template>
+      </UnifiedListTable>
     </div>
     
     <!-- 创建元素对话框 -->
@@ -211,7 +206,7 @@
         </span>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
@@ -228,8 +223,24 @@ import {
   getLocatorStrategies
 } from '@/api/ui_automation'
 import { useI18n } from 'vue-i18n'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { ListShell } from '@/components/page-shells'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 
 const { t } = useI18n()
+
+// Header actions configuration
+usePlatformPageHeader({
+  title: computed(() => t('uiAutomation.element.title')),
+  actions: computed(() => [
+    {
+      label: t('uiAutomation.element.newElement'),
+      type: 'primary',
+      icon: Plus,
+      handler: handleShowCreateDialog
+    }
+  ])
+})
 
 // 项目和元素数据
 const projects = ref([])
@@ -245,6 +256,12 @@ const pagination = reactive({
   currentPage: 1,
   pageSize: 10
 })
+
+const selectedIds = ref([])
+
+const handleSelectionChange = (selection) => {
+  selectedIds.value = selection.map(item => item.id)
+}
 
 // 搜索和筛选
 const searchText = ref('')
@@ -598,39 +615,31 @@ onMounted(async () => {
 })
 </script>
 
-<style scoped>
-.page-container {
-  padding: 20px;
-  height: 100%;
-  overflow-y: auto;
-}
-
-.page-header {
+<style scoped lang="scss">
+.table-container {
+  flex: 1;
+  overflow: hidden;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
+  flex-direction: column;
+  min-height: 0;
 
-.page-title {
-  margin: 0;
-  font-size: 24px;
-}
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
 
-.card-container {
-  background-color: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.filter-bar {
-  margin-bottom: 20px;
-}
-
-.pagination-container {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
+  }
 }
 </style>

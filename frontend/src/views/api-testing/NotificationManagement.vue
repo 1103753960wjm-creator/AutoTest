@@ -9,16 +9,16 @@
         <div class="tab-content">
           <div class="filters">
             <el-row :gutter="20">
-              <el-col :span="6">
+              <el-col :span="8">
                 <el-input
                   v-model="filters.task_name"
                   :placeholder="$t('apiTesting.notification.searchTaskName')"
                   clearable
                   @clear="handleFilterChange"
                   @keyup.enter="handleFilterChange"
-                />
+                style="width: 100%" />
               </el-col>
-              <el-col :span="6">
+              <el-col :span="8">
                 <el-date-picker
                   v-model="filters.date_range"
                   type="daterange"
@@ -26,9 +26,9 @@
                   :start-placeholder="$t('apiTesting.notification.startDate')"
                   :end-placeholder="$t('apiTesting.notification.endDate')"
                   value-format="YYYY-MM-DD"
-                />
+                style="width: 100%" />
               </el-col>
-              <el-col :span="6" class="filters__actions">
+              <el-col :span="8" class="filters__actions">
                 <el-button type="primary" @click="handleFilterChange">
                   <el-icon><Search /></el-icon>
                   {{ $t('apiTesting.common.search') }}

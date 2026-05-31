@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="platform-layout">
     <PlatformGlobalHeader
       :logo-src="logoSvg"
@@ -87,20 +87,16 @@
         />
 
         <main ref="mainContentRef" class="platform-layout__main">
-          <router-view v-slot="{ Component, route: currentRoute }">
-            <keep-alive>
-              <component
-                :is="Component"
-                v-if="currentRoute.meta.keepAlive"
-                :key="currentRoute.name || currentRoute.path"
-              />
-            </keep-alive>
-            <component
-              :is="Component"
-              v-if="!currentRoute.meta.keepAlive"
-              :key="currentRoute.fullPath"
-            />
-          </router-view>
+          <div class="platform-route-wrapper" style="display: flex; flex-direction: column; min-height: 0; width: 100%;">
+            <router-view v-slot="{ Component, route: currentRoute }">
+              <keep-alive :include="cachedViews">
+                <component
+                  :is="Component"
+                  :key="currentRoute.name || currentRoute.path"
+                />
+              </keep-alive>
+            </router-view>
+          </div>
         </main>
       </div>
     </div>
@@ -171,6 +167,12 @@ import logoSvg from '@/assets/images/logo.svg'
 
 const router = useRouter()
 const route = useRoute()
+
+const cachedViews = computed(() => {
+  return router.getRoutes()
+    .filter(r => r.meta?.keepAlive && r.name)
+    .map(r => r.name)
+})
 const userStore = useUserStore()
 const appStore = useAppStore()
 const productivityStore = useProductivityStore()
@@ -426,11 +428,15 @@ const handleUserCommand = (command) => {
 watch(
   () => route.path,
   async () => {
-    await nextTick()
+    try {
+      await nextTick()
 
-    if (mainContentRef.value) {
-      mainContentRef.value.scrollTop = 0
-      mainContentRef.value.scrollLeft = 0
+      if (mainContentRef.value) {
+        mainContentRef.value.scrollTop = 0
+        mainContentRef.value.scrollLeft = 0
+      }
+    } catch (error) {
+      console.warn('Scroll reset after navigation failed:', error)
     }
   }
 )

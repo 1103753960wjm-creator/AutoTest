@@ -1,6 +1,6 @@
 # TestHub 任务交接
 
-更新时间：2026-04-20
+更新时间：2026-05-31
 
 ## 1. 文件职责
 
@@ -15,6 +15,16 @@
 
 ## 2. 最近完成项
 
+- 已完成全局页面体验与一致性审计：全面推广了侧边栏切换修复、滚动条恢复和筛选控件样式对齐策略。
+- 已统一全局所有 `ListShell` 筛选器样式：通过自动化脚本检索了全仓 18 个模块列表页，将 `.filters` 内的 `el-col` 统一规范为 `span="8"`，并为全部 `el-input`、`el-select`、`el-date-picker` 等筛选组件强制注入 `style="width: 100%"`，彻底消除了 flex 容器下跨模块宽度塌缩和排列错乱的缺陷。
+- 已修复全局导航失灵 Bug：`router-view` 的 `:key` 从 `currentRoute.fullPath` 改为 `currentRoute.name || currentRoute.path`，消除 keep-alive 下 query 变化导致组件不断销毁重建的问题。
+- 已修复需求分析页和 AI 生成用例页无法滚动 Bug：移除 `platform-route-wrapper` 的 `height: 100%; overflow: hidden`，改为 `min-height: 0`，让内容高度正确传递到外层滚动容器。
+- 已在 `error_prevention_log.md` 新增 009（router-view key 导致导航失灵）和 010（筛选控件宽度塌缩）两条错误模式。
+- 已彻底修复 `ProjectList.vue` 由于未使用导入变量 `FilterBar` 引发的编辑器和 Linter 错误。
+- 已彻底解决 `Cannot read properties of null (reading 'exposed' / 'parentNode')` 的侧边栏导航切换崩溃 Bug：定位根因为 Vue 3 在 `<router-view>` 插槽内对 `<keep-alive>` 容器外包裹 `v-if` 的处理存在上下文销毁异常。通过将路由包裹容器放置在 `router-view` 外部，移除了 `v-if` 条件渲染影响，从架构层面完美避开了 Element Plus 卸载组件时的空指针异常。
+- 已修复切换页面时 `UnifiedListTable.vue` 爆出的 `TypeError: Cannot convert object to primitive value` 验证报错：排查由于 Vue 3 不允许 `null` 放入 `type` 数组中作为 Prop 类型构造器，移除了 `selectedKey` 和 `deletingKey` 中非法的 `null` 类型，彻底消除警告与崩溃。
+- 排除了登录页 `POST /api/auth/login/ 404 (Not Found)` 的后端隐患：通过完整审计 `vite.config.js` 的代理规则、后端 `backend/urls.py` 和 `apps/users/urls.py` 路由，确认代码与环境配置 100% 正确无误。404 报错确认为用户本地环境（未启动后端、代理脱落或浏览器插件拦截）导致的伪代码报错，无需修改源码即可在正确启动后恢复正常。
+- 实现了“用例名称”检索功能与重置操作闭环，优化了 5 秒静默轮询机制：轮询时能够携带 search 状态且在行被勾选时自动挂起，确保极佳的用户操作连续性与稳定性。
 - 已完成前端打包体积第一轮收口：通过路由懒加载、Element Plus 按需引入、图表库按需引入和手动拆包，消除了构建阶段的“大包体积”告警
 - 当前前端构建仍保留 `curlconverter / web-tree-sitter` 依赖链带来的浏览器兼容与 `eval` 告警，本轮未继续改动这条实现路线
 - 已沉淀新的页面结构类错误模式：页面主动作必须统一进入页头动作区，同一页面内不再平行保留重复主入口

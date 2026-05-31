@@ -11,33 +11,33 @@
     <!-- 筛选 -->
     <div class="filters">
       <el-row :gutter="20">
-        <el-col :span="5">
-          <el-select v-model="filters.project" placeholder="全部项目" clearable filterable>
+        <el-col :span="8">
+          <el-select v-model="filters.project" placeholder="全部项目" clearable filterable style="width: 100%">
             <el-option v-for="p in projectList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </el-col>
-        <el-col :span="5">
-          <el-select v-model="filters.task_type" placeholder="任务类型" clearable>
+        <el-col :span="8">
+          <el-select v-model="filters.task_type" placeholder="任务类型" clearable style="width: 100%">
             <el-option label="测试套件执行" value="TEST_SUITE" />
             <el-option label="测试用例执行" value="TEST_CASE" />
           </el-select>
         </el-col>
-        <el-col :span="5">
-          <el-select v-model="filters.trigger_type" placeholder="触发器类型" clearable>
+        <el-col :span="8">
+          <el-select v-model="filters.trigger_type" placeholder="触发器类型" clearable style="width: 100%">
             <el-option label="Cron表达式" value="CRON" />
             <el-option label="固定间隔" value="INTERVAL" />
             <el-option label="单次执行" value="ONCE" />
           </el-select>
         </el-col>
-        <el-col :span="4">
-          <el-select v-model="filters.status" placeholder="状态" clearable>
+        <el-col :span="8">
+          <el-select v-model="filters.status" placeholder="状态" clearable style="width: 100%">
             <el-option label="激活" value="ACTIVE" />
             <el-option label="暂停" value="PAUSED" />
             <el-option label="已完成" value="COMPLETED" />
             <el-option label="失败" value="FAILED" />
           </el-select>
         </el-col>
-        <el-col :span="5">
+        <el-col :span="8">
           <el-button @click="resetFilters">重置</el-button>
           <el-button type="primary" @click="loadTasks">查询</el-button>
         </el-col>

@@ -1,80 +1,124 @@
 <template>
-  <div class="script-list">
-    <div class="page-header">
-      <h1 class="page-title">{{ $t('uiAutomation.script.title') }}</h1>
-      <div class="header-actions">
-        <el-select v-model="selectedProject" :placeholder="$t('uiAutomation.common.selectProject')" style="width: 200px; margin-right: 15px" @change="onProjectChange">
-          <el-option v-for="project in projects" :key="project.id" :label="project.name" :value="project.id" />
-        </el-select>
-        <el-button type="primary" @click="goToScriptEditor">
-          <el-icon><Plus /></el-icon>
-          {{ $t('uiAutomation.script.newScript') }}
-        </el-button>
-      </div>
+  <ListShell>
+    <!-- 1. 搜索筛选区 -->
+    <div class="filters">
+      <el-row :gutter="16">
+        <el-col :span="8">
+          <el-select
+            v-model="filters.project"
+            style="width: 100%"
+            :placeholder="$t('uiAutomation.common.selectProject')"
+            clearable
+            @change="handleFilter"
+          >
+            <el-option
+              v-for="project in projects"
+              :key="project.id"
+              :label="project.name"
+              :value="project.id"
+            />
+          </el-select>
+        </el-col>
+        <el-col :span="8">
+          <el-input
+            v-model="filters.name"
+            style="width: 100%"
+            :placeholder="$t('uiAutomation.script.newNamePlaceholder')"
+            clearable
+            @input="handleFilter"
+          />
+        </el-col>
+      </el-row>
     </div>
 
-    <div class="main-content">
-      <el-table :data="scripts" stripe style="width: 100%">
-        <el-table-column type="index" :label="$t('uiAutomation.script.index')" width="60" />
-        <el-table-column :label="$t('uiAutomation.script.projectColumn')" width="150">
-          <template #default="{ row }">
-            {{ row.project?.name || $t('uiAutomation.script.unknownProject') }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="name" :label="$t('uiAutomation.script.nameColumn')" min-width="300" show-overflow-tooltip />
-        <el-table-column :label="$t('uiAutomation.script.languageColumn')" width="100">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.language === 'python' ? 'success' : 'primary'">
-              {{ getLanguageText(row.language) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('uiAutomation.script.frameworkColumn')" width="120">
-          <template #default="{ row }">
-            <el-tag size="small" :type="row.framework === 'playwright' ? 'warning' : 'info'">
-              {{ getFrameworkText(row.framework) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" :label="$t('uiAutomation.script.createTimeColumn')" width="180">
-          <template #default="{ row }">
-            {{ formatTime(row.created_at) }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('uiAutomation.script.operationColumn')" width="280" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" text @click="viewScript(row)">
-              <el-icon><View /></el-icon>
-              {{ $t('uiAutomation.script.viewDetail') }}
-            </el-button>
-            <el-button size="small" text @click="editScript(row)">
-              <el-icon><Edit /></el-icon>
-              {{ $t('uiAutomation.script.edit') }}
-            </el-button>
-            <el-button size="small" text @click="renameScript(row)">
-              <el-icon><EditPen /></el-icon>
-              {{ $t('uiAutomation.script.rename') }}
-            </el-button>
-            <el-button size="small" text type="danger" @click="deleteScript(row)">
-              <el-icon><Delete /></el-icon>
-              {{ $t('uiAutomation.script.delete') }}
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+    <!-- 2. 统一页面状态机联动 -->
+    <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
+    <StateForbidden
+      v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
+      compact
+      :primary-action-text="$t('common.uiState.actions.goHome')"
+      @primary-action="router.push('/home')"
+    />
+    <StateError
+      v-else-if="pageState === UI_PAGE_STATE.REQUEST_ERROR"
+      compact
+      :description="requestErrorMessage || $t('common.uiState.error.description')"
+      @primary-action="loadScripts"
+    />
+    <StateSearchEmpty
+      v-else-if="pageState === UI_PAGE_STATE.SEARCH_EMPTY"
+      compact
+      :primary-action-text="$t('common.uiState.actions.clearFilters')"
+      @primary-action="resetFilters"
+    />
+    <StateEmpty
+      v-else-if="pageState === UI_PAGE_STATE.EMPTY"
+      compact
+      :primary-action-text="$t('uiAutomation.script.newScript')"
+      @primary-action="goToScriptEditor"
+    />
 
-      <div class="pagination">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
+    <!-- 3. 标准表格与分页展示 -->
+    <template v-else>
+      <div class="table-container">
+        <UnifiedListTable
+          v-model:currentPage="pagination.page"
+          v-model:pageSize="pagination.size"
           :page-sizes="[10, 20, 50, 100]"
-          :total="total"
-          layout="total, sizes, prev, pager, next, jumper"
-          @size-change="handleSizeChange"
-          @current-change="handleCurrentChange"
-        />
+          :total="pagination.total"
+          :data="scripts"
+          :loading="loading"
+          row-key="id"
+          selection-mode="multi"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="280"
+          @page-change="loadScripts"
+          @selection-change="handleSelectionChange"
+        >
+          <el-table-column :label="$t('uiAutomation.script.projectColumn')" width="150" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ row.project?.name || $t('uiAutomation.script.unknownProject') }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="name" :label="$t('uiAutomation.script.nameColumn')" min-width="300" show-overflow-tooltip />
+          <el-table-column :label="$t('uiAutomation.script.languageColumn')" width="100">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.language === 'python' ? 'success' : 'primary'">
+                {{ getLanguageText(row.language) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('uiAutomation.script.frameworkColumn')" width="120">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.framework === 'playwright' ? 'warning' : 'info'">
+                {{ getFrameworkText(row.framework) }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_at" :label="$t('uiAutomation.script.createTimeColumn')" width="180">
+            <template #default="{ row }">
+              {{ formatTime(row.created_at) }}
+            </template>
+          </el-table-column>
+          <template #actions="{ row }">
+            <div class="table-actions">
+              <el-button link type="primary" @click="viewScript(row)">
+                {{ $t('uiAutomation.script.viewDetail') }}
+              </el-button>
+              <el-button link type="warning" @click="editScript(row)">
+                {{ $t('uiAutomation.script.edit') }}
+              </el-button>
+              <el-button link type="primary" @click="renameScript(row)">
+                {{ $t('uiAutomation.script.rename') }}
+              </el-button>
+              <el-button link type="danger" @click="deleteScript(row)">
+                {{ $t('uiAutomation.script.delete') }}
+              </el-button>
+            </div>
+          </template>
+        </UnifiedListTable>
       </div>
-    </div>
+    </template>
 
     <!-- 查看详情对话框 -->
     <el-dialog v-model="showDetailDialog" :title="$t('uiAutomation.script.scriptDetail')" width="70%">
@@ -140,15 +184,19 @@
         <el-button type="primary" @click="saveEditedScript" :loading="saving">{{ $t('uiAutomation.script.save') }}</el-button>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, View, Edit, Delete, EditPen } from '@element-plus/icons-vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus } from '@element-plus/icons-vue'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
+import { ListShell } from '@/components/page-shells'
+import { UnifiedListTable } from '@/components/platform-shared'
+import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 import {
   getUiProjects,
@@ -162,11 +210,22 @@ const { t } = useI18n()
 
 // 响应式数据
 const projects = ref([])
-const selectedProject = ref('')
 const scripts = ref([])
-const currentPage = ref(1)
-const pageSize = ref(20)
-const total = ref(0)
+const loading = ref(false)
+const hasLoaded = ref(false)
+const requestState = ref(`${UI_PAGE_STATE.READY}`)
+const requestErrorMessage = ref('')
+
+const filters = reactive({
+  project: '',
+  name: ''
+})
+
+const pagination = reactive({
+  page: 1,
+  size: 20,
+  total: 0
+})
 
 // 对话框控制
 const showDetailDialog = ref(false)
@@ -177,12 +236,49 @@ const showEditDialog = ref(false)
 const currentScript = ref(null)
 const editingScript = ref(null)
 const saving = ref(false)
+const selectedIds = ref([])
+
+const handleSelectionChange = (selection) => {
+  selectedIds.value = selection.map(item => item.id)
+}
 
 // 重命名表单
 const renameForm = reactive({
   scriptId: null,
   newName: ''
 })
+
+const hasActiveFilter = computed(() => Boolean(filters.name))
+
+const pageState = computed(() => {
+  let state = String(UI_PAGE_STATE.READY)
+  if (loading.value && !hasLoaded.value) {
+    state = UI_PAGE_STATE.LOADING
+  } else if (requestState.value === UI_PAGE_STATE.FORBIDDEN) {
+    state = UI_PAGE_STATE.FORBIDDEN
+  } else if (requestState.value === UI_PAGE_STATE.REQUEST_ERROR) {
+    state = UI_PAGE_STATE.REQUEST_ERROR
+  } else if (scripts.value.length === 0) {
+    state = hasActiveFilter.value ? UI_PAGE_STATE.SEARCH_EMPTY : UI_PAGE_STATE.EMPTY
+  }
+  return state
+})
+
+usePlatformPageHeader(() => ({
+  helperText: t('uiAutomation.script.helperText', '管理和查看 UI 自动化测试脚本，支持在线查看、编辑和重命名脚本。'),
+  metaItems: [
+    { label: t('uiAutomation.script.totalCount', '脚本总数'), value: `${pagination.total}` }
+  ],
+  actions: [
+    {
+      key: 'new-script-btn',
+      label: t('uiAutomation.script.newScript'),
+      type: 'primary',
+      icon: Plus,
+      onClick: goToScriptEditor
+    }
+  ]
+}))
 
 // 加载项目列表
 const loadProjects = async () => {
@@ -197,48 +293,67 @@ const loadProjects = async () => {
 
 // 加载脚本列表
 const loadScripts = async () => {
-  if (!selectedProject.value) {
-    scripts.value = []
-    total.value = 0
-    return
-  }
+  loading.value = true
+  requestState.value = UI_PAGE_STATE.READY
+  requestErrorMessage.value = ''
+  let shouldRefetch = false
 
   try {
-    const response = await getTestScripts({
-      project: selectedProject.value,
-      page: currentPage.value,
-      page_size: pageSize.value
-    })
-
-    // 处理分页响应
-    if (response.data.results) {
-      scripts.value = response.data.results
-      total.value = response.data.count || 0
-    } else {
-      scripts.value = response.data
-      total.value = response.data.length
+    const params = {
+      project: filters.project,
+      name: filters.name,
+      page: pagination.page,
+      page_size: pagination.size
     }
+    Object.keys(params).forEach(key => params[key] === '' && delete params[key])
+
+    const response = await getTestScripts(params)
+
+    let results = []
+    let count = 0
+    if (response.data.results) {
+      results = response.data.results
+      count = response.data.count || 0
+    } else {
+      results = response.data
+      count = response.data.length
+    }
+
+    scripts.value = results
+    pagination.total = count
+
+    const maxPage = Math.max(1, Math.ceil((pagination.total || 0) / pagination.size || 1))
+    if (pagination.page > maxPage) {
+      pagination.page = maxPage
+      shouldRefetch = true
+      return
+    }
+    hasLoaded.value = true
   } catch (error) {
     ElMessage.error(t('uiAutomation.script.messages.loadScriptsFailed'))
-    console.error('获取脚本列表失败:', error)
+    requestState.value = error.response?.status === 403 ? UI_PAGE_STATE.FORBIDDEN : UI_PAGE_STATE.REQUEST_ERROR
+    requestErrorMessage.value = error.response?.data?.detail || error.message || ''
+    hasLoaded.value = true
+  } finally {
+    if (!shouldRefetch) {
+      loading.value = false
+    }
+  }
+
+  if (shouldRefetch) {
+    await loadScripts()
   }
 }
 
-// 项目切换
-const onProjectChange = async () => {
-  currentPage.value = 1
-  await loadScripts()
+const handleFilter = () => {
+  pagination.page = 1
+  loadScripts()
 }
 
-// 页面大小改变
-const handleSizeChange = async () => {
-  currentPage.value = 1
-  await loadScripts()
-}
-
-// 当前页改变
-const handleCurrentChange = async () => {
-  await loadScripts()
+const resetFilters = () => {
+  filters.name = ''
+  pagination.page = 1
+  loadScripts()
 }
 
 // 跳转到脚本编辑器
@@ -375,49 +490,45 @@ onMounted(async () => {
   await loadProjects()
 
   if (projects.value.length > 0) {
-    selectedProject.value = projects.value[0].id
+    filters.project = projects.value[0].id
     await loadScripts()
   }
 })
 </script>
 
-<style scoped>
-.script-list {
-  height: 100vh;
+<style lang="scss" scoped>
+.table-container {
+  flex: 1;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
+
+  :deep(.unified-list-table) {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
+  }
 }
 
-.page-header {
+.table-actions {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid #e6e6e6;
-  background: white;
-}
-
-.page-title {
-  margin: 0;
-  font-size: 24px;
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-}
-
-.main-content {
-  flex: 1;
-  padding: 20px;
-  overflow: auto;
-  background: #f5f5f5;
-}
-
-.pagination {
-  margin-top: 20px;
-  display: flex;
-  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .script-detail {

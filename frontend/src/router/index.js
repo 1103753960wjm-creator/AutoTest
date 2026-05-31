@@ -1,4 +1,4 @@
-﻿import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useProductivityStore } from '@/stores/productivity'
 import { usePlatformSearchStore } from '@/stores/platform-search'
@@ -728,16 +728,26 @@ const routes = [
   },
   {
     path: '/data-factory',
-    name: 'DataFactory',
-    component: DataFactory,
+    component: Layout,
     meta: createRouteMeta({
       requiresAuth: true,
-      title: '数据工厂',
       module: 'data-factory',
-      pageType: 'workspace',
-      icon: 'data-line',
-      keepAlive: true
-    })
+      hidden: true
+    }),
+    children: [
+      {
+        path: '',
+        name: 'DataFactory',
+        component: DataFactory,
+        meta: createRouteMeta({
+          title: '数据工厂',
+          module: 'data-factory',
+          pageType: 'workspace',
+          icon: 'data-line',
+          keepAlive: true
+        })
+      }
+    ]
   },
   {
     path: '/configuration',

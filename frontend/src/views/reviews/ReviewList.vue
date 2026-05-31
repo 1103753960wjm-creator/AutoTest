@@ -1,24 +1,12 @@
-﻿<template>
-  <div class="page-container">
-    <div class="page-header">
-      <h1 class="page-title">{{ $t('reviewList.title') }}</h1>
-      <div>
-        <el-button @click="goToAutoReviews">
-          查看 AI 自动评审
-        </el-button>
-        <el-button type="primary" @click="createReview">
-          <el-icon><Plus /></el-icon>
-          {{ $t('reviewList.createReview') }}
-        </el-button>
-      </div>
-    </div>
-
-    <div class="filter-bar">
-      <el-form :inline="true" :model="filters" class="filter-form">
-        <el-form-item :label="$t('reviewList.project')">
+<template>
+  <ListShell>
+    <!-- 1. 搜索筛选区 (排版与 ProjectManagement 严格对齐) -->
+    <div class="filters">
+      <el-row :gutter="16">
+        <el-col :span="8">
           <el-select
             v-model="filters.project"
-            class="filter-select"
+            style="width: 100%"
             :placeholder="$t('reviewList.selectProject')"
             clearable
             @change="handleFilter"
@@ -30,11 +18,11 @@
               :value="project.id"
             />
           </el-select>
-        </el-form-item>
-        <el-form-item :label="$t('reviewList.status')">
+        </el-col>
+        <el-col :span="8">
           <el-select
             v-model="filters.status"
-            class="filter-select"
+            style="width: 100%"
             :placeholder="$t('reviewList.selectStatus')"
             clearable
             @change="handleFilter"
@@ -45,11 +33,11 @@
             <el-option :label="$t('reviewList.statusRejected')" value="rejected" />
             <el-option :label="$t('reviewList.statusCancelled')" value="cancelled" />
           </el-select>
-        </el-form-item>
-        <el-form-item :label="$t('reviewList.reviewer')">
+        </el-col>
+        <el-col :span="8">
           <el-select
             v-model="filters.reviewer"
-            class="filter-select"
+            style="width: 100%"
             :placeholder="$t('reviewList.selectReviewer')"
             clearable
             @change="handleFilter"
@@ -61,10 +49,11 @@
               :value="user.id"
             />
           </el-select>
-        </el-form-item>
-      </el-form>
+        </el-col>
+      </el-row>
     </div>
 
+    <!-- 2. 统一页面状态机联动 -->
     <StateLoading v-if="pageState === UI_PAGE_STATE.LOADING" compact />
     <StateForbidden
       v-else-if="pageState === UI_PAGE_STATE.FORBIDDEN"
@@ -90,88 +79,92 @@
       :primary-action-text="$t('reviewList.createReview')"
       @primary-action="createReview"
     />
-    <div v-else class="table-container">
-      <UnifiedListTable
-        v-model:currentPage="pagination.page"
-        v-model:pageSize="pagination.size"
-        :page-sizes="[10, 20, 50, 100]"
-        :total="pagination.total"
-        :data="reviews"
-        :loading="loading"
-        row-key="id"
-        selection-mode="none"
-        :actions="{ view: false, edit: false, delete: false }"
-        :action-column-width="180"
-        @page-change="fetchReviews"
-      >
-        <el-table-column :label="$t('reviewList.reviewTitle')" min-width="200" show-overflow-tooltip>
-          <template #default="{ row }">
-            <el-link type="primary" @click="viewReview(row.id)">
-              {{ row.title }}
-            </el-link>
+
+    <!-- 3. 标准表格与分页展示 -->
+    <template v-else>
+      <div class="table-container">
+        <UnifiedListTable
+          v-model:currentPage="pagination.page"
+          v-model:pageSize="pagination.size"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="pagination.total"
+          :data="reviews"
+          :loading="loading"
+          row-key="id"
+          selection-mode="none"
+          :actions="{ view: false, edit: false, delete: false }"
+          :action-column-width="180"
+          @page-change="fetchReviews"
+        >
+          <el-table-column :label="$t('reviewList.reviewTitle')" min-width="200" show-overflow-tooltip>
+            <template #default="{ row }">
+              <el-link type="primary" @click="viewReview(row.id)">
+                {{ row.title }}
+              </el-link>
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('reviewList.reviewProject')" width="200">
+            <template #default="{ row }">
+              <span v-if="row.projects && row.projects.length > 0">
+                {{ row.projects.map(p => p.name).join(', ') }}
+              </span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('reviewList.reviewStatus')" width="120">
+            <template #default="{ row }">
+              <el-tag :type="getStatusType(row.status)">{{ getStatusText(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('reviewList.priority')" width="100">
+            <template #default="{ row }">
+              <el-tag :class="`priority-tag ${row.priority}`">{{ getPriorityText(row.priority) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="creator.username" :label="$t('reviewList.creator')" width="120" />
+          <el-table-column :label="$t('reviewList.testcaseCount')" width="100">
+            <template #default="{ row }">
+              {{ row.testcases?.length || 0 }}
+            </template>
+          </el-table-column>
+          <el-table-column :label="$t('reviewList.progress')" width="120">
+            <template #default="{ row }">
+              <el-progress
+                :percentage="getReviewProgress(row)"
+                :color="getProgressColor(row)"
+                :stroke-width="6"
+              />
+            </template>
+          </el-table-column>
+          <el-table-column prop="deadline" :label="$t('reviewList.deadline')" width="160">
+            <template #default="{ row }">
+              {{ row.deadline ? formatDate(row.deadline) : $t('reviewList.noDeadline') }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="created_at" :label="$t('reviewList.createdAt')" width="160">
+            <template #default="{ row }">
+              {{ formatDate(row.created_at) }}
+            </template>
+          </el-table-column>
+          <template #actions="{ row }">
+            <div class="table-actions">
+              <el-button v-if="canReview(row)" link type="success" @click="submitReview(row)">{{ $t('reviewList.review') }}</el-button>
+              <el-button v-if="canEdit(row)" link type="warning" @click="editReview(row.id)">{{ $t('reviewList.edit') }}</el-button>
+              <el-popconfirm
+                v-if="canDelete(row)"
+                :title="$t('reviewList.deleteConfirm')"
+                @confirm="deleteReview(row.id)"
+              >
+                <template #reference>
+                  <el-button link type="danger">{{ $t('reviewList.delete') }}</el-button>
+                </template>
+              </el-popconfirm>
+              <span v-if="!hasRowActions(row)" class="action-placeholder">-</span>
+            </div>
           </template>
-        </el-table-column>
-        <el-table-column :label="$t('reviewList.reviewProject')" width="200">
-          <template #default="{ row }">
-            <span v-if="row.projects && row.projects.length > 0">
-              {{ row.projects.map(p => p.name).join(', ') }}
-            </span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('reviewList.reviewStatus')" width="120">
-          <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">{{ getStatusText(row.status) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('reviewList.priority')" width="100">
-          <template #default="{ row }">
-            <el-tag :class="`priority-tag ${row.priority}`">{{ getPriorityText(row.priority) }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="creator.username" :label="$t('reviewList.creator')" width="120" />
-        <el-table-column :label="$t('reviewList.testcaseCount')" width="100">
-          <template #default="{ row }">
-            {{ row.testcases?.length || 0 }}
-          </template>
-        </el-table-column>
-        <el-table-column :label="$t('reviewList.progress')" width="120">
-          <template #default="{ row }">
-            <el-progress
-              :percentage="getReviewProgress(row)"
-              :color="getProgressColor(row)"
-              :stroke-width="6"
-            />
-          </template>
-        </el-table-column>
-        <el-table-column prop="deadline" :label="$t('reviewList.deadline')" width="160">
-          <template #default="{ row }">
-            {{ row.deadline ? formatDate(row.deadline) : $t('reviewList.noDeadline') }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" :label="$t('reviewList.createdAt')" width="160">
-          <template #default="{ row }">
-            {{ formatDate(row.created_at) }}
-          </template>
-        </el-table-column>
-        <template #actions="{ row }">
-          <div class="table-actions">
-            <el-button v-if="canReview(row)" link type="success" @click="submitReview(row)">{{ $t('reviewList.review') }}</el-button>
-            <el-button v-if="canEdit(row)" link type="warning" @click="editReview(row.id)">{{ $t('reviewList.edit') }}</el-button>
-            <el-popconfirm
-              v-if="canDelete(row)"
-              :title="$t('reviewList.deleteConfirm')"
-              @confirm="deleteReview(row.id)"
-            >
-              <template #reference>
-                <el-button link type="danger">{{ $t('reviewList.delete') }}</el-button>
-              </template>
-            </el-popconfirm>
-            <span v-if="!hasRowActions(row)" class="action-placeholder">-</span>
-          </div>
-        </template>
-      </UnifiedListTable>
-    </div>
+        </UnifiedListTable>
+      </div>
+    </template>
 
     <el-dialog v-model="reviewDialogVisible" :title="$t('reviewList.submitReview')" width="600px">
       <el-form :model="reviewForm" label-width="80px">
@@ -195,7 +188,7 @@
         <el-button type="primary" @click="confirmSubmitReview">{{ $t('reviewList.submit') }}</el-button>
       </template>
     </el-dialog>
-  </div>
+  </ListShell>
 </template>
 
 <script setup>
@@ -207,6 +200,8 @@ import { Plus } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 import { useUserStore } from '@/stores/user'
+import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
+import { ListShell } from '@/components/page-shells'
 import { UnifiedListTable } from '@/components/platform-shared'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
@@ -251,6 +246,28 @@ const pageState = computed(() => {
   }
   return state
 })
+
+usePlatformPageHeader(() => ({
+  helperText: t('reviewList.helperText', '查看和管理AI生成的用例评审任务。'),
+  metaItems: [
+    { label: t('reviewList.totalTasks', '任务总数'), value: `${pagination.total}` }
+  ],
+  actions: [
+    {
+      key: 'ai-auto-btn',
+      label: t('reviewList.viewAutoReviews', '查看 AI 自动评审'),
+      plain: true,
+      onClick: goToAutoReviews
+    },
+    {
+      key: 'create-btn',
+      label: t('reviewList.createReview'),
+      type: 'primary',
+      icon: Plus,
+      onClick: createReview
+    }
+  ]
+}))
 
 const reviewForm = reactive({
   status: 'approved',
@@ -445,18 +462,39 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.filters {
+  background: #ffffff;
+  padding: 18px 24px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  margin-bottom: 16px;
+}
+
 .table-container {
+  flex: 1;
   overflow: hidden;
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px 24px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
 
   :deep(.unified-list-table) {
     display: flex;
     flex-direction: column;
+    height: 100%;
   }
-}
 
-.filter-form {
-  :deep(.filter-select) {
-    width: 180px;
+  :deep(.unified-list-table__table) {
+    flex: 1;
+    min-height: 0;
+  }
+  
+  :deep(.el-table) {
+    height: 100% !important;
+  }
+  
+  :deep(.el-table__body-wrapper) {
+    overflow-y: auto !important;
   }
 }
 

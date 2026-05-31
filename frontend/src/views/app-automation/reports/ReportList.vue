@@ -14,25 +14,25 @@
 
         <div class="filters">
           <el-row :gutter="20">
-            <el-col :span="4">
-              <el-select v-model="suiteProjectFilter" placeholder="全部项目" clearable filterable @change="handleSuiteFilterChange">
+            <el-col :span="8">
+              <el-select v-model="suiteProjectFilter" placeholder="全部项目" clearable filterable @change="handleSuiteFilterChange" style="width: 100%">
                 <el-option v-for="project in projectList" :key="project.id" :label="project.name" :value="project.id" />
               </el-select>
             </el-col>
-            <el-col :span="6">
-              <el-input v-model="suiteSearch" placeholder="搜索套件名称" clearable @clear="handleSuiteFilterChange" @keyup.enter="handleSuiteFilterChange">
+            <el-col :span="8">
+              <el-input v-model="suiteSearch" placeholder="搜索套件名称" clearable @clear="handleSuiteFilterChange" @keyup.enter="handleSuiteFilterChange" style="width: 100%">
                 <template #prefix><el-icon><Search /></el-icon></template>
               </el-input>
             </el-col>
-            <el-col :span="5">
-              <el-select v-model="suiteStatusFilter" placeholder="执行状态" clearable @change="handleSuiteFilterChange">
+            <el-col :span="8">
+              <el-select v-model="suiteStatusFilter" placeholder="执行状态" clearable @change="handleSuiteFilterChange" style="width: 100%">
                 <el-option label="已完成" value="completed" />
                 <el-option label="执行异常" value="error" />
                 <el-option label="执行中" value="running" />
                 <el-option label="未执行" value="not_run" />
               </el-select>
             </el-col>
-            <el-col :span="6">
+            <el-col :span="8">
               <el-button type="primary" @click="handleSuiteFilterChange">
                 <el-icon><Search /></el-icon>
                 查询
@@ -140,24 +140,24 @@
 
         <div class="filters">
           <el-row :gutter="20">
-            <el-col :span="4">
-              <el-select v-model="caseProjectFilter" placeholder="全部项目" clearable filterable @change="handleCaseFilterChange">
+            <el-col :span="8">
+              <el-select v-model="caseProjectFilter" placeholder="全部项目" clearable filterable @change="handleCaseFilterChange" style="width: 100%">
                 <el-option v-for="project in projectList" :key="project.id" :label="project.name" :value="project.id" />
               </el-select>
             </el-col>
-            <el-col :span="6">
-              <el-input v-model="caseSearch" placeholder="搜索用例名称或设备" clearable @clear="handleCaseFilterChange" @keyup.enter="handleCaseFilterChange">
+            <el-col :span="8">
+              <el-input v-model="caseSearch" placeholder="搜索用例名称或设备" clearable @clear="handleCaseFilterChange" @keyup.enter="handleCaseFilterChange" style="width: 100%">
                 <template #prefix><el-icon><Search /></el-icon></template>
               </el-input>
             </el-col>
-            <el-col :span="4">
-              <el-select v-model="caseStatusFilter" placeholder="执行状态" clearable @change="handleCaseFilterChange">
+            <el-col :span="8">
+              <el-select v-model="caseStatusFilter" placeholder="执行状态" clearable @change="handleCaseFilterChange" style="width: 100%">
                 <el-option label="已完成" value="completed" />
                 <el-option label="执行异常" value="error" />
                 <el-option label="已停止" value="stopped" />
               </el-select>
             </el-col>
-            <el-col :span="6">
+            <el-col :span="8">
               <el-button type="primary" @click="handleCaseFilterChange">
                 <el-icon><Search /></el-icon>
                 查询

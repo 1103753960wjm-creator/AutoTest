@@ -1,6 +1,6 @@
-﻿# TestHub 项目开发记忆
+# TestHub 项目开发记忆
 
-更新时间：2026-04-15
+更新时间：2026-05-26
 
 ## 1. 文件职责
 
@@ -210,6 +210,7 @@
 ### 3.9 统一平台壳
 
 阶段 1 已完成统一平台壳的基础落地。
+近期（2026-05-30）完成底层组件卸载崩溃隐患的彻底消除。
 
 相关文件：
 
@@ -226,6 +227,7 @@
 - 页面标题、面包屑、模块归属、页面类型优先由路由 meta 驱动
 - 顶部全局搜索、最近访问、收藏、消息通知、项目上下文当前仍为占位入口
 - 首页与 AI 助手已纳入统一平台壳，不再作为壳外孤立页面
+- **架构级路由缓存策略**：平台壳层在 `<router-view>` 中统一使用基于路由名称白名单的 `<keep-alive :include="cachedViews">` 进行按需缓存。为避开 Vue 3 的组件上下文丢失崩溃（Bug #6222），**绝对禁止**在缓存插槽层使用 `v-if` 条件渲染容器节点。
 
 ### 3.10 第一批共享组件边界
 
@@ -467,6 +469,21 @@
 - `frontend/src/views/versions/VersionList.vue`
 - `frontend/src/views/testcases/TestCaseList.vue`
 - `frontend/src/components/platform-shared/UnifiedListTable.vue`
+
+### 3.23 AI自动化执行记录页重构与前端 UI 一致化规范落地
+
+2026-05-26 已完成“AI自动化执行记录页” (AIExecutionRecords.vue) 的重构与迁移，并正式确立“前端样式 UI 一致化”规则。
+
+#### 当前冻结结论：
+
+- **UI 风格与状态收口**: 采用 `ListShell` 统一页面壳和 `UnifiedListTable` 表格组件。接入 Loading / Empty / SearchEmpty / Error / Forbidden 五大统一页面状态组件。
+- **UI 一致性规则对齐**: 任何模块新增或改造搜索筛选组件时，必须与 `ProjectManagement.vue` 的搜索框、查询/重置按钮在排版、位置、间距（如 `el-row :gutter=16`，独立卡片边距及阴影）上保持完全一致。
+- **检索与轮询闭环**: 实现了“用例名称”检索与清空重置；定时轮询触发时自动携带当前搜索状态，且在用户已勾选多选框时暂停数据覆盖以防干扰操作。
+
+#### 相关文件：
+
+- `.cursor/project_rules.md` / `frontend/AGENTS.md` (规则写入)
+- `frontend/src/views/ui-automation/ai/AIExecutionRecords.vue`
 
 ## 4. 当前代码层已落地、但仍需继续推进的点
 

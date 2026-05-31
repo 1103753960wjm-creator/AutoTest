@@ -3,14 +3,14 @@
     <!-- 页面操作栏 -->
     <div class="page-actions">
       <el-row :gutter="20" class="filter-row">
-        <el-col :span="6">
+        <el-col :span="8">
           <el-input
               v-model="searchForm.taskName"
               :placeholder="$t('uiAutomation.notification.logs.searchTaskName')"
               clearable
               @clear="handleSearch"
               @keyup.enter="handleSearch"
-          >
+           style="width: 100%">
             <template #prefix>
               <el-icon>
                 <Search/>
@@ -18,7 +18,7 @@
             </template>
           </el-input>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="8">
           <el-date-picker
               v-model="searchForm.dateRange"
               type="daterange"
@@ -27,22 +27,22 @@
               :end-placeholder="$t('uiAutomation.notification.logs.endDate')"
               value-format="YYYY-MM-DD"
               @change="handleSearch"
-          />
+          style="width: 100%" />
         </el-col>
-        <el-col :span="6">
+        <el-col :span="8">
           <el-select
               v-model="searchForm.status"
               :placeholder="$t('uiAutomation.notification.logs.notificationStatus')"
               clearable
               @change="handleSearch"
-          >
+           style="width: 100%">
             <el-option :label="$t('uiAutomation.notification.logs.allStatus')" value=""/>
             <el-option :label="$t('uiAutomation.notification.logs.statusSuccess')" value="SUCCESS"/>
             <el-option :label="$t('uiAutomation.notification.logs.statusFailed')" value="FAILED"/>
             <el-option :label="$t('uiAutomation.notification.logs.statusRetrying')" value="RETRYING"/>
           </el-select>
         </el-col>
-        <el-col :span="6">
+        <el-col :span="8">
           <el-button type="primary" @click="handleSearch">
             <el-icon>
               <Search/>
