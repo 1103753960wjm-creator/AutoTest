@@ -30,6 +30,13 @@ TestHub 是一个功能强大的智能测试管理平台，集成了 **AI 需求
 - **Token 黑名单**: 登出时自动将 Token 加入黑名单，防止重放攻击
 - **请求队列**: Token 刷新期间请求自动排队等待，确保请求不丢失
 
+### 🎨 平台体验与性能优化
+- **健壮的缓存导航**: 修复了 `<router-view>` 在 Keep-alive 模式下切换侧边栏引发组件卸载空指针的致命 Bug，实现了深度防崩塌的渲染层级机制。
+- **全局 UI/UX 一致性**: 规范化了全仓 18 个模块的列表页布局，统一采用网格一致化的 `ListShell` 结构，使输入框、选择框等筛选控件样式及间距保持 100% 对齐，彻底消除了 flex 容器下宽度塌缩和排列错乱的缺陷。
+- **自然流畅滚动**: 移除了多层包裹路由容器带来的高度截断，让页面高度自然传递，恢复了原生且流畅的滚动体验。
+- **前端打包分包优化**: 实施了路由懒加载与三方框架（如 Element Plus、ECharts 等）的模块级手动拆包策略，消除了构建时大体积文件告警，显著缩短首屏加载时间。
+
+
 ### ⚙️ 统一配置中心
 - **环境检测**: 自动检测系统浏览器和 Playwright 环境
 - **驱动管理**: 一键安装和更新浏览器驱动
@@ -164,11 +171,13 @@ testhub_platform/
 │   │   └── management/commands/     # 管理命令
 │   │       ├── run_all_scheduled_tasks.py  # 统一定时任务调度器
 │   │       ├── init_locator_strategies.py  # 初始化元素定位策略
-│   │       └── download_webdrivers.py      # 下载浏览器驱动
+│   │       ├── download_webdrivers.py      # 下载浏览器驱动
+│   │       └── load_component_pack.py      # 初始化 APP 自动化组件库
 │   ├── requirement_analysis/       # AI 需求分析
 │   ├── assistant/                  # 智能助手
 │   ├── api_testing/                # API 测试
-│   └── ui_automation/              # UI 自动化测试
+│   ├── ui_automation/              # UI 自动化测试
+│   └── app_automation/             # APP 自动化测试 (Android)
 ├── backend/                        # Django 项目配置
 │   ├── settings.py                 # 项目设置
 │   ├── urls.py                     # URL 路由
@@ -190,6 +199,8 @@ testhub_platform/
 │   │   │   │   ├── ai/             # AI 智能模式
 │   │   │   │   ├── config/         # 配置管理
 │   │   │   │   └── suites/         # 测试套件
+│   │   │   ├── app-automation/     # APP 自动化
+│   │   │   ├── versions/           # 版本管理
 │   │   │   └── configuration/      # 统一配置中心
 │   │   ├── stores/                 # Pinia 状态管理
 │   │   ├── router/                 # 路由配置
@@ -206,16 +217,21 @@ testhub_platform/
 
 ## 🚀 快速开始
 
-### 环境要求
+### 0️⃣ 从零开始：基础环境准备 (新电脑必看)
+如果您是在一台全新的电脑上下载了该项目，请在开始部署前，**务必确保安装并配置好以下基础环境（加入系统 PATH）**：
+1. **Python 3.12**：核心运行环境，其他版本可能存在依赖兼容问题。
+2. **Node.js 18+**：前端依赖，必须安装用于编译打包前端代码。
+3. **MySQL 8.0+**：核心数据库，必须安装并启动服务（需提前新建好一个空白数据库）。
+4. **Redis**: 6.0+ (可选,缓存与异步任务调度（Celery / APP 自动化依赖）。*注：原生 Windows 不支持 Redis，强烈建议采用下方的 `WSL2` 部署方案，或安装 Windows 移植版（如 Memurai 或 tporadowski/redis）。*
+5. **Java 17+**：生成 Allure 测试报告所需的依赖。
+6. **Android SDK / ADB**（可选）：如果您需要执行 **APP 自动化测试模块**，请确保系统中已安装 `adb` 工具并加入环境变量。
 
-- **Python**: 推荐Python3.12,其他版本可能会存在兼容性问题
-- **Node.js**: 18+(开发环境必须安装Node.js用于构建前端项目,生产可不安装)
-- **MySQL**: 8.0+(必须安装MySQL客户端，用于执行数据库迁移等操作)
-- **Java**: 17+ (可选,用于运行浏览器驱动、Allure 报告生成等，否则会生成报告失败)
-- **Redis**: 6.0+ (可选,用于APP自动化测试相关)
-- **浏览器驱动**: ChromeDriver / GeckoDriver (用于 UI 自动化,建议提前下载好)
+### 🐧 Ubuntu (WSL2) 部署专属通道（推荐 Windows 用户）
+如果您是在 Windows 电脑上部署，且 **C 盘空间紧张**，强烈建议直接查看我们为您定制的：
+👉 **[Ubuntu (WSL2) 本地部署小白教程](./docs/ubuntu_deploy_guide.md)**
+该指南提供了如何使用 WSL2 开启 Ubuntu 22.04 LTS、**一键无损将虚拟机系统搬迁至 E 盘/其他盘（彻底释放 C 盘空间）**、快速配置 Python 3.12 虚拟环境、安装带密码的 Redis 和初始化 MySQL 的完整保姆级步骤。
 
-### 后端部署
+### 后端普通部署（手动搭建）
 
 1. **克隆项目**
 ```bash
@@ -234,7 +250,11 @@ source venv/bin/activate
 
 3. **安装依赖**
 ```bash
+# 安装 Python 依赖包
 pip install -r requirements.txt
+
+# 安装 Playwright 内置浏览器（用于 UI 自动化 / AI 智能模式）
+playwright install
 ```
 
 4. **配置环境变量**
@@ -251,11 +271,7 @@ mysql -u root -p
 CREATE DATABASE testhub CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 EXIT;
 
-# 创建 migrations 目录（如果不存在）
-mkdir -p apps/testcases/migrations
-echo "# This file is intentionally left empty" > apps/testcases/migrations/__init__.py
-
-# 执行迁移
+# 执行迁移（迁移目录已随源码包含，可直接执行）
 python manage.py makemigrations
 python manage.py migrate
 
@@ -285,9 +301,9 @@ python manage.py run_all_scheduled_tasks
 # 启动 Django 开发服务器
 python manage.py runserver
 ```
-10. **启动Celery服务**
+10. **启动 Celery 服务**
 ```bash
-# 启动 Celery 开发服务(可选，用于处理APP自动化任务)
+# 启动 Celery 开发服务（用于处理异步 APP 自动化测试任务；Windows 环境下如遇并发报错，请加参数 -P solo 或 -P eventlet）
 celery -A backend worker -l info
 ```
 
@@ -332,7 +348,8 @@ npm run build
 
 ## 📄 文档
 
-- **[更新日志 (CHANGELOG)](./docs/CHANGELOG.md)**: 查看版本更新历史和重要变更
+- **[更新日志 (CHANGELOG)](./更新日志.md)**: 查看版本更新历史和重要变更
+- **[Ubuntu (WSL2) 本地部署小白教程](./docs/ubuntu_deploy_guide.md)**: 适合 Windows 用户的保姆级 WSL2 Ubuntu 22.04 LTS 本地化环境搭建与部署指南（支持无损将系统转移至非 C 盘）。
 - **[数据工厂使用说明](./docs/数据工厂使用说明.md)**: 数据工厂功能完整介绍和使用技巧
 - **[数据工厂快速开始](./docs/数据工厂快速开始.md)**: 数据工厂快速上手指南
 - **[数据工厂功能说明](./docs/数据工厂功能说明.md)**: 数据工厂功能详细说明
@@ -551,6 +568,46 @@ npm run build
 - `TestRun`: 测试执行
 - `TestRunCase`: 测试执行用例
 - `TestRunCaseHistory`: 执行历史
+
+### 9. APP 自动化测试模块 (`app_automation`)
+
+**功能**:
+- **设备生命周期管理**: 自动扫描并展示 ADB 在线 Android 设备/模拟器，支持设备手动锁定/解锁/独占，防并发冲突。
+- **元素库管理**: 统一维护测试所需的 UI 元素，支持“图片元素 (Airtest 图像识别阈值/RGB控制)”、“坐标元素”和“区域元素”多分辨率配置。
+- **组件编排**: 提供组件 Schema 的低代码编排体系，支持“自定义组件”多层级步骤组合嵌套。
+- **用例与套件设计**: 基于 Airtest 的动作流编排，支持测试变量局部/全局作用域定义与超时重试配置。
+- **异步分布式执行**: 基于 Celery 任务池实现用例/套件在特定设备上的异步调度执行，生成 Allure 测试报告与操作截图。
+
+**数据模型**:
+- `AppProject`: APP自动化项目
+- `AppDevice`: 测试设备
+- `AppElement`: UI 元素
+- `AppComponent` & `AppCustomComponent`: 系统组件与自定义组件
+- `AppPackage`: 目标应用包名
+- `AppTestSuite` & `AppTestCase`: 测试套件与测试用例
+- `AppTestExecution`: 测试执行与报告记录
+- `AppScheduledTask`: APP 定时任务与通知日志
+
+### 10. 版本管理模块 (`versions`)
+
+**功能**:
+- **版本演进隔离**: 支持项目在多个迭代版本（Version）下的用例、执行结果的跟踪。
+- **基线版本确立**: 可将特定版本标记为基线（Baseline），作为稳定性回归与演进的基准。
+
+**数据模型**:
+- `Version`: 迭代版本
+
+### 11. 项目与用户管理模块 (`projects` & `users`)
+
+**功能**:
+- **多租户/项目隔离**: 支持多项目独立运行，每个项目具有独立的环境变量、用例库和执行历史。
+- **细粒度成员角色**: 支持项目负责人、管理员、开发者、测试者、观察者角色控制。
+- **环境变量管理**: 项目级 Base URL、动态键值对存储，一键切换开发/测试/生产环境。
+
+**数据模型**:
+- `Project` & `ProjectMember`: 项目及项目成员
+- `ProjectEnvironment`: Project 环境及变量配置
+- `User`: 用户账号模型
 
 ## 🔧 配置说明
 
