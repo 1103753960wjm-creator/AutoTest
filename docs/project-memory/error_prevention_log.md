@@ -223,3 +223,102 @@
   - `frontend/src/views/versions/VersionList.vue`
   - `frontend/src/views/reviews/ReviewList.vue`（标准参考）
   - `frontend/src/components/page-shells/ListShell.vue`
+
+### 011. 根层 router-view key 粒度错误导致跨模块导航队列被打断
+
+- **发生时间**：2026-06-01，2026-06-16 复现并修正防复发规则
+- **错误类型**：框架底层交互类
+- **现象**：侧边栏切换同一业务模块下的不同子页面时，页面会明显闪烁、停在旧内容，或像必须刷新页面后才切换成功；跨顶部大模块后立即点击侧边栏子模块时，页面容易停在大模块默认页，用户体感像“卡住后刷新才恢复”。
+- **根因分析**：`App.vue` 根层 `<router-view>` 按业务模块或物理路由加 key 时，跨顶部大模块会销毁整套 `Layout`。销毁期间 `layout/index.vue` 内部的导航队列、乐观模块状态、侧边栏 DOM 和 Element Plus 菜单事件都会被打断；用户在这个窗口内快速点击侧边栏，点击可能落在刚被销毁或刚重建的菜单上，最终只完成顶部模块跳转，没有完成子模块跳转。
+- **防复发规则**：
+  - 登录后业务页面必须共用稳定的根层 Layout key，例如 `layout:authenticated`；禁止按 `route.meta.module`、物理顶层路由、`fullPath`、`params` 等维度销毁整套平台壳。
+  - 模块切换时只允许更新 `layout/index.vue` 内部的模块态、侧边栏菜单态和内容路由，不应销毁根层 Layout。
+  - 登录页、注册页等非登录后壳层页面仍可使用独立 key，避免认证页与业务平台壳互相复用。
+  - 业务内容层 `layout/index.vue` 可以继续使用 `:key="currentRoute.name || currentRoute.path"`，该 key 必须与 `<keep-alive :include="cachedViews">` 的路由名称维度保持一致。
+  - 顶部模块、侧边栏、全局搜索、最近访问和收藏入口必须共用同一套导航调度器；快速点击时，重复目标和当前路径应直接忽略，被后续点击取消的导航属于正常现象，不应输出红错或触发整页刷新兜底。
+  - 路由切换动画应轻量，优先使用短时长 `opacity + translateY`，避免大横向位移制造“页面重载”的体感。
+- **最低验证动作**：
+  - 从 `/ui-automation/*` 切到 `/ai-intelligent-mode/*`，确认 Layout 不被整套重建，页面内容正常切换。
+  - 从接口自动化、Web 自动化、App 自动化、配置中心等顶部大模块互相切换后，立即点击当前模块侧边栏，最终应停在最后点击目标，且无 `beforeunload`、`pagehide` 或主文档请求。
+  - 几秒内快速点击多个侧边栏子模块，确认最终停在最后点击的菜单，控制台无 `Navigation cancelled`、`parentNode`、`exposed` 等红错。
+  - 搜索、收藏、最近访问和顶部模块入口仍能通过统一路由链正常跳转。
+- **关联文件**：
+  - `frontend/src/App.vue`
+  - `frontend/src/layout/index.vue`
+
+### 012. 环境变量非法值和生产安全兜底导致启动状态不可信
+
+- **发生时间**：2026-06-14
+- **错误类型**：配置安全类
+- **触发场景**：终端环境变量 `DEBUG=release` 覆盖 `.env` 后，Django 在布尔转换阶段抛出底层 `ValueError`；生产环境未配置 CORS 时，旧逻辑会默认放开全部来源。
+- **根因分析**：配置读取直接依赖第三方布尔转换，缺少项目级错误提示；生产环境把“方便启动”的兜底当成了长期默认安全策略。
+- **防复发规则**：
+  - 关键布尔配置必须使用项目内统一解析函数，非法值直接抛出清晰配置错误。
+  - 生产环境必须显式配置 `ALLOWED_HOSTS` 和 `CORS_ALLOWED_ORIGINS`，不得默认使用 `*` 或放开所有来源。
+  - API CSRF 全局禁用必须由 `DISABLE_CSRF_FOR_API` 显式控制，并且生产环境禁止开启。
+- **最低验证动作**：
+  - `DEBUG=True` 时执行 `manage.py check` 应通过。
+  - `DEBUG=release` 时执行 `manage.py check` 应明确提示 `DEBUG` 非法。
+  - `DEBUG=False` 且缺少 `CORS_ALLOWED_ORIGINS` 时应启动失败。
+  - `DEBUG=False` 且 `DISABLE_CSRF_FOR_API=True` 时应启动失败。
+- **关联文件**：
+  - `backend/settings.py`
+  - `backend/middleware.py`
+  - `.env.example`
+
+### 013. 认证失效跳转散写浏览器跳转导致整页刷新体感
+
+- **发生时间**：2026-06-16
+- **错误类型**：认证导航一致性类
+- **触发场景**：`userStore.logout()`、axios 401 拦截器或其他认证失效分支中直接调用 `window.location.href = '/login'`，导致绕开 Vue Router，产生整页刷新体感，并让历史记录、全局导航监控和平台壳状态不可控。
+- **根因分析**：认证跳转属于全局路由行为，散写浏览器跳转会与 SPA 导航链路并行，后续任何一个分支忘记同步修改都会重新引入刷新、重复跳转或登录页历史记录异常。
+- **防复发规则**：
+  - 认证失效、退出登录、refresh token 失败后回登录页，统一调用 `frontend/src/utils/authNavigation.js` 的 `redirectToLogin()`。
+  - `frontend/src/router/index.js` 必须在 router 创建后调用 `setAuthRouter(router)`。
+  - 除无法使用 router 的兜底层外，禁止在 store、api 拦截器和页面中直接写 `window.location.href`、`window.location.assign` 或 `location.replace('/login')`。
+- **最低验证动作**：
+  - 执行 `node --check frontend/src/stores/user.js frontend/src/utils/api.js frontend/src/utils/authNavigation.js frontend/src/router/index.js`。
+  - 人工或浏览器验证退出登录、401 刷新失败后能回到 `/login`，且无额外整页刷新兜底。
+- **关联文件**：
+  - `frontend/src/utils/authNavigation.js`
+  - `frontend/src/stores/user.js`
+  - `frontend/src/utils/api.js`
+  - `frontend/src/router/index.js`
+
+### 014. 前端继续使用 xlsx 导出导致安全风险回归
+
+- **发生时间**：2026-06-16
+- **错误类型**：依赖安全类
+- **触发场景**：前端页面或文档模板继续 `import * as XLSX from 'xlsx'`，即使 `package.json` 已移除该依赖，也可能在后续复制模板时重新引回存在高危漏洞且无修复版本的导出库。
+- **根因分析**：旧导出逻辑分散在多个页面，且文档模板中保留了 `xlsx` 示例；如果只改业务页面、不改模板和规则，新页面开发会继续复制旧依赖。
+- **防复发规则**：
+  - 前端 Excel 导出统一使用 `frontend/src/utils/excelExport.js`。
+  - 新页面和文档模板禁止引入 `xlsx`。
+  - 如需新增导出能力，只允许在统一工具层扩展，不在页面内手写 workbook / worksheet 细节。
+- **最低验证动作**：
+  - 执行 `rg -n "from 'xlsx'|from \\\"xlsx\\\"|XLSX" frontend docs`，确认没有新增业务代码或模板引用。
+  - 执行 `npm audit --omit=dev`，确认生产依赖漏洞未回归。
+  - 执行 `cd frontend && cmd /c npm run build`，确认导出工具可打包。
+- **关联文件**：
+  - `frontend/package.json`
+  - `frontend/src/utils/excelExport.js`
+  - `frontend/src/views/testcases/TestCaseList.vue`
+  - `frontend/src/views/requirement-analysis/RequirementAnalysisView.vue`
+  - `frontend/src/views/requirement-analysis/TaskDetail.vue`
+
+### 015. 页面头部 actions 传入 computed 或非数组导致布局崩溃
+
+- **发生时间**：2026-06-16
+- **错误类型**：全局页面壳兼容类
+- **触发场景**：页面通过 `usePlatformPageHeader()` 注入页头动作时，`actions`、`statusTags`、`metaItems` 可能来自 computed/ref 或异常非数组值；旧逻辑直接 `.map()` 会导致运行时错误，进而打断页面切换。
+- **根因分析**：平台页头控制器属于跨页面共享入口，不能假设所有消费端都传入普通数组；需要在统一入口中解包 `ref/computed` 并做数组兜底。
+- **防复发规则**：
+  - `usePlatformPageHeader` 的 normalize 层必须对所有字段执行 `unref`。
+  - `actions`、`statusTags`、`metaItems` 必须统一兜底为数组，页面侧传错值时不能拖垮 Layout。
+  - 新增页头字段时必须在 normalize 层补充类型兜底。
+- **最低验证动作**：
+  - 构建级验证 `cd frontend && cmd /c npm run build`。
+  - 页面级验证切换使用动态页头动作的列表页、详情页、配置页，控制台无 `actions.map is not a function` 或类似红错。
+- **关联文件**：
+  - `frontend/src/layout/usePlatformPageHeader.js`
+  - `frontend/src/layout/index.vue`

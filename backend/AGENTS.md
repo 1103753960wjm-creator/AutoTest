@@ -19,6 +19,9 @@
 
 - 新增配置统一收敛到 `backend/settings.py`、`decouple.config` 或既有集中配置入口
 - 禁止在业务模块继续散写路径、地址、密钥和额外环境变量读取
+- `DEBUG`、`DISABLE_CSRF_FOR_API` 等关键布尔配置必须使用项目级严格解析，非法值直接抛出清晰配置错误
+- 生产环境必须显式配置安全 `SECRET_KEY`、`ALLOWED_HOSTS` 和 `CORS_ALLOWED_ORIGINS`
+- 生产环境禁止 `ALLOWED_HOSTS=*`，禁止开启 `DISABLE_CSRF_FOR_API=True`
 - 新增日志必须优先复用现有日志体系，避免重复访问日志、重复异常日志和无上下文日志
 
 ## 5. 接口兼容
@@ -30,3 +33,4 @@
 
 - 至少完成导入级、编译级、请求级或测试级验证中的一种
 - 涉及登录、任务状态流转、结果处理、日志链路或 AI 统一入口的改动，交付时必须说明状态变化、结果影响、日志影响和前端影响
+- 涉及 `backend/settings.py`、`backend/middleware.py` 或部署配置时，至少验证开发合法配置、生产合法配置和一个非法配置失败场景

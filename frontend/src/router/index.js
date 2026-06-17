@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useProductivityStore } from '@/stores/productivity'
 import { usePlatformSearchStore } from '@/stores/platform-search'
+import { setAuthRouter } from '@/utils/authNavigation'
 import { createRouteMeta, getDocumentTitle } from './route-meta'
 
 import Layout from '@/layout/index.vue'
@@ -1016,6 +1017,8 @@ const router = createRouter({
   history: createWebHistory(),
   routes
 })
+
+setAuthRouter(router)
 
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()

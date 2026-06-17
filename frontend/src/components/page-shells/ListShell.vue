@@ -137,6 +137,16 @@ const hasHeader = computed(() => {
   gap: 12px;
 }
 
+.shell-filters :deep(.el-row) {
+  width: 100%;
+}
+
+.shell-filters :deep(.el-input),
+.shell-filters :deep(.el-select),
+.shell-filters :deep(.el-date-editor) {
+  width: 100%;
+}
+
 .shell-pagination {
   display: flex;
   justify-content: flex-end;

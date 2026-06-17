@@ -1,6 +1,6 @@
 # TestHub 对话启动记忆
 
-更新时间：2026-05-26
+更新时间：2026-06-16
 
 ## 1. 文件职责
 
@@ -22,7 +22,9 @@
 - 项目：`TestHub` 智能测试管理平台
 - 后端：Django 4.2 + Django REST Framework + MySQL + SimpleJWT + Channels + Celery
 - 前端：Vue 3 + JavaScript + Vite + Pinia + Element Plus
-- 当前高频主题：平台统一壳、导航真源、统一状态组件、测试设计 2.1/2.2、AI 生成链路
+- 当前高频主题：平台统一壳、导航真源、顶部/侧边栏快速切换稳定性、P0 安全配置、统一状态组件、测试设计 2.1/2.2、AI 生成链路
+- 最新冻结点：登录后业务页面共用 `layout:authenticated` 根层 Layout key；顶部模块、侧边栏、搜索、最近访问、收藏和用户资料入口统一走 Layout 导航调度器；认证失效跳转统一走 `authNavigation`；Excel 导出统一走 `excelExport` + `write-excel-file`。
+- 最新验证口径：改 `App.vue`、`layout/index.vue`、侧边栏、认证跳转或路由 key 时，除 `npm run build` 外，必须补跑顶部大模块 -> 侧边栏子模块快速切换，确认无 `beforeunload`、`pagehide` 和主文档请求。
 
 ## 3. 新对话接手顺序
 
@@ -44,3 +46,5 @@
 - 任务交接：`docs/project-memory/task_handoff.md`
 - 统一表格与状态模板规范：[unified-table-template-spec.md](file:///e:/testhub_platform-main/testhub_platform-main/docs/unified-table-template-spec.md)
 - 错误模式库：`docs/project-memory/error_prevention_log.md`
+- Excel 导出统一工具：`frontend/src/utils/excelExport.js`
+- 认证跳转统一工具：`frontend/src/utils/authNavigation.js`

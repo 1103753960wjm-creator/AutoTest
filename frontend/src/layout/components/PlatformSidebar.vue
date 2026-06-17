@@ -1,5 +1,10 @@
 ﻿<template>
-  <aside class="platform-sidebar" :class="{ 'is-collapsed': collapsed }">
+  <aside
+    class="platform-sidebar"
+    :class="{ 'is-collapsed': collapsed }"
+    @pointerdown.capture="handleMenuPointerDown"
+    @click.capture="handleMenuClick"
+  >
     <div class="platform-sidebar__header">
       <div class="platform-sidebar__module">
         <span class="platform-sidebar__module-label">当前模块</span>
@@ -23,6 +28,7 @@
           :key="item.key"
           :index="item.path || item.key"
           :disabled="!item.path"
+          :data-sidebar-menu-path="item.path || ''"
         >
           <el-icon v-if="item.iconComponent"><component :is="item.iconComponent" /></el-icon>
           <el-icon v-else><Menu /></el-icon>
@@ -71,6 +77,36 @@ const moduleInitial = computed(() => props.moduleTitle.slice(0, 2) || '模块')
 
 const handleSelect = (index) => {
   const target = props.items.find((item) => (item.path || item.key) === index)
+  if (target?.path) {
+    emit('navigate', target)
+  }
+}
+
+const handleMenuClick = (event) => {
+  emitMenuNavigation(event)
+}
+
+const handleMenuPointerDown = (event) => {
+  if (event.button === 0) {
+    emitMenuNavigation(event)
+  }
+}
+
+const emitMenuNavigation = (event) => {
+  const targetElement = event.target?.closest?.('[data-sidebar-menu-path]')
+
+  if (!targetElement || !event.currentTarget.contains(targetElement)) {
+    return
+  }
+
+  const targetPath = targetElement.dataset.sidebarMenuPath
+
+  if (!targetPath) {
+    return
+  }
+
+  const target = props.items.find((item) => item.path === targetPath)
+
   if (target?.path) {
     emit('navigate', target)
   }

@@ -371,7 +371,7 @@
 <script>
 import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
-import * as XLSX from 'xlsx'
+import { exportRowsToExcel } from '@/utils/excelExport'
 import { useUserStore } from '@/stores/user'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 import {
@@ -1462,15 +1462,12 @@ export default {
         })
     },
 
-    // 下载测试用例为xlsx文件
+    // 下载测试用例为 Excel 文件
     async downloadTestCases() {
       try {
         // 解析最终测试用例内容
         const finalTestCases = this.generationResult.final_test_cases;
         const taskId = this.generationResult.task_id;
-
-        // 创建工作簿
-        const workbook = XLSX.utils.book_new();
 
         // 过滤掉总结和建议部分，只保留测试用例内容
         const filteredContent = this.filterTestCasesOnly(finalTestCases);
@@ -1506,52 +1503,33 @@ export default {
           row.map(cell => this.convertBrToNewline(cell))
         );
 
-        // 创建工作表
-        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-
         // 设置列宽
-        const colWidths = [
-          { wch: 15 }, // 测试用例编号
-          { wch: 30 }, // 测试场景
-          { wch: 25 }, // 前置条件
-          { wch: 40 }, // 操作步骤
-          { wch: 30 }, // 预期结果
-          { wch: 10 }  // 优先级
+        const columns = [
+          { width: 15 }, // 测试用例编号
+          { width: 30 }, // 测试场景
+          { width: 25 }, // 前置条件
+          { width: 40 }, // 操作步骤
+          { width: 30 }, // 预期结果
+          { width: 10 }  // 优先级
         ];
-        worksheet['!cols'] = colWidths;
-
-        // 设置表头样式（加粗）
-        if (worksheetData.length > 1) {
-          for (let col = 0; col < Math.min(6, worksheetData[0].length); col++) {
-            const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
-            if (!worksheet[cellAddress]) continue;
-            worksheet[cellAddress].s = {
-              font: { bold: true },
-              alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
-            };
-          }
-
-          // 设置自动换行
-          for (let row = 1; row < worksheetData.length; row++) {
-            for (let col = 0; col < Math.min(6, worksheetData[row].length); col++) {
-              const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-              if (worksheet[cellAddress]) {
-                worksheet[cellAddress].s = {
-                  alignment: { vertical: 'top', wrapText: true }
-                };
-              }
-            }
-          }
-        }
-
-        // 将工作表添加到工作簿
-        XLSX.utils.book_append_sheet(workbook, worksheet, this.$t('requirementAnalysis.testCaseSheetName'));
 
         // 生成文件名（包含任务ID和日期）
         const fileName = this.$t('requirementAnalysis.excelFileName', { taskId: taskId, date: new Date().toISOString().slice(0, 10) });
 
         // 导出文件
-        XLSX.writeFile(workbook, fileName);
+        await exportRowsToExcel({
+          rows: worksheetData,
+          columns,
+          sheetName: this.$t('requirementAnalysis.testCaseSheetName'),
+          fileName,
+          headerStyle: {
+            font: { bold: true },
+            alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+          },
+          bodyStyle: {
+            alignment: { vertical: 'top', wrapText: true },
+          },
+        });
 
         ElMessage.success(this.$t('requirementAnalysis.downloadSuccess'));
       } catch (error) {
@@ -1599,8 +1577,8 @@ export default {
       this.streamedReviewContent = '';
       this.finalTestCases = '';
 
-      // 刷新页面以获取最新的配置
-      window.location.reload();
+      // 不做整页刷新，避免侧边栏切换和新一轮生成时重载平台壳。
+      this.checkConfigStatus();
     },
 
     // 格式化日期时间

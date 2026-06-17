@@ -82,12 +82,17 @@
 
 后续每次改以下区域时，至少执行本文件对应 smoke：
 
+- `frontend/src/App.vue`
 - `frontend/src/stores/user.js`
 - `frontend/src/utils/api.js`
+- `frontend/src/utils/authNavigation.js`
 - `frontend/src/router/index.js`
 - `frontend/src/router/route-meta.js`
 - `frontend/src/layout/index.vue`
+- `frontend/src/layout/components/PlatformSidebar.vue`
 - `frontend/src/views/Home.vue`
+- `backend/settings.py`
+- `backend/middleware.py`
 - `apps/users/*`
 - `backend/urls.py`
 
@@ -97,8 +102,10 @@
 - refresh token 无效后，401 无法回收为重新登录
 - layout 菜单和 meta 不一致，导致页面能开但标题或模块归属错误
 - 首页卡片跳转目标变更后失效
+- 顶部大模块切换后立即点击侧边栏子模块，页面停在大模块默认页或触发主文档刷新
 - 配置中心页面误挂到业务模块
 - 个人资料入口继续散落或被误删
+- 生产环境配置缺失时仍能启动，或生产环境误开 `DISABLE_CSRF_FOR_API`
 
 ## 5. 执行顺序建议
 
@@ -254,6 +261,12 @@
 - `/configuration/scheduled-task`
 - `/api-testing/ai-service-config`
 - token 失效回登录流程
+- 顶部大模块快速切换后立即点击侧边栏子模块：
+  - `配置中心 -> Dify 配置`，最终停在 `/configuration/dify`
+  - `App 自动化 -> 项目管理`，最终停在 `/app-automation/projects`
+  - `Web 自动化 -> 测试用例`，最终停在 `/ui-automation/test-cases`
+  - `接口自动化 -> 接口管理`，最终停在 `/api-testing/interfaces`
+  - 验证过程中不应出现 `beforeunload`、`pagehide` 或新的主文档请求
 
 ## 8. 后续扩展建议
 

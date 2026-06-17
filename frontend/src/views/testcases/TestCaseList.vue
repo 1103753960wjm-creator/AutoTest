@@ -164,7 +164,7 @@ import { Plus, Search, Download, Delete, ArrowLeft } from '@element-plus/icons-v
 import api from '@/utils/api'
 import dayjs from 'dayjs'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
-import * as XLSX from 'xlsx'
+import { exportRowsToExcel } from '@/utils/excelExport'
 import { buildDeeplinkLocation, resolveReturnTarget } from '@/router/deeplink'
 import { ListShell } from '@/components/page-shells'
 import { UnifiedListTable } from '@/components/platform-shared'
@@ -507,9 +507,6 @@ const exportToExcel = async () => {
       return
     }
 
-    // 创建工作簿
-    const workbook = XLSX.utils.book_new()
-
     // 准备Excel数据
     const worksheetData = [
       [t('testcase.excelNumber'), t('testcase.excelTitle'), t('testcase.excelProject'), t('testcase.excelVersions'), t('testcase.excelPreconditions'), t('testcase.excelSteps'), t('testcase.excelExpectedResult'), t('testcase.excelPriority'), t('testcase.excelTestType'), t('testcase.excelAuthor'), t('testcase.excelCreatedAt')]
@@ -535,55 +532,38 @@ const exportToExcel = async () => {
       ])
     })
     
-    // 创建工作表
-    const worksheet = XLSX.utils.aoa_to_sheet(worksheetData)
-    
     // 设置列宽
-    const colWidths = [
-      { wch: 15 }, // Test case number
-      { wch: 30 }, // Case title
-      { wch: 20 }, // Related project
-      { wch: 25 }, // Related versions
-      { wch: 30 }, // Preconditions
-      { wch: 40 }, // Steps
-      { wch: 30 }, // Expected result
-      { wch: 10 }, // Priority
-      { wch: 15 }, // Test type
-      { wch: 15 }, // Author
-      { wch: 20 }  // Created at
+    const columns = [
+      { width: 15 }, // Test case number
+      { width: 30 }, // Case title
+      { width: 20 }, // Related project
+      { width: 25 }, // Related versions
+      { width: 30 }, // Preconditions
+      { width: 40 }, // Steps
+      { width: 30 }, // Expected result
+      { width: 10 }, // Priority
+      { width: 15 }, // Test type
+      { width: 15 }, // Author
+      { width: 20 }  // Created at
     ]
-    worksheet['!cols'] = colWidths
-    
-    // 设置表头样式
-    for (let col = 0; col < worksheetData[0].length; col++) {
-      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col })
-      if (!worksheet[cellAddress]) continue
-      worksheet[cellAddress].s = {
-        font: { bold: true },
-        alignment: { horizontal: 'center', vertical: 'center', wrapText: true }
-      }
-    }
-    
-    // 设置其他行的样式
-    for (let row = 1; row < worksheetData.length; row++) {
-      for (let col = 0; col < worksheetData[row].length; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
-        if (worksheet[cellAddress]) {
-          worksheet[cellAddress].s = {
-            alignment: { vertical: 'top', wrapText: true }
-          }
-        }
-      }
-    }
-
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(workbook, worksheet, t('testcase.excelSheetName'))
 
     // Generate filename
     const fileName = t('testcase.excelFileName', { date: new Date().toISOString().slice(0, 10) })
 
     // Export file
-    XLSX.writeFile(workbook, fileName)
+    await exportRowsToExcel({
+      rows: worksheetData,
+      columns,
+      sheetName: t('testcase.excelSheetName'),
+      fileName,
+      headerStyle: {
+        font: { bold: true },
+        alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+      },
+      bodyStyle: {
+        alignment: { vertical: 'top', wrapText: true },
+      },
+    })
 
     ElMessage.success(t('testcase.exportSuccess'))
   } catch (error) {

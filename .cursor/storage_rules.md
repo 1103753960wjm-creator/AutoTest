@@ -27,6 +27,7 @@
 - 后端配置真源是 `backend/settings.py`、`decouple.config` 与已有集中配置入口
 - 前端配置真源是 Vite 环境变量与现有配置文件
 - AI 相关配置真源优先是现有数据库配置与统一 AI 接入入口，不新增业务模块内散落配置
+- 生产环境安全配置必须显式提供，`ALLOWED_HOSTS`、`CORS_ALLOWED_ORIGINS`、`SECRET_KEY` 不得依赖开发默认值
 
 ## 3. 前端访问链路
 
@@ -38,6 +39,7 @@
 
 - 页面和组件不得直接发送裸请求
 - 鉴权头、token 刷新、401 处理统一沿用 `frontend/src/utils/api.js`
+- 登录态失效后的路由跳转统一沿用 `frontend/src/utils/authNavigation.js`
 - 仅将运行时必需信息保存到本地存储，如 token、用户基础信息和少量界面状态
 - 真实业务数据不得长期依赖浏览器缓存代替后端真源
 
@@ -69,6 +71,7 @@
 ## 7. 配置访问规则
 
 - 后端新增配置时，不在业务代码中继续扩散 `os.getenv`、地址常量和硬编码密钥
+- `DEBUG`、`DISABLE_CSRF_FOR_API` 等关键布尔配置必须严格解析；生产环境禁止 `ALLOWED_HOSTS=*` 和 `DISABLE_CSRF_FOR_API=True`
 - 前端环境配置统一通过 Vite 环境变量和现有配置入口管理，不在页面内散写环境判断
 - AI 模型配置、提示词配置和行为配置优先走现有数据库配置或统一配置入口，不新增一套平行配置通路
 
@@ -76,6 +79,7 @@
 
 - 用户 token、刷新 token 和过期时间统一沿用 `frontend/src/stores/user.js` 与 `frontend/src/utils/api.js` 管理
 - 登录、刷新、退出相关变更时，必须同步检查本地存储、Pinia 状态、请求拦截器和路由跳转
+- 登录、刷新、退出相关跳转统一走 `authNavigation`，除兜底工具外禁止直接操作 `window.location`
 - 不允许同一业务数据同时依赖数据库与浏览器缓存，并靠猜测决定谁是真源
 
 ## 9. 明确禁止

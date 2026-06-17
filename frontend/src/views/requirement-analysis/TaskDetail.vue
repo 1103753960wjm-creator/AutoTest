@@ -263,7 +263,7 @@ import { computed, getCurrentInstance } from 'vue'
 import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, DocumentCopy, Download } from '@element-plus/icons-vue'
-import * as XLSX from 'xlsx'
+import { exportRowsToExcel } from '@/utils/excelExport'
 import { resolveReturnTarget } from '@/router/deeplink'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
 
@@ -764,7 +764,7 @@ export default {
     },
 
     // 导出到Excel
-    exportToExcel() {
+    async exportToExcel() {
       if (this.testCases.length === 0) {
         ElMessage.warning(this.$t('taskDetail.noCasesToExport'))
         return
@@ -773,9 +773,6 @@ export default {
       this.isExporting = true
 
       try {
-        // 创建工作簿
-        const workbook = XLSX.utils.book_new()
-
         // 准备数据
         const worksheetData = []
 
@@ -801,44 +798,34 @@ export default {
           ])
         })
 
-        // 创建工作表
-        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData)
-
         // 设置列宽
-        const colWidths = [
-          { wch: 15 }, // 测试用例编号
-          { wch: 30 }, // 测试场景
-          { wch: 25 }, // 前置条件
-          { wch: 50 }, // 操作步骤（增加宽度）
-          { wch: 40 }, // 预期结果（增加宽度）
-          { wch: 10 }  // 优先级
+        const columns = [
+          { width: 15 }, // 测试用例编号
+          { width: 30 }, // 测试场景
+          { width: 25 }, // 前置条件
+          { width: 50 }, // 操作步骤（增加宽度）
+          { width: 40 }, // 预期结果（增加宽度）
+          { width: 10 }  // 优先级
         ]
-        worksheet['!cols'] = colWidths
-
-        // 为所有单元格添加自动换行样式
-        const range = XLSX.utils.decode_range(worksheet['!ref'])
-        for (let row = range.s.r; row <= range.e.r; row++) {
-          for (let col = range.s.c; col <= range.e.c; col++) {
-            const cellAddress = XLSX.utils.encode_cell({ r: row, c: col })
-            if (!worksheet[cellAddress]) continue
-            worksheet[cellAddress].s = {
-              alignment: {
-                wrapText: true,
-                vertical: 'top'
-              }
-            }
-          }
-        }
-
-        // 将工作表添加到工作簿
-        XLSX.utils.book_append_sheet(workbook, worksheet, this.$t('taskDetail.excelSheetName'))
 
         // 生成文件名
         const dateStr = new Date().toISOString().slice(0, 10)
         const fileName = this.$t('taskDetail.excelFileName', { taskId: this.taskId, date: dateStr })
 
         // 导出文件
-        XLSX.writeFile(workbook, fileName)
+        await exportRowsToExcel({
+          rows: worksheetData,
+          columns,
+          sheetName: this.$t('taskDetail.excelSheetName'),
+          fileName,
+          headerStyle: {
+            font: { bold: true },
+            alignment: { horizontal: 'center', vertical: 'middle', wrapText: true },
+          },
+          bodyStyle: {
+            alignment: { vertical: 'top', wrapText: true },
+          },
+        })
 
         ElMessage.success(this.$t('taskDetail.exportSuccess'))
       } catch (error) {

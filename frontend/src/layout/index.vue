@@ -8,12 +8,12 @@
       :language-code="appStore.language"
       :language-label="currentLanguage"
       :user="userStore.user"
-      @go-home="router.push('/home')"
+      @go-home="handleHomeNavigate"
       @navigate-module="handleModuleNavigate"
       @open-placeholder="handlePlaceholderAction"
       @open-global-search="openSearchDialog"
       @toggle-productivity-panel="toggleProductivityPanel"
-      @open-assistant="router.push('/ai-generation/assistant')"
+      @open-assistant="handleAssistantNavigate"
       @language-change="handleLanguageChange"
       @user-command="handleUserCommand"
     />
@@ -63,6 +63,7 @@
 
     <div class="platform-layout__shell">
       <PlatformSidebar
+        :key="currentModuleKey"
         :collapsed="sidebarCollapsed"
         :module-title="currentModuleTitle"
         :items="sidebarItems"
@@ -89,12 +90,14 @@
         <main ref="mainContentRef" class="platform-layout__main">
           <div class="platform-route-wrapper" style="display: flex; flex-direction: column; min-height: 0; width: 100%;">
             <router-view v-slot="{ Component, route: currentRoute }">
-              <keep-alive :include="cachedViews">
-                <component
-                  :is="Component"
-                  :key="currentRoute.name || currentRoute.path"
-                />
-              </keep-alive>
+              <transition name="fade-transform" mode="out-in">
+                <keep-alive :include="cachedViews">
+                  <component
+                    :is="Component"
+                    :key="currentRoute.name || currentRoute.path"
+                  />
+                </keep-alive>
+              </transition>
             </router-view>
           </div>
         </main>
@@ -105,7 +108,7 @@
 
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { isNavigationFailure, NavigationFailureType, useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   Aim,
@@ -182,6 +185,9 @@ const { t } = useI18n()
 const sidebarCollapsed = ref(false)
 const activeProductivityPanel = ref('')
 const mainContentRef = ref(null)
+const pendingNavigationPath = ref('')
+const optimisticModuleKey = ref('')
+const queuedNavigationRequest = ref(null)
 const pageHeaderController = createPlatformPageHeaderController()
 
 providePlatformPageHeader(pageHeaderController)
@@ -225,6 +231,10 @@ const currentLanguage = computed(() => {
 
 const routeMeta = computed(() => resolveRouteMeta(route))
 const currentModuleKey = computed(() => {
+  if (optimisticModuleKey.value) {
+    return optimisticModuleKey.value
+  }
+
   return routeMeta.value.module || getCurrentModuleDefinition(route.path)?.key || 'workbench'
 })
 const currentModule = computed(() => getCurrentModuleDefinition(route.path, currentModuleKey.value))
@@ -302,16 +312,138 @@ const handleLanguageChange = (lang) => {
   ElMessage.success(lang === 'zh-cn' ? '语言已切换为中文' : 'Language switched to English')
 }
 
+const isNavigationNoise = (error) => {
+  return (
+    isNavigationFailure(error, NavigationFailureType.cancelled) ||
+    isNavigationFailure(error, NavigationFailureType.duplicated)
+  )
+}
+
+const getActualModuleKey = () => {
+  return routeMeta.value.module || getCurrentModuleDefinition(route.path)?.key || 'workbench'
+}
+
+const resolveNavigationRequest = (target, source = 'navigation') => {
+  if (!target) {
+    return null
+  }
+
+  const resolvedRoute = router.resolve(target)
+  const targetMeta = resolveRouteMeta(resolvedRoute)
+  const targetModuleKey = targetMeta.module || getCurrentModuleDefinition(resolvedRoute.path)?.key || ''
+
+  return {
+    target,
+    source,
+    fullPath: resolvedRoute.fullPath,
+    moduleKey: targetModuleKey
+  }
+}
+
+const syncOptimisticModule = () => {
+  if (queuedNavigationRequest.value?.moduleKey) {
+    optimisticModuleKey.value = queuedNavigationRequest.value.moduleKey
+    return
+  }
+
+  if (!pendingNavigationPath.value && optimisticModuleKey.value === getActualModuleKey()) {
+    optimisticModuleKey.value = ''
+  }
+}
+
+const runNavigationRequest = async (request) => {
+  pendingNavigationPath.value = request.fullPath
+
+  if (request.moduleKey) {
+    optimisticModuleKey.value = request.moduleKey
+  }
+
+  if (request.fullPath === route.fullPath) {
+    pendingNavigationPath.value = ''
+    syncOptimisticModule()
+    return
+  }
+
+  try {
+    const failure = await router.push(request.target)
+    if (failure && !isNavigationNoise(failure)) {
+      console.warn(`${request.source} navigation failed:`, failure)
+    }
+  } catch (error) {
+    if (!isNavigationNoise(error)) {
+      console.warn(`${request.source} navigation failed:`, error)
+    }
+  } finally {
+    if (pendingNavigationPath.value === request.fullPath) {
+      pendingNavigationPath.value = ''
+    }
+
+    syncOptimisticModule()
+  }
+}
+
+const flushQueuedNavigation = async () => {
+  while (queuedNavigationRequest.value) {
+    const nextRequest = queuedNavigationRequest.value
+    queuedNavigationRequest.value = null
+
+    if (nextRequest.fullPath !== route.fullPath) {
+      await runNavigationRequest(nextRequest)
+    } else {
+      syncOptimisticModule()
+    }
+  }
+}
+
+const navigateToLocation = async (target, source = 'navigation') => {
+  const request = resolveNavigationRequest(target, source)
+
+  if (!request) {
+    return
+  }
+
+  if (request.fullPath === route.fullPath && !pendingNavigationPath.value) {
+    return
+  }
+
+  if (request.fullPath === pendingNavigationPath.value) {
+    return
+  }
+
+  if (pendingNavigationPath.value) {
+    queuedNavigationRequest.value = request
+    if (request.moduleKey) {
+      optimisticModuleKey.value = request.moduleKey
+    }
+    return
+  }
+
+  await runNavigationRequest(request)
+  await flushQueuedNavigation()
+}
+
+const handleHomeNavigate = () => {
+  activeProductivityPanel.value = ''
+  searchStore.closeSearch()
+  navigateToLocation('/home', 'Home')
+}
+
+const handleAssistantNavigate = () => {
+  activeProductivityPanel.value = ''
+  searchStore.closeSearch()
+  navigateToLocation('/ai-generation/assistant', 'Assistant')
+}
+
 const handleModuleNavigate = (item) => {
-  if (item.route) {
-    router.push(item.route)
+  if (item?.route) {
+    activeProductivityPanel.value = ''
+    searchStore.closeSearch()
+    navigateToLocation(item.route, 'Module')
   }
 }
 
 const handleSidebarNavigate = (item) => {
-  if (item.path) {
-    router.push(item.path)
-  }
+  navigateToLocation(item?.path, 'Sidebar')
 }
 
 const handlePlaceholderAction = (type) => {
@@ -355,11 +487,11 @@ const handleProductivityNavigate = (item) => {
     })
 
     if (nextLocation) {
-      router.push(nextLocation)
+      navigateToLocation(nextLocation, 'Productivity')
       return
     }
 
-    router.push(item.fullPath)
+    navigateToLocation(item.fullPath, 'Productivity')
     return
   }
 
@@ -372,11 +504,11 @@ const handleProductivityNavigate = (item) => {
     })
 
     if (nextLocation) {
-      router.push(nextLocation)
+      navigateToLocation(nextLocation, 'Productivity')
       return
     }
 
-    router.push(item.route)
+    navigateToLocation(item.route, 'Productivity')
   }
 }
 
@@ -394,11 +526,11 @@ const handleSearchNavigate = (item) => {
     })
 
     if (nextLocation) {
-      router.push(nextLocation)
+      navigateToLocation(nextLocation, 'Search')
       return
     }
 
-    router.push(target)
+    navigateToLocation(target, 'Search')
   }
 }
 
@@ -421,7 +553,7 @@ const handleUserCommand = (command) => {
   }
 
   if (command === 'profile') {
-    router.push('/ai-generation/profile')
+    navigateToLocation('/ai-generation/profile', 'User')
   }
 }
 
@@ -509,6 +641,24 @@ watch(
 .platform-layout__main :deep(.app-automation-page),
 .platform-layout__main :deep(.data-factory-page) {
   min-height: 0;
+}
+
+/* 路由动画 */
+.fade-transform-enter-active,
+.fade-transform-leave-active {
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+
+.fade-transform-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.fade-transform-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
 }
 
 @media (max-width: 960px) {

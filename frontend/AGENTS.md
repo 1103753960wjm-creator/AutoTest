@@ -26,9 +26,19 @@
 - 涉及 route meta、导航守卫、布局壳、全局状态的改动视为高风险改动
 - 新增 route meta 字段时，必须同步检查 `frontend/src/types/router-meta.d.ts` 与消费端
 - 模块页面应优先复用统一页面壳、统一表格壳、统一状态壳，不重复造大体相同的页面骨架
+- 登录后的业务页面在 `frontend/src/App.vue` 根层必须共用稳定 `layout:authenticated`，禁止按业务模块、物理顶层路由、`fullPath` 或 `params` 销毁整套平台壳
+- `frontend/src/layout/index.vue` 内容层 `router-view` key 必须保持 `currentRoute.name || currentRoute.path`，并与 `<keep-alive :include="cachedViews">` 的路由名称维度一致
+- 顶部模块、侧边栏、全局搜索、最近访问、收藏和用户资料入口必须统一走 Layout 导航调度器，不能分散直接 `router.push`
 - 页面必须遵守“前端样式 UI 一致化”规则：任何模块新增或改造搜索筛选组件时，必须与 `ProjectManagement.vue` 的搜索框、查询/重置按钮在排版、位置、间距（如 `el-row :gutter=16`，底部 margin 等）上保持绝对一致，不得随意引入 ad-hoc 的自定义摆放样式。
 
-## 6. 最低验证要求
+## 6. 认证与导出
+
+- 认证失效、退出登录、refresh token 失败回登录必须走 `frontend/src/utils/authNavigation.js`
+- 禁止在 store、api 拦截器或页面中散写 `window.location.href`、`window.location.assign`、`location.reload` 作为登录跳转或导航兜底
+- Excel 导出统一走 `frontend/src/utils/excelExport.js`，禁止新增 `xlsx` 依赖或在页面模板中直接引入 `XLSX`
+
+## 7. 最低验证要求
 
 - 至少完成构建级、类型级或页面级验证中的一种
 - 影响列表、详情、编辑、结果页主链路时，至少核对主流程与一个异常流程
+- 影响 `App.vue`、`layout/index.vue`、侧边栏、认证跳转或路由 key 时，必须补跑顶部大模块 -> 侧边栏子模块快速切换，确认最终停在最后点击目标且无整页刷新事件

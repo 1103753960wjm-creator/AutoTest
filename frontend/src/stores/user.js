@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import api from '@/utils/api'
+import { redirectToLogin } from '@/utils/authNavigation'
 
 export const useUserStore = defineStore('user', () => {
   const user = ref(null)
@@ -137,7 +138,7 @@ export const useUserStore = defineStore('user', () => {
       // 重置标记
       isLoggingOut = false
 
-      window.location.href = '/login'
+      await redirectToLogin()
     }
   }
 

@@ -1,6 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
+import { redirectToLogin } from '@/utils/authNavigation'
 
 const api = axios.create({
   baseURL: '/api',
@@ -111,7 +112,7 @@ api.interceptors.response.use(
         localStorage.removeItem('refresh_token')
         localStorage.removeItem('token_expires_at')
         localStorage.removeItem('user')
-        window.location.href = '/login'
+        await redirectToLogin()
         return Promise.reject(error)
       }
 

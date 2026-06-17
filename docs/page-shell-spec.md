@@ -103,7 +103,9 @@
 
 - 先迁结构最标准的后台列表页
 - 表格列定义、分页逻辑、对话框逻辑不动
-- 筛选栏和内容区按 slot 平移
+- 筛选栏统一进入 `#filters` 插槽，禁止落入默认内容区或再包一层卡片
+- `ListShell` 已为 `el-row`、`el-input`、`el-select`、`el-date-editor` 提供宽度兜底；页面侧仍应优先使用标准 `el-row :gutter="16"` / `el-col :span="8"` 口径
+- 内容区按默认 slot 平移，分页进入 `#pagination`，弹窗进入 `#dialogs`
 
 ### 4.3 WorkspaceShell
 

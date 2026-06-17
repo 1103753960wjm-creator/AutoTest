@@ -128,7 +128,7 @@ Custom prompts for AI test case generation are defined in:
 
 Backend: Django REST Framework, drf-spectacular, django-filter, celery, httpx, selenium, playwright, browser-use, langchain-openai
 
-Frontend: Vue 3, Element Plus, Pinia, Vue Router, Axios, ECharts, Monaco Editor, xlsx
+Frontend: Vue 3, Element Plus, Pinia, Vue Router, Axios, ECharts, Monaco Editor, write-excel-file
 
 ## Commit 规范
 - 默认不自动提交代码

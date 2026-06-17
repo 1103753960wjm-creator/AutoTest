@@ -1,6 +1,6 @@
 # TestHub 决策日志
 
-更新时间：2026-04-15
+更新时间：2026-06-16
 
 ## 1. 文件职责
 
@@ -75,3 +75,35 @@
 - 决策内容：彻底废弃在 `<router-view>` 插槽内通过 `v-if` 条件渲染来切换缓存与非缓存容器。按需缓存必须且只能使用基于路由白名单的 `<keep-alive :include="cachedViews">` 模式，确保渲染器与组件卸载流程不受上层容器频繁销毁的影响。
 - 影响范围：全局平台壳层 (`frontend/src/layout/index.vue`)，以及所有涉及动态渲染路由出口的子组件。
 - 不再采用的替代方案：在缓存插槽层动态组合 div 容器与 `<keep-alive>`。
+
+### 3.7 登录后业务页面共用稳定根层 Layout
+
+- 决策时间：2026-06-16
+- 背景：顶部大模块切换后立即点击侧边栏子模块，会出现页面停在大模块默认页、需要刷新后才恢复的体验问题。现场监控确认不是每次都发生浏览器硬刷新，而是根层 `router-view` key 导致整套 `Layout` 被销毁重建，导航队列和侧边栏事件在重建窗口内被打断。
+- 决策内容：`frontend/src/App.vue` 对所有登录后业务页面统一使用 `layout:authenticated` 作为根层 key；模块切换只更新 `layout/index.vue` 内部模块态、侧边栏菜单态和内容路由，不销毁整个平台壳。登录页、注册页等壳外页面仍保持独立 key。
+- 影响范围：`frontend/src/App.vue`、`frontend/src/layout/index.vue`、顶部模块导航、侧边栏导航、全局搜索、最近访问、收藏、个人资料入口。
+- 不再采用的替代方案：按 `route.meta.module`、物理顶层路由、`fullPath` 或 `params` 给根层 Layout 加 key；用 `window.location.reload()` 或硬刷新兜底导航状态。
+
+### 3.8 认证失效跳转统一走 authNavigation
+
+- 决策时间：2026-06-16
+- 背景：`userStore` 和 `api` 拦截器各自直接写 `window.location.href = '/login'`，会绕开 Vue Router，制造整页刷新体感，并与路由注册、历史记录和导航监控口径不一致。
+- 决策内容：认证失效、退出登录、refresh token 失败后的登录页跳转统一通过 `frontend/src/utils/authNavigation.js`。已注册 router 时优先 `router.replace('/login')`，无法使用 router 时才降级到浏览器跳转。
+- 影响范围：`frontend/src/stores/user.js`、`frontend/src/utils/api.js`、`frontend/src/router/index.js`、登录态和 401 刷新链路。
+- 不再采用的替代方案：在 store、axios 拦截器或业务页面中散写 `window.location.href`、`window.location.assign`、`location.reload`。
+
+### 3.9 生产配置必须显式安全化
+
+- 决策时间：2026-06-16
+- 背景：旧配置允许生产态缺省 CORS 后默认放开全部来源，`DEBUG=release` 等非法布尔值会抛出底层异常，API CSRF 禁用没有生产态硬拦截。
+- 决策内容：后端关键布尔环境变量统一走项目级严格解析；生产态必须显式配置 `ALLOWED_HOSTS` 和 `CORS_ALLOWED_ORIGINS`；生产态禁止 `ALLOWED_HOSTS=*` 与 `DISABLE_CSRF_FOR_API=True`；生产态不能使用默认开发 `SECRET_KEY`。
+- 影响范围：`backend/settings.py`、`backend/middleware.py`、`.env.example`、部署文档和启动检查流程。
+- 不再采用的替代方案：生产态使用通配 hosts、缺省放开 CORS、全局禁用 API CSRF、依赖第三方布尔转换的底层错误提示。
+
+### 3.10 前端 Excel 导出统一改用 write-excel-file
+
+- 决策时间：2026-06-16
+- 背景：`xlsx` 依赖存在无修复版本的安全风险，且导出逻辑散落在多个页面。
+- 决策内容：移除 `xlsx`，新增 `frontend/src/utils/excelExport.js`，统一基于 `write-excel-file` 导出 Excel。测试用例列表、需求分析页、任务详情页已经迁移；后续文档模板和新页面示例不得继续引入 `xlsx`。
+- 影响范围：`frontend/package.json`、`frontend/src/utils/excelExport.js`、所有前端 Excel 导出页面和文档模板。
+- 不再采用的替代方案：继续在页面内直接 `import * as XLSX from 'xlsx'` 并手写 workbook / worksheet。

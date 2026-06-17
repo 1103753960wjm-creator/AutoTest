@@ -10,6 +10,9 @@ export default {
     selectReviewer: 'Select Reviewer',
     search: 'Search',
     reset: 'Reset',
+    helperText: 'View and manage review tasks for AI-generated test cases.',
+    totalTasks: 'Total Tasks',
+    viewAutoReviews: 'View AI Auto Reviews',
 
     // Table columns
     reviewTitle: 'Review Title',

@@ -1,6 +1,6 @@
 # TestHub 模块记忆
 
-更新时间：2026-05-31
+更新时间：2026-06-16
 
 ## 1. 文件职责
 
@@ -33,14 +33,21 @@
 - 超大 `page_size` 或一次性全量拉取
 - token、登录、退出、401 刷新链路
 - `router-view` 的 `:key` 与 `keep-alive` 的 `include` 匹配维度不一致
+- 根层 `App.vue` 的 `router-view` key 过细，导致跨顶部模块切换时销毁整套 Layout 并打断导航队列
 - `platform-route-wrapper` 的 overflow/height 内联样式影响子页面滚动
+- 业务页面或认证跳转中直接使用 `window.location.href`、`window.location.assign`、`window.location.reload`
+- 前端 Excel 导出散落页面并继续依赖 `xlsx`
 
 ### 2.4 开发注意事项
 
 - 首屏数据优先通过单一 `refresh/load` 收口
 - 轮询必须具备最小间隔、终态停止、失焦暂停或降频、同对象去重
 - 新增 route meta 字段时同步更新 `frontend/src/types/router-meta.d.ts`
-- `router-view` 的 `:key` 必须使用 `currentRoute.name || currentRoute.path`，禁止使用 `fullPath`
+- 根层 `App.vue` 登录后业务页面必须使用稳定 `layout:authenticated`，禁止按模块、物理顶层路由、`fullPath` 或 `params` 销毁平台壳
+- 内容层 `layout/index.vue` 的 `router-view` 组件 key 必须使用 `currentRoute.name || currentRoute.path`，禁止使用 `fullPath`
+- 顶部模块、侧边栏、搜索、最近访问、收藏和用户资料入口必须统一走 `layout/index.vue` 的导航调度器，不能绕过它直接 `router.push`
+- 认证失效、退出登录和 refresh 失败回登录统一走 `frontend/src/utils/authNavigation.js`
+- Excel 导出统一走 `frontend/src/utils/excelExport.js`，不得在新页面或文档模板中继续引入 `xlsx`
 - 在 `ListShell` 的 `#filters` 插槽中，所有 `el-select` 和 `el-input` 必须设置 `width: 100%`，`el-col` span 参考评审列表（每列 span 8）
 
 ## 3. backend
@@ -62,10 +69,14 @@
 - Channels / WebSocket
 - 执行器链路、Allure 报告、通知链路
 - AI 统一接入入口
+- 生产配置缺失或非法时仍能启动，导致 CORS、hosts、CSRF 等安全兜底不可控
 
 ### 3.4 开发注意事项
 
 - 新增配置统一收敛到 `backend/settings.py`、`decouple.config` 或既有集中配置入口
+- `DEBUG`、`DISABLE_CSRF_FOR_API` 等关键布尔配置必须走项目级严格解析，非法值直接 `ImproperlyConfigured`
+- 生产环境必须显式配置 `ALLOWED_HOSTS`、`CORS_ALLOWED_ORIGINS` 和安全 `SECRET_KEY`，禁止 `ALLOWED_HOSTS=*`
+- 生产环境禁止开启 `DISABLE_CSRF_FOR_API=True`
 - 避免新增重复访问日志、重复异常日志与无上下文日志
 - 改共享字段、状态字段、来源标签时必须同步检查前端消费端与文档
 

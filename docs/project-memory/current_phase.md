@@ -1,6 +1,6 @@
 # TestHub 项目开发记忆
 
-更新时间：2026-05-26
+更新时间：2026-06-16
 
 ## 1. 文件职责
 
@@ -211,6 +211,7 @@
 
 阶段 1 已完成统一平台壳的基础落地。
 近期（2026-05-30）完成底层组件卸载崩溃隐患的彻底消除。
+2026-06-16 完成顶部大模块与侧边栏连续切换卡顿修复，冻结登录后根层 Layout 复用策略。
 
 相关文件：
 
@@ -228,6 +229,10 @@
 - 顶部全局搜索、最近访问、收藏、消息通知、项目上下文当前仍为占位入口
 - 首页与 AI 助手已纳入统一平台壳，不再作为壳外孤立页面
 - **架构级路由缓存策略**：平台壳层在 `<router-view>` 中统一使用基于路由名称白名单的 `<keep-alive :include="cachedViews">` 进行按需缓存。为避开 Vue 3 的组件上下文丢失崩溃（Bug #6222），**绝对禁止**在缓存插槽层使用 `v-if` 条件渲染容器节点。
+- **根层 Layout 复用策略**：`frontend/src/App.vue` 中登录后的业务页面统一使用 `layout:authenticated` 作为根层 key，禁止按业务模块、物理顶层路由、`fullPath` 或 `params` 销毁整套平台壳；登录页、注册页等壳外页面仍可使用独立 key。
+- **内容层 key 策略**：`frontend/src/layout/index.vue` 内容路由组件继续使用 `currentRoute.name || currentRoute.path`，与 `<keep-alive :include="cachedViews">` 的路由名称维度保持一致，禁止使用 `fullPath`。
+- **导航调度策略**：顶部模块、侧边栏、全局搜索、最近访问、收藏、个人资料等入口必须统一走 Layout 内部导航调度器；快速连续点击时只保留最新目标，重复目标和重复路径应直接忽略，不得用整页刷新兜底。
+- **硬刷新红线**：业务页面、平台壳和路由导航中不得调用 `window.location.reload()` 作为状态刷新手段；需要重取配置或数据时必须调用页面内部 `refresh/load/check...` 入口。
 
 ### 3.10 第一批共享组件边界
 
@@ -485,6 +490,37 @@
 - `.cursor/project_rules.md` / `frontend/AGENTS.md` (规则写入)
 - `frontend/src/views/ui-automation/ai/AIExecutionRecords.vue`
 
+### 3.24 2026-06-16 P0 安全、依赖与导航稳定性收口
+
+2026-06-16 已完成一轮 P0 安全与前端体验收口，以下结论后续开发必须继承。
+
+#### 当前冻结结论：
+
+- 后端 `DEBUG`、`DISABLE_CSRF_FOR_API` 统一使用项目级严格布尔解析；非法值必须明确报错，不允许第三方转换抛出难读底层异常。
+- 生产环境必须显式配置 `ALLOWED_HOSTS` 与 `CORS_ALLOWED_ORIGINS`，禁止 `ALLOWED_HOSTS=*`，禁止生产环境开启 `DISABLE_CSRF_FOR_API=True`。
+- 前端 Excel 导出依赖从 `xlsx` 替换为 `write-excel-file`，并统一通过 `frontend/src/utils/excelExport.js` 导出；后续文档和代码示例不得继续引入 `xlsx`。
+- 登录失效、退出登录和 401 刷新失败后的登录页跳转统一走 `frontend/src/utils/authNavigation.js`，优先复用 router，不在业务代码和拦截器中直接写 `window.location.href`。
+- `ListShell #filters` 是列表筛选区正式插槽；筛选控件必须撑满所在列，`ListShell` 已兜底 `el-row`、`el-input`、`el-select`、`el-date-editor` 宽度。
+- 评审列表缺失翻译已补齐，进入评审列表不应再输出 `reviewList.*` i18n missing warning。
+
+#### 相关文件：
+
+- `backend/settings.py`
+- `backend/middleware.py`
+- `.env.example`
+- `frontend/src/App.vue`
+- `frontend/src/layout/index.vue`
+- `frontend/src/layout/components/PlatformSidebar.vue`
+- `frontend/src/layout/usePlatformPageHeader.js`
+- `frontend/src/utils/authNavigation.js`
+- `frontend/src/utils/excelExport.js`
+- `frontend/src/components/page-shells/ListShell.vue`
+- `frontend/src/views/requirement-analysis/RequirementAnalysisView.vue`
+- `frontend/src/views/requirement-analysis/TaskDetail.vue`
+- `frontend/src/views/testcases/TestCaseList.vue`
+- `frontend/src/locales/lang/zh-cn/review.js`
+- `frontend/src/locales/lang/en/review.js`
+
 ## 4. 当前代码层已落地、但仍需继续推进的点
 
 以下内容已经有“基座”或“真源”，但尚未全站完成：
@@ -511,7 +547,7 @@
 当前环境有以下验证限制：
 
 - 当前前端没有完整的项目级 ESLint 配置可直接用于校验
-- 2026-03-21 已实测 `frontend` 执行 `cmd /c npm run build` 可以通过；若后续再次失败，需先区分环境波动还是代码问题
+- 2026-06-16 已实测 `frontend` 执行 `cmd /c npm run build` 可以通过；若后续再次失败，需先区分环境波动还是代码问题
 - 2026-03-21 已实测后端受影响文件执行 `py_compile` 可以通过
 - 当前 Python 环境不保证已安装 Django；`python manage.py check` 可能因缺少 Django 依赖而失败，这属于环境问题，不等于本轮代码语法失败
 - 当前目录未必总是一个完全干净的 git 工作树，不能默认依赖“没有脏改动”
@@ -521,6 +557,7 @@
 - 做前端改动时，优先做文件级核对和构建级核对
 - 做后端改动时，至少做导入级或编译级校验
 - 若验证失败，要先区分是环境问题还是代码问题
+- 涉及顶部模块、侧边栏、根层 `App.vue`、`layout/index.vue`、认证跳转或 `router-view` key 时，除构建外必须补跑页面级快速切换验证：顶部大模块 -> 侧边栏子模块，确认最终停在最后点击目标，且没有 `beforeunload`、`pagehide` 或主文档请求。
 
 ## 7. 当前阶段推进原则
 

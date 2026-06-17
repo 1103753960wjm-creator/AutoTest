@@ -31,11 +31,19 @@ const normalizeHeaderConfig = (config = {}) => {
     ...(config || {})
   }
 
+  Object.keys(nextConfig).forEach((key) => {
+    nextConfig[key] = unref(nextConfig[key])
+  })
+
   if (nextConfig.resolvedIcon) {
     nextConfig.resolvedIcon = markRaw(nextConfig.resolvedIcon)
   }
 
-  nextConfig.actions = (nextConfig.actions || []).map((action) => ({
+  nextConfig.statusTags = Array.isArray(nextConfig.statusTags) ? nextConfig.statusTags : []
+  nextConfig.metaItems = Array.isArray(nextConfig.metaItems) ? nextConfig.metaItems : []
+  nextConfig.actions = Array.isArray(nextConfig.actions) ? nextConfig.actions : []
+
+  nextConfig.actions = nextConfig.actions.map((action) => ({
     ...action,
     icon: action?.icon ? markRaw(action.icon) : action?.icon || null
   }))

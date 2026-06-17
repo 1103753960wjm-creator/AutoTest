@@ -24,6 +24,7 @@
 - 页面级逻辑留在页面内，共享逻辑再考虑提取到 `stores`、`components` 或 `utils`
 - 与后端交互统一通过 `frontend/src/api/*`
 - 长列表页、长表单页和结果页必须显式检查滚动容器、内容截断和主内容区展示，不依赖浏览器默认行为碰运气
+- 前端 Excel 导出统一通过 `frontend/src/utils/excelExport.js`，禁止新增或恢复 `xlsx` 依赖
 
 ## 4. 命名与结构
 
@@ -46,6 +47,7 @@
 - 编辑页：负责输入、校验、提交和必要的上下文回填
 - 结果批次页：负责结果对象、处理状态和批量动作，不伪装为任务对象主页面
 - 前端样式 UI 一致化：所有包含搜索/筛选区、操作按钮和数据表格的页面，其搜索/筛选组件、操作按钮的排版、对齐方式、位置及样式必须与平台已有的标准页面（如 ProjectManagement.vue）保持完全一致。统一采用标准的网格系统对齐（如 el-row :gutter=16/18），放置在列表表格上方、页面主壳（或 ListShell）中，保持一致的间距与布局顺序，不得随意设计新布局。具体组件级与代码级开发范本可参考规范文档 [unified-table-template-spec.md](file:///e:/testhub_platform-main/testhub_platform-main/docs/unified-table-template-spec.md)。
+- 列表筛选区统一进入 `ListShell #filters` 插槽，筛选控件必须撑满所在列宽，禁止落入默认内容区或再包一层卡片。
 
 ## 7. 编码与中文规则
 
@@ -76,3 +78,5 @@
 - 为了统一风格把老代码一次性重构成完全不同的体系
 - 在前端复制后端业务规则，在后端复制前端展示规则
 - 未经验证就调整登录、token、动态路由、执行器、异步任务、报告或 AI 调用链
+- 继续引入 `xlsx` 或在文档模板中保留 `XLSX` 示例
+- 在页面、store、api 拦截器中直接使用 `window.location.reload()` 或浏览器跳转兜底平台导航

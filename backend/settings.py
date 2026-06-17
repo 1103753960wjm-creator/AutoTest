@@ -2,20 +2,61 @@
 
 from pathlib import Path
 from decouple import config
+from django.core.exceptions import ImproperlyConfigured
 import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def env_bool(name, default=False):
+    raw_value = config(name, default=None)
+    if raw_value is None:
+        return default
+
+    normalized = str(raw_value).strip().lower()
+    true_values = {'1', 'true', 'yes', 'y', 'on'}
+    false_values = {'0', 'false', 'no', 'n', 'off'}
+
+    if normalized in true_values:
+        return True
+    if normalized in false_values:
+        return False
+
+    raise ImproperlyConfigured(
+        f"{name} 配置值非法：{raw_value!r}。请使用 true/false、1/0、yes/no 或 on/off。"
+    )
+
+
+def env_list(name, default='', allow_wildcard=True, required_in_production=False):
+    raw_value = config(name, default=default)
+    values = [item.strip() for item in str(raw_value).split(',') if item.strip()]
+
+    if required_in_production and not DEBUG and not values:
+        raise ImproperlyConfigured(f"生产环境必须显式配置 {name}。")
+
+    if not allow_wildcard and '*' in values:
+        raise ImproperlyConfigured(f"生产环境 {name} 不允许使用通配符 '*'。")
+
+    return values
+
+
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-your-secret-key-here')
 
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = env_bool('DEBUG', default=True)
+
+if not DEBUG and SECRET_KEY == 'django-insecure-your-secret-key-here':
+    raise ImproperlyConfigured("生产环境必须配置安全的 SECRET_KEY，不能使用默认开发密钥。")
 
 # 根据DEBUG模式设置ALLOWED_HOSTS，生产环境不应使用通配符
 if DEBUG:
     ALLOWED_HOSTS = ['*']
 else:
-    ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1',
-                           cast=lambda v: [s.strip() for s in v.split(',')])
+    ALLOWED_HOSTS = env_list(
+        'ALLOWED_HOSTS',
+        default='',
+        allow_wildcard=False,
+        required_in_production=True,
+    )
 
 DJANGO_APPS = [
     'simpleui',
@@ -63,7 +104,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'backend.middleware.DisableCSRFMiddleware',  # 添加CSRF禁用中间件
+    'backend.middleware.DisableCSRFMiddleware',  # 开发环境可通过配置禁用API CSRF
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -203,6 +244,11 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_REFRESH_LIFETIME': timedelta(days=1),
 }
 
+DISABLE_CSRF_FOR_API = env_bool('DISABLE_CSRF_FOR_API', default=DEBUG)
+
+if not DEBUG and DISABLE_CSRF_FOR_API:
+    raise ImproperlyConfigured("生产环境不允许开启 DISABLE_CSRF_FOR_API。")
+
 # CSRF Settings - 根据DEBUG模式设置
 if DEBUG:
     CSRF_COOKIE_SECURE = False
@@ -215,8 +261,12 @@ else:
     CSRF_COOKIE_SAMESITE = 'Strict'
 
 # CORS Settings
-cors_origins_str = config('CORS_ALLOWED_ORIGINS', default='')
-parsed_cors_origins = [s.strip() for s in cors_origins_str.split(',') if s.strip()]
+parsed_cors_origins = env_list(
+    'CORS_ALLOWED_ORIGINS',
+    default='',
+    allow_wildcard=False,
+    required_in_production=not DEBUG,
+)
 
 if DEBUG:
     # 开发环境默认允许本地地址，同时合并环境变量里的配置
@@ -244,12 +294,7 @@ if DEBUG:
     ]
 else:
     # 生产环境 CORS 配置
-    if parsed_cors_origins:
-        # 如果配置了 CORS_ALLOWED_ORIGINS，使用配置的值
-        CORS_ALLOWED_ORIGINS = parsed_cors_origins
-    else:
-        # 如果未配置，允许所有来源（可根据需求调整）
-        CORS_ALLOW_ALL_ORIGINS = True
+    CORS_ALLOWED_ORIGINS = parsed_cors_origins
 
     CORS_ALLOW_CREDENTIALS = True
     CORS_ALLOW_HEADERS = [
@@ -268,10 +313,14 @@ else:
     CORS_EXPOSE_HEADERS = ['Content-Type', 'Cache-Control']
 
 # CSRF Settings
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+if DEBUG:
+    CSRF_TRUSTED_ORIGINS = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        *parsed_cors_origins,
+    ]
+else:
+    CSRF_TRUSTED_ORIGINS = parsed_cors_origins
 
 # Spectacular Settings
 SPECTACULAR_SETTINGS = {

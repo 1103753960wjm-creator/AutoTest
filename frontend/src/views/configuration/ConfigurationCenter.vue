@@ -1,9 +1,10 @@
 <template>
   <div class="configuration-center">
     <div class="content-area">
-      <router-view v-slot="{ Component }">
+      <router-view v-slot="{ Component, route: currentRoute }">
         <transition name="fade" mode="out-in">
-          <component :is="Component" />
+          <!-- 与 layout/index.vue 保持一致的 key 策略，按路由名称或路径区分实例 -->
+          <component :is="Component" :key="currentRoute.name || currentRoute.path" />
         </transition>
       </router-view>
     </div>
@@ -11,7 +12,7 @@
 </template>
 
 <script setup>
-// No script logic needed for now
+// 配置中心子页面每个都有唯一的 name，不需要额外的 key 计算逻辑
 </script>
 
 <style scoped>

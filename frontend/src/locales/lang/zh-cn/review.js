@@ -10,6 +10,9 @@ export default {
     selectReviewer: '请选择评审人',
     search: '搜索',
     reset: '重置',
+    helperText: '查看和管理 AI 生成的用例评审任务。',
+    totalTasks: '任务总数',
+    viewAutoReviews: '查看 AI 自动评审',
 
     // Table columns
     reviewTitle: '评审标题',
