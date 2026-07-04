@@ -137,7 +137,7 @@
       :close-on-click-modal="false"
       @close="resetForm"
     >
-      <el-form
+      <el-form @submit.prevent
         ref="formRef"
         :model="form"
         :rules="rules"
@@ -171,15 +171,8 @@
           </el-select>
         </el-form-item>
 
-        <el-form-item :label="$t('apiTesting.project.owner')" prop="owner">
-          <el-select v-model="form.owner" :placeholder="$t('apiTesting.project.selectOwner')" filterable>
-            <el-option
-              v-for="user in users"
-              :key="user.id"
-              :label="user.username"
-              :value="user.id"
-            />
-          </el-select>
+        <el-form-item :label="$t('apiTesting.project.owner')">
+          <el-input :model-value="editingProject?.owner?.username || '当前登录用户'" readonly />
         </el-form-item>
 
         <el-form-item :label="$t('apiTesting.project.teamMembers')" prop="member_ids">
@@ -278,8 +271,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { Plus, Search } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
-import api from '@/utils/api'
-import { getApiProjects, getUsers } from '@/api/api-testing'
+import { createApiProject, deleteApiProject, getApiProjects, getUsers, updateApiProject } from '@/api/api-testing'
 import { UnifiedListTable } from '@/components/platform-shared'
 import { ListShell } from '@/components/page-shells'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
@@ -312,7 +304,6 @@ const form = reactive({
   description: '',
   project_type: 'HTTP',
   status: 'NOT_STARTED',
-  owner: null,
   member_ids: [],
   start_date: '',
   end_date: ''
@@ -346,9 +337,6 @@ const rules = computed(() => ({
   status: [
     { required: true, message: t('apiTesting.project.selectStatus'), trigger: 'change' }
   ],
-  owner: [
-    { required: true, message: t('apiTesting.project.selectOwner'), trigger: 'change' }
-  ]
 }))
 
 const getStatusType = (status) => {
@@ -451,7 +439,6 @@ const editProject = (project) => {
   form.description = project.description
   form.project_type = project.project_type
   form.status = project.status
-  form.owner = project.owner?.id || null
   form.member_ids = (project.members || []).map((member) => member.id)
   form.start_date = project.start_date
   form.end_date = project.end_date
@@ -466,16 +453,16 @@ const viewProject = (project) => {
 const deleteProject = async (project) => {
   try {
     await ElMessageBox.confirm(
-      t('apiTesting.project.confirmDelete', { name: project.name }),
+      `确认删除项目「${project.name}」？删除后会影响该项目下的集合、接口测试用例、测试套件、局部环境和相关执行历史，此操作不可恢复。`,
       t('apiTesting.messages.confirm.deleteTitle'),
       {
-        confirmButtonText: t('apiTesting.common.confirm'),
+        confirmButtonText: '确认删除',
         cancelButtonText: t('apiTesting.common.cancel'),
         type: 'warning'
       }
     )
 
-    await api.delete(`/api-testing/projects/${project.id}/`)
+    await deleteApiProject(project.id)
     ElMessage.success(t('apiTesting.messages.success.delete'))
     await loadProjects()
   } catch (error) {
@@ -501,12 +488,13 @@ const submitForm = async () => {
     if (data.end_date) {
       data.end_date = dayjs(data.end_date).format('YYYY-MM-DD')
     }
+    delete data.owner
 
     if (editingProject.value) {
-      await api.put(`/api-testing/projects/${editingProject.value.id}/`, data)
+      await updateApiProject(editingProject.value.id, data)
       ElMessage.success(t('apiTesting.messages.success.projectUpdated'))
     } else {
-      await api.post('/api-testing/projects/', data)
+      await createApiProject(data)
       ElMessage.success(t('apiTesting.messages.success.projectCreated'))
       currentPage.value = 1
     }
@@ -528,7 +516,6 @@ const resetForm = () => {
     description: '',
     project_type: 'HTTP',
     status: 'NOT_STARTED',
-    owner: null,
     member_ids: [],
     start_date: '',
     end_date: ''

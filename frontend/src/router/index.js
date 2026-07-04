@@ -14,8 +14,9 @@ const Home = () => import('@/views/Home.vue')
 const DataFactory = () => import('@/views/data-factory/DataFactory.vue')
 const ApiDashboard = () => import('@/views/api-testing/Dashboard.vue')
 const ApiProjectManagement = () => import('@/views/api-testing/ProjectManagement.vue')
+const ApiTestCaseList = () => import('@/views/api-testing/ApiTestCaseList.vue')
 const ApiInterfaceManagement = () => import('@/views/api-testing/InterfaceManagement.vue')
-const ApiAutomationTesting = () => import('@/views/api-testing/AutomationTesting.vue')
+const ApiTestSuitesView = () => import('@/views/api-testing/AutomationTesting.vue')
 const ApiRequestHistory = () => import('@/views/api-testing/RequestHistory.vue')
 const ApiEnvironmentManagement = () => import('@/views/api-testing/EnvironmentManagement.vue')
 const ApiReportView = () => import('@/views/api-testing/ReportView.vue')
@@ -434,22 +435,63 @@ const routes = [
       },
       {
         path: 'interfaces',
-        name: 'ApiInterfaces',
-        component: ApiInterfaceManagement,
+        redirect: '/api-testing/test-cases',
         meta: createRouteMeta({
           title: '接口管理',
           module: 'api-automation',
           pageType: 'workspace',
           icon: 'link',
+          hidden: true,
+          activeMenu: '/api-testing/test-cases'
+        })
+      },
+      {
+        path: 'test-cases',
+        name: 'ApiTestCases',
+        component: ApiTestCaseList,
+        meta: createRouteMeta({
+          title: '接口测试用例',
+          description: '统一管理可执行的接口用例资产、断言配置和调试入口。',
+          module: 'api-automation',
+          pageType: 'list',
+          icon: 'document',
+          keepAlive: true
+        })
+      },
+      {
+        path: 'test-cases/workspace',
+        name: 'ApiTestCaseWorkspace',
+        component: ApiInterfaceManagement,
+        meta: createRouteMeta({
+          title: '接口测试用例调试',
+          description: '编辑接口请求定义、断言、脚本并执行调试。',
+          module: 'api-automation',
+          pageType: 'workspace',
+          icon: 'document',
+          hidden: true,
+          activeMenu: '/api-testing/test-cases',
           keepAlive: true
         })
       },
       {
         path: 'automation',
-        name: 'ApiAutomation',
-        component: ApiAutomationTesting,
+        redirect: '/api-testing/test-suites',
         meta: createRouteMeta({
-          title: '自动化测试',
+          title: '测试套件旧入口',
+          module: 'api-automation',
+          pageType: 'workspace',
+          icon: 'video-play',
+          hidden: true,
+          activeMenu: '/api-testing/test-suites'
+        })
+      },
+      {
+        path: 'test-suites',
+        name: 'ApiTestSuites',
+        component: ApiTestSuitesView,
+        meta: createRouteMeta({
+          title: '测试套件',
+          description: '编排接口测试用例、维护套件级配置并执行套件。',
           module: 'api-automation',
           pageType: 'workspace',
           icon: 'video-play'
@@ -1061,7 +1103,12 @@ router.afterEach((to, from) => {
   const platformSearchStore = usePlatformSearchStore()
   productivityStore.recordVisit(to)
   platformSearchStore.closeSearch()
-  document.title = getDocumentTitle(to)
+  const targetFullPath = to.fullPath
+  Promise.resolve().then(() => {
+    if (router.currentRoute.value.fullPath === targetFullPath) {
+      document.title = getDocumentTitle(router.currentRoute.value)
+    }
+  })
   console.log(`Navigated from ${from.path} to ${to.path}`)
 })
 

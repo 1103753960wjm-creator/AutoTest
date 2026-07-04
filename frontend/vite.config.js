@@ -12,6 +12,13 @@ const manualChunkGroups = {
   'vendor-editor': ['monaco-editor'],
 }
 
+const optimizeDepEntries = [
+  'index.html',
+  'src/**/*.{js,vue}',
+  '!src/**/__tests__/**',
+  '!src/**/*.spec.*'
+]
+
 const resolveManualChunk = (id) => {
   if (!id.includes('node_modules')) {
     return null
@@ -79,10 +86,16 @@ export default defineConfig({
     }
   },
   optimizeDeps: {
+    // 懒加载页面里有大量 Element Plus 按需样式，启动时提前扫描，避免首次点击页面才重优化并触发整页刷新。
+    entries: optimizeDepEntries,
+    include: [
+      'element-plus',
+      '@element-plus/icons-vue',
+      'element-plus/es/components/**/style/css'
+    ],
     esbuildOptions: {
       target: 'es2022'
     },
-    force: true,
     exclude: ['tree-sitter'],
   },
   build: {

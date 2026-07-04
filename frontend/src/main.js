@@ -1,19 +1,16 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { ElLoading } from 'element-plus'
+import 'element-plus/es/components/loading/style/css'
+import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
-import axios from 'axios'
 import { useUserStore } from '@/stores/user'
 import i18n from './locales'
 
 import App from './App.vue'
 import router from './router'
 import './assets/css/global.scss'
-
-// Axios 基础配置
-axios.defaults.xsrfCookieName = 'csrftoken';
-axios.defaults.xsrfHeaderName = 'X-CSRFToken';
-axios.defaults.withCredentials = true; // 允许跨域带 Cookie
 
 const app = createApp(App)
 

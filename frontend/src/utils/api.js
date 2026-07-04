@@ -6,6 +6,9 @@ import { redirectToLogin } from '@/utils/authNavigation'
 const api = axios.create({
   baseURL: '/api',
   timeout: 30000,
+  xsrfCookieName: 'csrftoken',
+  xsrfHeaderName: 'X-CSRFToken',
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },

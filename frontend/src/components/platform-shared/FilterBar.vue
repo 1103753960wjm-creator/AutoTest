@@ -26,13 +26,13 @@ const hasExtra = computed(() => Boolean(slots.extra))
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 20px;
-  padding: 18px 20px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 20px;
+  gap: var(--th-space-16);
+  margin-bottom: var(--th-space-20);
+  padding: var(--th-space-16) var(--th-space-20);
+  border: 1px solid var(--th-border-color);
+  border-radius: var(--th-radius-lg);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.94) 100%);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--th-shadow-popover);
 }
 
 .filter-bar-block__main {
@@ -45,7 +45,7 @@ const hasExtra = computed(() => Boolean(slots.extra))
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--th-space-12);
   margin-left: auto;
 }
 
@@ -55,8 +55,8 @@ const hasExtra = computed(() => Boolean(slots.extra))
 
 @media (max-width: 1024px) {
   .filter-bar-block {
-    margin-bottom: 12px;
-    padding: 16px;
+    margin-bottom: var(--th-space-12);
+    padding: var(--th-space-16);
   }
 
   .filter-bar-block__actions {
@@ -68,16 +68,16 @@ const hasExtra = computed(() => Boolean(slots.extra))
 
 @media (max-width: 768px) {
   .filter-bar-block {
-    gap: 12px;
-    margin-bottom: 8px;
-    padding: 14px;
+    gap: var(--th-space-12);
+    margin-bottom: var(--th-space-8);
+    padding: var(--th-space-12);
   }
 }
 
 @media (max-width: 480px) {
   .filter-bar-block {
-    margin-bottom: 6px;
-    padding: 12px;
+    margin-bottom: var(--th-space-8);
+    padding: var(--th-space-12);
   }
 }
 </style>

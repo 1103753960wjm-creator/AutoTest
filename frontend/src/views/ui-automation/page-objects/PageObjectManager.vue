@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-object-manager">
     <div class="page-header">
       <h1 class="page-title">{{ $t('uiAutomation.pageObject.title') }}</h1>
@@ -191,7 +191,7 @@
             <el-tab-pane :label="$t('uiAutomation.pageObject.propertiesConfig')" name="properties">
               <div class="properties-panel" v-if="selectedCanvasElement">
                 <h4>{{ $t('uiAutomation.pageObject.elementPropertiesConfig') }}</h4>
-                <el-form :model="selectedCanvasElement" label-width="100px">
+                <el-form @submit.prevent :model="selectedCanvasElement" label-width="100px">
                   <el-form-item :label="$t('uiAutomation.pageObject.methodName')">
                     <el-input v-model="selectedCanvasElement.method_name" @change="updateCanvasElement" />
                   </el-form-item>
@@ -234,7 +234,7 @@
 
     <!-- 新增页面对象对话框 -->
     <el-dialog v-model="showCreateDialog" :title="$t('uiAutomation.pageObject.createPageObject')" width="600px" :close-on-click-modal="false">
-      <el-form ref="createFormRef" :model="createForm" :rules="formRules" label-width="120px">
+      <el-form @submit.prevent ref="createFormRef" :model="createForm" :rules="formRules" label-width="120px">
         <el-form-item :label="$t('uiAutomation.pageObject.pageObjectName')" prop="name">
           <el-input v-model="createForm.name" :placeholder="$t('uiAutomation.pageObject.rules.nameRequired')" />
         </el-form-item>
@@ -263,7 +263,7 @@
 
     <!-- 添加元素对话框 -->
     <el-dialog v-model="showAddElementDialog" :title="$t('uiAutomation.pageObject.addElementToPageObject')" width="600px">
-      <el-form ref="addElementFormRef" :model="addElementForm" :rules="addElementRules" label-width="120px">
+      <el-form @submit.prevent ref="addElementFormRef" :model="addElementForm" :rules="addElementRules" label-width="120px">
         <el-form-item :label="$t('uiAutomation.pageObject.selectElement')" prop="element_id">
           <el-select v-model="addElementForm.element_id" :placeholder="$t('uiAutomation.pageObject.selectElement')" filterable>
             <el-option

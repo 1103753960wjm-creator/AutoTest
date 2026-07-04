@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="generated-testcase-list">
     <div class="result-object-strip">
       <div class="result-object-card">
@@ -52,7 +52,7 @@
         </div>
 
         <div class="filter-actions">
-          <button
+          <button type="button"
             v-if="selectedTasks.length > 0"
             class="batch-delete-btn"
             @click="batchDeleteTasks"
@@ -60,7 +60,7 @@
             <span v-if="isDeleting">{{ $t('generatedTestCases.deleting') }}</span>
             <span v-else>{{ $t('generatedTestCases.batchDelete', { count: selectedTasks.length }) }}</span>
           </button>
-          <button class="refresh-btn" @click="loadTasks" :disabled="isLoading">
+          <button type="button" class="refresh-btn" @click="loadTasks" :disabled="isLoading">
             <span v-if="isLoading">{{ $t('generatedTestCases.loading') }}</span>
             <span v-else>{{ $t('generatedTestCases.refresh') }}</span>
           </button>
@@ -389,7 +389,7 @@
 
         <!-- 分页按钮 -->
         <div class="pagination-buttons">
-          <button
+          <button type="button"
             class="page-btn"
             :disabled="pagination.currentPage <= 1"
             @click="goToPage(pagination.currentPage - 1)">
@@ -399,7 +399,7 @@
           <!-- 页码显示 -->
           <div class="page-numbers">
             <span v-for="page in getVisiblePages()" :key="page" class="page-number">
-              <button 
+              <button type="button"
                 v-if="page !== '...'"
                 class="page-btn"
                 :class="{ active: page === pagination.currentPage }"
@@ -410,7 +410,7 @@
             </span>
           </div>
           
-          <button
+          <button type="button"
             class="page-btn"
             :disabled="pagination.currentPage >= totalPages"
             @click="goToPage(pagination.currentPage + 1)">
@@ -428,7 +428,7 @@
             :max="totalPages"
             @keyup.enter="jumpToPage"
             :placeholder="$t('generatedTestCases.pageNumber')">
-          <button class="jump-btn" @click="jumpToPage">{{ $t('generatedTestCases.jump') }}</button>
+          <button type="button" class="jump-btn" @click="jumpToPage">{{ $t('generatedTestCases.jump') }}</button>
         </div>
       </div>
     </div>
@@ -438,7 +438,7 @@
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>{{ selectedTestCaseDetail.title }}</h3>
-          <button class="close-btn" @click="closeTestCaseDetail">×</button>
+          <button type="button" class="close-btn" @click="closeTestCaseDetail">×</button>
         </div>
         <div class="modal-body">
           <div class="detail-item">
@@ -498,10 +498,10 @@
       <div class="modal-content large-modal" @click.stop>
         <div class="modal-header">
           <h3>{{ $t('generatedTestCases.adoptModalTitle') }}</h3>
-          <button class="close-btn" @click="closeAdoptModal">×</button>
+          <button type="button" class="close-btn" @click="closeAdoptModal">×</button>
         </div>
         <div class="modal-body">
-          <form class="adopt-form">
+          <form @submit.prevent class="adopt-form">
             <div class="form-row">
               <div class="form-group">
                 <label>{{ $t('generatedTestCases.caseTitle') }}</label>

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="notification-configs-container">
     <!-- 页面说明 -->
     <div class="page-header">
@@ -22,7 +22,7 @@
         <el-tab-pane :label="$t('notification.botTypes.feishu')" name="feishu">
           <div class="tab-content">
             <div class="config-section">
-              <el-form
+              <el-form @submit.prevent
                   ref="feishuFormRef"
                   :model="webhookBots.feishu"
                   label-position="top"
@@ -75,7 +75,7 @@
         <el-tab-pane :label="$t('notification.botTypes.wechat')" name="wechat">
           <div class="tab-content">
             <div class="config-section">
-              <el-form
+              <el-form @submit.prevent
                   ref="wechatFormRef"
                   :model="webhookBots.wechat"
                   label-position="top"
@@ -128,7 +128,7 @@
         <el-tab-pane :label="$t('notification.botTypes.dingtalk')" name="dingtalk">
           <div class="tab-content">
             <div class="config-section">
-              <el-form
+              <el-form @submit.prevent
                   ref="dingtalkFormRef"
                   :model="webhookBots.dingtalk"
                   label-position="top"

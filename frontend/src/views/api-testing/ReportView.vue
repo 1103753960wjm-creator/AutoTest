@@ -50,7 +50,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import api from '@/utils/api'
+import { generateAllureReport, getTestExecutions } from '@/api/api-testing'
 import dayjs from 'dayjs'
 
 const { t } = useI18n()
@@ -60,7 +60,7 @@ const loading = ref(false)
 const loadReports = async () => {
   loading.value = true
   try {
-    const response = await api.get('/api-testing/test-executions/')
+    const response = await getTestExecutions()
     reports.value = response.data.results || response.data
   } catch (error) {
     ElMessage.error(t('apiTesting.messages.error.loadReports'))
@@ -76,7 +76,7 @@ const refreshReports = async () => {
 const generateAndOpenAllureReport = async (executionId) => {
   try {
     // 调用API生成Allure报告数据
-    const response = await api.post(`/api-testing/test-executions/${executionId}/generate-allure-report/`)
+    const response = await generateAllureReport(executionId)
     ElMessage.success(t('apiTesting.messages.success.reportGenerated'))
 
     // 通过当前窗口的origin构造完整的URL，确保通过Vite代理访问

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="device-management">
     <div class="device-header">
       <h3>设备管理</h3>
@@ -163,7 +163,7 @@
       width="500px"
       :close-on-click-modal="false"
     >
-      <el-form
+      <el-form @submit.prevent
         ref="remoteDeviceFormRef"
         :model="remoteDeviceForm"
         :rules="remoteDeviceRules"

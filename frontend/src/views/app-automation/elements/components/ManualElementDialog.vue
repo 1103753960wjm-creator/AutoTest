@@ -1,11 +1,11 @@
-<template>
+﻿<template>
   <el-dialog
     v-model="dialogVisible"
     :title="isEdit ? '编辑元素' : '新增元素'"
     width="700px"
     @close="handleClose"
   >
-    <el-form :model="formData" ref="formRef" label-width="120px" :rules="rules">
+    <el-form @submit.prevent :model="formData" ref="formRef" label-width="120px" :rules="rules">
       <el-form-item label="元素名称" prop="name" required>
         <el-input v-model="formData.name" placeholder="如：登录按钮" />
       </el-form-item>
@@ -275,7 +275,7 @@
     title="创建图片分类"
     width="400px"
   >
-    <el-form>
+    <el-form @submit.prevent>
       <el-form-item label="分类名称">
         <el-input 
           v-model="newCategoryName" 

@@ -160,7 +160,7 @@
       :close-on-click-modal="false"
       @close="resetTaskForm"
     >
-      <el-form :model="taskForm" label-width="120px">
+      <el-form @submit.prevent :model="taskForm" label-width="120px">
         <el-form-item :label="$t('apiTesting.scheduledTask.taskName')" required>
           <el-input v-model="taskForm.name" :placeholder="$t('apiTesting.scheduledTask.inputTaskName')" />
         </el-form-item>
@@ -329,7 +329,6 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { Plus, ArrowDown } from '@element-plus/icons-vue'
-import api from '@/utils/api'
 import { UnifiedListTable } from '@/components/platform-shared'
 import { ListShell } from '@/components/page-shells'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
@@ -339,6 +338,8 @@ import {
   updateScheduledTask,
   deleteScheduledTask,
   runScheduledTask,
+  pauseScheduledTask,
+  activateScheduledTask,
   getExecutionLogs,
   getTestSuites,
   getApiRequests,
@@ -719,7 +720,7 @@ const editTask = (task) => {
 // 鏆傚仠浠诲姟
 const pauseTask = async (task) => {
   try {
-    await api.post(`/api-testing/scheduled-tasks/${task.id}/pause/`)
+    await pauseScheduledTask(task.id)
     ElMessage.success(t('apiTesting.messages.success.taskPaused'))
     loadTasks()
   } catch (error) {
@@ -730,7 +731,7 @@ const pauseTask = async (task) => {
 
 const activateTask = async (task) => {
   try {
-    await api.post(`/api-testing/scheduled-tasks/${task.id}/activate/`)
+    await activateScheduledTask(task.id)
     ElMessage.success(t('apiTesting.messages.success.taskActivated'))
     loadTasks()
   } catch (error) {

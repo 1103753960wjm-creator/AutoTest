@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="notification-logs-container">
     <!-- 页面操作栏 -->
     <div class="page-actions">
@@ -198,7 +198,7 @@
         :modal="true"
         :destroy-on-close="false"
     >
-      <el-form
+      <el-form @submit.prevent
           v-if="selectedLog"
           label-position="top"
           class="notification-detail-form"

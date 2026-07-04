@@ -255,8 +255,8 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import axios from 'axios'
 import { useI18n } from 'vue-i18n'
+import { getHistory as getDataFactoryHistory, getTags as getDataFactoryTags } from '@/api/data-factory'
 
 const { t } = useI18n()
 
@@ -301,7 +301,7 @@ const categories = [
 
 const fetchAvailableTags = async () => {
   try {
-    const response = await axios.get('/api/data-factory/tags/')
+    const response = await getDataFactoryTags()
     availableTags.value = response.data.tags || []
   } catch (error) {
     console.error('获取标签列表失败:', error)
@@ -325,7 +325,7 @@ const fetchRecordsByTag = async () => {
       params.tool_category = filterCategory.value
     }
     
-    const response = await axios.get('/api/data-factory/', { params })
+    const response = await getDataFactoryHistory(params)
     records.value = response.data.results || []
     total.value = response.data.count || 0
   } catch (error) {
@@ -359,7 +359,7 @@ const fetchRecords = async () => {
       params.tags__contains = filterTag.value
     }
     
-    const response = await axios.get('/api/data-factory/', { params })
+    const response = await getDataFactoryHistory(params)
     records.value = response.data.results || []
     total.value = response.data.count || 0
   } catch (error) {

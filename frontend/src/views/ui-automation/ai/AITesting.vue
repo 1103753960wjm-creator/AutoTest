@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">{{ $t('uiAutomation.ai.title') }}</h1>
@@ -8,7 +8,7 @@
       <el-row :gutter="20">
         <el-col :span="12">
           <div class="section-title">{{ $t('uiAutomation.ai.taskInput') }}</div>
-          <el-form :model="taskForm" label-position="top">
+          <el-form @submit.prevent :model="taskForm" label-position="top">
             <el-form-item :label="$t('uiAutomation.ai.taskDescription')" required>
               <el-input
                 v-model="taskForm.description"
@@ -117,7 +117,7 @@
 
     <!-- 保存为用例对话框 -->
     <el-dialog v-model="showSaveDialog" :title="$t('uiAutomation.ai.saveAsCaseTitle')" width="500px" :close-on-click-modal="false">
-      <el-form :model="saveForm" :rules="saveRules" ref="saveFormRef" label-width="80px">
+      <el-form @submit.prevent :model="saveForm" :rules="saveRules" ref="saveFormRef" label-width="80px">
         <el-form-item :label="$t('uiAutomation.ai.caseName')" prop="name">
           <el-input v-model="saveForm.name" :placeholder="$t('uiAutomation.ai.caseNamePlaceholder')" />
         </el-form-item>

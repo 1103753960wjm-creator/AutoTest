@@ -7,7 +7,7 @@ export default {
     title: '接口测试',
     projects: '项目管理',
     interfaces: '接口管理',
-    automation: '自动化测试',
+    automation: '测试套件',
     history: '请求历史',
     environments: '环境管理',
     scheduledTasks: '定时任务',
@@ -66,7 +66,7 @@ export default {
       title: '快速操作',
       projectManagement: '项目管理',
       interfaceManagement: '接口管理',
-      automationTesting: '自动化测试',
+      automationTesting: '测试套件',
       requestHistory: '请求历史',
       environmentManagement: '环境管理',
       testReport: '测试报告'
@@ -77,8 +77,8 @@ export default {
         description: '支持HTTP/HTTPS协议，快速导入Swagger/Postman数据，实现接口统一管理。'
       },
       automationTesting: {
-        title: '自动化测试',
-        description: '可视化的测试流程编排，支持断言、提取变量、前置/后置脚本等高级功能。'
+        title: '测试套件',
+        description: '编排接口测试用例、维护套件级配置并执行套件。'
       },
       scheduledTask: {
         title: '定时任务',
@@ -287,9 +287,9 @@ export default {
     assertion: '断言'
   },
 
-  // 自动化测试
+  // 测试套件
   automation: {
-    title: '自动化测试',
+    title: '测试套件',
     createSuite: '新建测试套件',
     createTestSuite: '新建测试套件',
     editTestSuite: '编辑测试套件',

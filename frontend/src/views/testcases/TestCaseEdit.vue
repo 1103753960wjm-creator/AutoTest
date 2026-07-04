@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="edit-context-card" v-if="!loading">
       <div class="edit-context-card__item">
@@ -39,7 +39,7 @@
     </div>
 
     <div class="card-container" v-if="!loading">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+      <el-form @submit.prevent ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item :label="$t('testcase.caseTitle')" prop="title">
           <el-input v-model="form.title" :placeholder="$t('testcase.caseTitlePlaceholder')" />
         </el-form-item>

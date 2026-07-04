@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="ui-flow-case-list">
     <div class="page-header">
       <h3>APP测试用例</h3>
@@ -16,7 +16,7 @@
     </div>
 
     <el-card class="device-card">
-      <el-form :model="form" label-width="100px" size="small">
+      <el-form @submit.prevent :model="form" label-width="100px" size="small">
         <el-row :gutter="16">
           <el-col :span="5">
             <el-form-item label="所属项目">

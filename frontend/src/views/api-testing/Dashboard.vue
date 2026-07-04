@@ -32,7 +32,7 @@
           <div>
             <h3 class="dashboard-section__title">常用入口 / 快捷动作</h3>
             <p class="dashboard-section__description">
-              保留模块级高频入口，不把接口管理、请求历史和报告页重新拼成第二套模块导航。
+              保留模块级高频入口，不把接口测试用例、请求历史和报告页重新拼成第二套模块导航。
             </p>
           </div>
         </div>
@@ -123,6 +123,7 @@ import { useI18n } from 'vue-i18n'
 import {
   Collection,
   Delete,
+  Document,
   Edit,
   Folder,
   Link,
@@ -226,17 +227,17 @@ const quickActions = computed(() => ([
   },
   {
     key: 'interfaces',
-    title: '接口管理',
-    description: '维护接口清单和请求定义，继续日常资产维护。',
+    title: '接口测试用例',
+    description: '维护接口请求、断言和可执行定义，继续日常资产维护。',
     badge: '资产',
-    icon: Link,
+    icon: Document,
     accent: 'green',
     onClick: goToInterfaces
   },
   {
     key: 'automation',
-    title: '自动化测试',
-    description: '进入自动化执行工作区，继续回归与调试。',
+    title: '测试套件',
+    description: '进入套件编排与执行工作区，继续回归与调试。',
     badge: '执行',
     icon: VideoPlay,
     accent: 'cyan',
@@ -393,11 +394,11 @@ const goToProjects = () => {
 }
 
 const goToInterfaces = () => {
-  router.push('/api-testing/interfaces')
+  router.push('/api-testing/test-cases')
 }
 
 const goToAutomation = () => {
-  router.push('/api-testing/automation')
+  router.push('/api-testing/test-suites')
 }
 
 const goToHistory = () => {

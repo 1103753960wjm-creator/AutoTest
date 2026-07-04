@@ -67,7 +67,7 @@ const hasSecondary = computed(() => Boolean(slots.secondary))
 .dashboard-shell {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--th-space-20);
   min-height: 100%;
 }
 
@@ -75,12 +75,12 @@ const hasSecondary = computed(() => Boolean(slots.secondary))
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
-  padding: 24px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, #ffffff 0%, #f7f9fc 100%);
-  border: 1px solid #e8eef5;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  gap: var(--th-space-16);
+  padding: var(--th-space-24);
+  border-radius: var(--th-radius-lg);
+  background: linear-gradient(135deg, #ffffff 0%, var(--th-bg-color) 100%);
+  border: 1px solid var(--th-border-color);
+  box-shadow: var(--th-shadow-card);
 }
 
 .shell-heading {
@@ -88,32 +88,32 @@ const hasSecondary = computed(() => Boolean(slots.secondary))
 }
 
 .shell-eyebrow {
-  margin-bottom: 8px;
+  margin-bottom: var(--th-space-8);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #409eff;
+  color: var(--th-color-primary);
 }
 
 .shell-title {
   margin: 0;
   font-size: 28px;
   font-weight: 700;
-  color: #1f2d3d;
+  color: var(--th-text-primary);
 }
 
 .shell-description {
   margin: 10px 0 0;
   font-size: 14px;
   line-height: 1.7;
-  color: #606266;
+  color: var(--th-text-secondary);
 }
 
 .shell-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--th-space-12);
 }
 
 .shell-metrics,
@@ -126,7 +126,7 @@ const hasSecondary = computed(() => Boolean(slots.secondary))
 
 .shell-body {
   display: grid;
-  gap: 20px;
+  gap: var(--th-space-20);
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -142,7 +142,7 @@ const hasSecondary = computed(() => Boolean(slots.secondary))
 
 @media (max-width: 768px) {
   .shell-header {
-    padding: 20px;
+    padding: var(--th-space-20);
     flex-direction: column;
   }
 

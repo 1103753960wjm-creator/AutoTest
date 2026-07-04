@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="ai-model-config">
     <div class="config-source-strip">
       <div class="config-source-card">
@@ -55,14 +55,14 @@
                   </div>
                 </div>
                 <div class="config-actions">
-                  <button
+                  <button type="button"
                     class="test-btn"
                     @click="testConnection(config)"
                     :disabled="isTestingConnection">
                     {{ $t('configuration.aiModel.testConnection') }}
                   </button>
-                  <button class="edit-btn" @click="editConfig(config)">{{ $t('configuration.common.edit') }}</button>
-                  <button class="delete-btn" @click="deleteConfig(config.id)">{{ $t('configuration.common.delete') }}</button>
+                  <button type="button" class="edit-btn" @click="editConfig(config)">{{ $t('configuration.common.edit') }}</button>
+                  <button type="button" class="delete-btn" @click="deleteConfig(config.id)">{{ $t('configuration.common.delete') }}</button>
                 </div>
               </div>
 
@@ -267,7 +267,7 @@
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>{{ $t('configuration.aiModel.testResult') }}</h3>
-          <button class="close-btn" @click="closeTestResult">x</button>
+          <button type="button" class="close-btn" @click="closeTestResult">x</button>
         </div>
         <div class="modal-body">
           <div class="test-result" :class="{ success: testResult.success, error: !testResult.success }">

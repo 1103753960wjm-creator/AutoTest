@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <ListShell>
     <template #filters>
       <div class="filter-bar-content">
@@ -134,7 +134,7 @@
       width="600px"
       :close-on-click-modal="false"
     >
-      <el-form :model="versionForm" :rules="versionRules" :ref="setVersionFormRef" label-width="120px">
+      <el-form @submit.prevent :model="versionForm" :rules="versionRules" :ref="setVersionFormRef" label-width="120px">
         <el-form-item :label="$t('version.versionName')" prop="name">
           <el-input v-model="versionForm.name" :placeholder="$t('version.versionNamePlaceholder')" />
         </el-form-item>

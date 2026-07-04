@@ -116,7 +116,7 @@
             <h4>{{ $t('apiTesting.notification.emailConfig') }}</h4>
             <el-card>
               <div class="config-form">
-                <el-form :model="emailConfig" label-width="120px">
+                <el-form @submit.prevent :model="emailConfig" label-width="120px">
                   <el-form-item :label="$t('apiTesting.notification.senderEmail')" required>
                     <el-input
                       v-model="emailConfig.sender_email"
@@ -262,7 +262,7 @@
       width="400px"
       :close-on-click-modal="false"
     >
-      <el-form :model="newRecipient" label-width="80px">
+      <el-form @submit.prevent :model="newRecipient" label-width="80px">
         <el-form-item :label="$t('apiTesting.notification.recipientName')" required>
           <el-input v-model="newRecipient.name" :placeholder="$t('apiTesting.notification.inputName')" />
         </el-form-item>
@@ -282,7 +282,7 @@
       width="500px"
       :close-on-click-modal="false"
     >
-      <el-form :model="newWebhook" label-width="100px">
+      <el-form @submit.prevent :model="newWebhook" label-width="100px">
         <el-form-item :label="$t('apiTesting.common.name')" required>
           <el-input v-model="newWebhook.name" :placeholder="$t('apiTesting.notification.inputWebhookName')" />
         </el-form-item>

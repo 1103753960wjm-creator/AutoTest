@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">{{ $t('profile.title') }}</h1>
@@ -7,7 +7,7 @@
     <div class="card-container">
       <el-tabs v-model="activeTab">
         <el-tab-pane :label="$t('profile.basicInfo')" name="basic">
-          <el-form v-if="userStore.user" :model="userStore.user" label-width="100px">
+          <el-form @submit.prevent v-if="userStore.user" :model="userStore.user" label-width="100px">
             <el-form-item :label="$t('profile.username')">
               <el-input v-model="userStore.user.username" disabled />
             </el-form-item>
@@ -30,7 +30,7 @@
         </el-tab-pane>
 
         <el-tab-pane :label="$t('profile.changePassword')" name="password">
-          <el-form label-width="120px">
+          <el-form @submit.prevent label-width="120px">
             <el-form-item :label="$t('profile.currentPassword')">
               <el-input type="password" />
             </el-form-item>

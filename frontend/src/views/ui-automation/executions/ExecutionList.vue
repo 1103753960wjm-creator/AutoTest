@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <ListShell>
     <!-- 1. 搜索筛选区 -->
     <div class="filters">
@@ -246,7 +246,7 @@
 
     <!-- 重跑测试用例对话框 -->
     <el-dialog v-model="showRerunDialogVisible" :title="$t('uiAutomation.execution.rerunTitle')" width="500px">
-      <el-form :model="rerunFormData" label-width="100px">
+      <el-form @submit.prevent :model="rerunFormData" label-width="100px">
         <el-form-item :label="$t('uiAutomation.execution.testEngine')">
           <el-radio-group v-model="rerunFormData.engine">
             <el-radio label="playwright">Playwright</el-radio>

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="generation-config">
     <div class="config-source-strip">
       <div class="config-source-card">
@@ -28,7 +28,7 @@
       <div class="configs-section">
         <div class="section-header">
           <h2>{{ $t('generationConfig.configList') }}</h2>
-          <button class="add-config-btn" @click="openAddModal">
+          <button type="button" class="add-config-btn" @click="openAddModal">
             {{ $t('generationConfig.addConfig') }}
           </button>
         </div>
@@ -48,11 +48,11 @@
                 </div>
               </div>
               <div class="config-actions">
-                <button v-if="!config.is_active" class="enable-btn" @click="enableConfig(config.id)">
+                <button type="button" v-if="!config.is_active" class="enable-btn" @click="enableConfig(config.id)">
                   {{ $t('generationConfig.enable') }}
                 </button>
-                <button class="edit-btn" @click="editConfig(config)">{{ $t('generationConfig.edit') }}</button>
-                <button class="delete-btn" @click="deleteConfig(config.id)">{{ $t('generationConfig.delete') }}</button>
+                <button type="button" class="edit-btn" @click="editConfig(config)">{{ $t('generationConfig.edit') }}</button>
+                <button type="button" class="delete-btn" @click="deleteConfig(config.id)">{{ $t('generationConfig.delete') }}</button>
               </div>
             </div>
 
@@ -101,7 +101,7 @@
           <div class="empty-icon">⚙️</div>
           <h3>{{ $t('generationConfig.emptyTitle') }}</h3>
           <p>{{ $t('generationConfig.emptyDescription') }}</p>
-          <button class="add-first-config-btn" @click="openAddModal">
+          <button type="button" class="add-first-config-btn" @click="openAddModal">
             {{ $t('generationConfig.addFirstConfig') }}
           </button>
         </div>
@@ -113,7 +113,7 @@
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>{{ isEditing ? $t('generationConfig.editTitle') : $t('generationConfig.addTitle') }}{{ $t('generationConfig.formTitle') }}</h3>
-          <button class="close-btn" @click="closeModals">×</button>
+          <button type="button" class="close-btn" @click="closeModals">×</button>
         </div>
         <div class="modal-body">
           <form @submit.prevent="saveConfig">

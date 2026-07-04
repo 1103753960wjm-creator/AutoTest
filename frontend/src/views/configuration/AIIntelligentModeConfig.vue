@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="ai-mode-config">
     <div class="page-header">
       <h1>{{ $t('configuration.aiMode.title') }}</h1>
@@ -10,7 +10,7 @@
       <div class="configs-section">
         <div class="section-header">
           <h2>{{ $t('configuration.aiMode.configList') }}</h2>
-          <button class="add-config-btn" @click="openAddModal">
+          <button type="button" class="add-config-btn" @click="openAddModal">
             {{ $t('configuration.aiMode.addConfig') }}
           </button>
         </div>
@@ -38,11 +38,11 @@
                   :inactive-text="$t('configuration.common.disabled')"
                   :loading="config.toggling"
                 />
-                <button class="test-btn" @click="testConnection(config)" :disabled="config.testing">
+                <button type="button" class="test-btn" @click="testConnection(config)" :disabled="config.testing">
                   {{ $t('configuration.aiMode.testConnection') }}
                 </button>
-                <button class="edit-btn" @click="editConfig(config)">✏️</button>
-                <button class="delete-btn" @click="deleteConfig(config.id)">🗑️</button>
+                <button type="button" class="edit-btn" @click="editConfig(config)">✏️</button>
+                <button type="button" class="delete-btn" @click="deleteConfig(config.id)">🗑️</button>
               </div>
             </div>
 
@@ -63,7 +63,7 @@
           <div class="empty-icon"></div>
           <h3>{{ $t('configuration.aiMode.emptyTitle') }}</h3>
           <p>{{ $t('configuration.aiMode.emptyDescription') }}</p>
-          <button class="add-first-config-btn" @click="openAddModal">
+          <button type="button" class="add-first-config-btn" @click="openAddModal">
             {{ $t('configuration.aiMode.addFirstConfig') }}
           </button>
         </div>
@@ -175,7 +175,7 @@
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>{{ $t('configuration.aiMode.testResult') }}</h3>
-          <button class="close-btn" @click="closeTestResult">×</button>
+          <button type="button" class="close-btn" @click="closeTestResult">×</button>
         </div>
         <div class="modal-body">
           <div class="test-result" :class="{ success: testResult.success, error: !testResult.success }">

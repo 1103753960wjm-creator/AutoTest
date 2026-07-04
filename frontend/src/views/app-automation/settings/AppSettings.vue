@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-settings">
     <el-card>
       <template #header>
@@ -7,7 +7,7 @@
         </div>
       </template>
 
-      <el-form
+      <el-form @submit.prevent
         ref="formRef"
         :model="form"
         :rules="rules"

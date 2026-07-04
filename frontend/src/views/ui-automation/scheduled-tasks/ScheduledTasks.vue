@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <ListShell>
     <!-- 1. 搜索筛选区 -->
     <div class="filters">
@@ -160,7 +160,7 @@
       :close-on-click-modal="false"
       @close="resetTaskForm"
     >
-      <el-form :model="taskForm" label-width="120px">
+      <el-form @submit.prevent :model="taskForm" label-width="120px">
         <el-form-item :label="$t('uiAutomation.scheduledTask.taskName')" required>
           <el-input v-model="taskForm.name" :placeholder="$t('uiAutomation.scheduledTask.taskNamePlaceholder')" />
         </el-form-item>

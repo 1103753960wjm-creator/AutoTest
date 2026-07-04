@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="dify-config-container">
     <div class="page-header">
       <h1>{{ $t('configuration.dify.title') }}</h1>
@@ -15,7 +15,7 @@
           </div>
         </template>
 
-        <el-form :model="form" :rules="rules" ref="configForm" label-width="120px">
+        <el-form @submit.prevent :model="form" :rules="rules" ref="configForm" label-width="120px">
           <el-form-item :label="$t('configuration.dify.apiUrl')" prop="api_url">
             <el-input
               v-model="form.api_url"

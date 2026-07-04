@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">{{ $t('reviewDetail.title') }}</h1>
@@ -182,7 +182,7 @@
 
     <!-- 提交评审对话框 -->
     <el-dialog v-model="reviewDialogVisible" :title="$t('reviewDetail.submitReviewDialog')" :close-on-click-modal="false" :close-on-press-escape="false" :modal="true" :destroy-on-close="false" width="800px">
-      <el-form :model="reviewForm" label-width="100px">
+      <el-form @submit.prevent :model="reviewForm" label-width="100px">
         <el-form-item :label="$t('reviewDetail.reviewResult')" required>
           <el-radio-group v-model="reviewForm.status">
             <el-radio-button label="approved">{{ $t('reviewDetail.approved') }}</el-radio-button>
@@ -238,7 +238,7 @@
 
     <!-- 添加意见对话框 -->
     <el-dialog v-model="commentDialogVisible" :title="$t('reviewDetail.addCommentDialog')" :close-on-click-modal="false" width="600px">
-      <el-form :model="commentForm" label-width="100px">
+      <el-form @submit.prevent :model="commentForm" label-width="100px">
         <el-form-item :label="$t('reviewDetail.commentType')" required>
           <el-radio-group v-model="commentForm.comment_type">
             <el-radio-button label="general">{{ $t('reviewDetail.generalComment') }}</el-radio-button>

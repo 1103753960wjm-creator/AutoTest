@@ -69,7 +69,7 @@ const hasHeader = computed(() => {
 .list-shell {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--th-space-20);
   min-height: 100%;
 }
 
@@ -77,7 +77,7 @@ const hasHeader = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  gap: var(--th-space-16);
 }
 
 .shell-heading {
@@ -85,46 +85,46 @@ const hasHeader = computed(() => {
 }
 
 .shell-eyebrow {
-  margin-bottom: 8px;
+  margin-bottom: var(--th-space-8);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #409eff;
+  color: var(--th-color-primary);
 }
 
 .shell-title {
   margin: 0;
   font-size: 28px;
   font-weight: 700;
-  color: #1f2d3d;
+  color: var(--th-text-primary);
 }
 
 .shell-description {
   margin: 10px 0 0;
   font-size: 14px;
   line-height: 1.7;
-  color: #606266;
+  color: var(--th-text-secondary);
 }
 
 .shell-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--th-space-12);
 }
 
 .shell-toolbar-card,
 .shell-content-card {
-  border: 1px solid #e8eef5;
-  border-radius: 18px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  border: 1px solid var(--th-border-color);
+  border-radius: var(--th-radius-lg);
+  box-shadow: var(--th-shadow-card);
 }
 
 .shell-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: var(--th-space-12);
+  margin-bottom: var(--th-space-16);
 }
 
 .shell-toolbar:last-child {
@@ -134,7 +134,7 @@ const hasHeader = computed(() => {
 .shell-filters {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--th-space-12);
 }
 
 .shell-filters :deep(.el-row) {

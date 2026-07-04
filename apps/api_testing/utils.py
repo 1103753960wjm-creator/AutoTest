@@ -1,5 +1,6 @@
 import json
 import time
+import copy
 from django.utils import timezone
 from .models import RequestHistory
 from .variable_resolver import VariableResolver
@@ -14,14 +15,14 @@ def execute_assertions(response, assertions):
             'name': assertion.get('name', '未命名断言'),
             'type': assertion.get('type'),
             'passed': False,
-            'expected': assertion.get('expected'),
+            'expected': assertion.get('expected', assertion.get('value')),
             'actual': None,
             'error': None
         }
         
         try:
             assertion_type = assertion.get('type')
-            expected = assertion.get('expected')
+            expected = assertion.get('expected', assertion.get('value'))
             actual = None
             passed = False
             
@@ -189,8 +190,8 @@ def execute_test_suite(test_suite, environment, executed_by):
                 end_time = time.time()
                 response_time = (end_time - start_time) * 1000
                 
-                # 执行断言验证
-                assertions = api_request.assertions or []
+                # 套件级断言优先生效；未配置时回退到接口自身断言，保持旧套件兼容。
+                assertions = copy.deepcopy(suite_request.assertions or api_request.assertions or [])
                 for assertion in assertions:
                     if assertion.get('type') == 'response_time':
                         assertion['actual_time'] = response_time
@@ -201,17 +202,7 @@ def execute_test_suite(test_suite, environment, executed_by):
                 passed = True
                 error_message = ''
                 
-                # 检查套件请求的断言
-                for assertion in suite_request.assertions:
-                    if assertion.get('type') == 'status_code':
-                        expected = assertion.get('value')
-                        if response.status_code != expected:
-                            passed = False
-                            error_message = f'状态码断言失败: 期望 {expected}, 实际 {response.status_code}'
-                            break
-                
-                # 检查接口自身的断言
-                if passed and assertions_results:
+                if assertions_results:
                     for assertion_result in assertions_results:
                         if not assertion_result.get('passed', True):
                             passed = False

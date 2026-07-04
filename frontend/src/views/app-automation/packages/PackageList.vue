@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-package-list">
     <div class="page-header">
       <h3>包名管理</h3>
@@ -71,7 +71,7 @@
       width="500px"
       :close-on-click-modal="false"
     >
-      <el-form
+      <el-form @submit.prevent
         ref="formRef"
         :model="form"
         :rules="rules"

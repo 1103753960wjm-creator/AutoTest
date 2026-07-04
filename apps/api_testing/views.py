@@ -19,6 +19,7 @@ import json
 import logging
 import uuid
 import subprocess
+import copy
 from datetime import datetime, timedelta
 
 from .models import (
@@ -281,9 +282,12 @@ class ApiRequestViewSet(viewsets.ModelViewSet):
     queryset = ApiRequest.objects.all()
     serializer_class = ApiRequestSerializer
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['collection', 'method', 'request_type']
     search_fields = ['name', 'url']
+    ordering_fields = ['created_at', 'updated_at', 'name', 'method']
+    ordering = ['-updated_at']
+    pagination_class = StandardPagination
     
     def get_queryset(self):
         user = self.request.user
@@ -295,6 +299,10 @@ class ApiRequestViewSet(viewsets.ModelViewSet):
         # 查询两种接口：
         # 1. 关联到集合的接口（集合所属项目是用户有权限的）
         # 2. 或者是用户创建的且没有关联集合的接口
+        latest_history = RequestHistory.objects.filter(
+            request=models.OuterRef('pk')
+        ).order_by('-executed_at')
+
         queryset = ApiRequest.objects.filter(
             models.Q(
                 collection__project__in=accessible_projects
@@ -302,6 +310,14 @@ class ApiRequestViewSet(viewsets.ModelViewSet):
                 collection__isnull=True,
                 created_by=user
             )
+        ).select_related(
+            'collection',
+            'collection__project',
+            'created_by'
+        ).annotate(
+            latest_status_code=models.Subquery(latest_history.values('status_code')[:1]),
+            latest_error_message=models.Subquery(latest_history.values('error_message')[:1]),
+            latest_executed_at=models.Subquery(latest_history.values('executed_at')[:1])
         ).distinct()
 
         project_id = self.request.query_params.get('project')
@@ -348,6 +364,47 @@ class ApiRequestViewSet(viewsets.ModelViewSet):
             user=self.request.user
         )
         instance.delete()
+
+    @action(detail=True, methods=['post'], url_path='move-collection')
+    def move_collection(self, request, pk=None):
+        """移动接口测试用例到同项目集合"""
+        api_request = self.get_object()
+        collection_id = request.data.get('collection')
+
+        if not collection_id:
+            return Response({'error': '请选择目标集合'}, status=status.HTTP_400_BAD_REQUEST)
+
+        target_collection = get_object_or_404(ApiCollection, id=collection_id)
+
+        source_project = api_request.collection.project if api_request.collection else None
+        target_project = target_collection.project
+
+        if source_project and source_project.id != target_project.id:
+            return Response({'error': '接口测试用例只能移动到同项目集合'}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = request.user
+        has_permission = ApiProject.objects.filter(
+            id=target_project.id
+        ).filter(
+            models.Q(owner=user) | models.Q(members=user)
+        ).exists()
+
+        if not has_permission:
+            return Response({'error': '无权限移动到该集合'}, status=status.HTTP_403_FORBIDDEN)
+
+        api_request.collection = target_collection
+        api_request.save(update_fields=['collection', 'updated_at'])
+
+        log_operation(
+            operation_type='edit',
+            resource_type='request',
+            resource_id=api_request.id,
+            resource_name=api_request.name,
+            description=f'移动接口测试用例到集合：{target_collection.name}',
+            user=request.user
+        )
+
+        return Response(ApiRequestSerializer(api_request, context={'request': request}).data)
     
     @action(detail=True, methods=['post'])
     def execute(self, request, pk=None):
@@ -478,6 +535,7 @@ class ApiRequestViewSet(viewsets.ModelViewSet):
                 },
                 status_code=response.status_code,
                 response_time=response_time,
+                assertions_results=assertions_results,
                 executed_by=request.user
             )
             
@@ -630,7 +688,7 @@ class RequestHistoryViewSet(viewsets.ModelViewSet):
     serializer_class = RequestHistorySerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['request__request_type', 'status_code']
+    filterset_fields = ['request', 'request__request_type', 'status_code']
     ordering = ['-executed_at']
     pagination_class = StandardPagination
     
@@ -661,6 +719,38 @@ class RequestHistoryViewSet(viewsets.ModelViewSet):
         deleted_count, _ = RequestHistory.objects.filter(id__in=valid_ids).delete()
         
         return Response({'message': f'成功删除 {deleted_count} 条记录'})
+
+    @action(detail=False, methods=['post'], url_path='clear')
+    def clear(self, request):
+        """按当前筛选范围清空请求历史"""
+        queryset = self.get_queryset()
+
+        request_id = request.data.get('request')
+        request_type = request.data.get('request__request_type') or request.data.get('request_type')
+        status_code = request.data.get('status_code')
+        search = request.data.get('search')
+
+        if request_id:
+            queryset = queryset.filter(request_id=request_id)
+        if request_type:
+            queryset = queryset.filter(request__request_type=request_type)
+        if status_code not in [None, '']:
+            queryset = queryset.filter(status_code=status_code)
+        if search:
+            queryset = queryset.filter(
+                models.Q(request__name__icontains=search) |
+                models.Q(request__url__icontains=search)
+            )
+
+        valid_ids = list(queryset.values_list('id', flat=True))
+        deleted_count = 0
+        if valid_ids:
+            deleted_count, _ = RequestHistory.objects.filter(id__in=valid_ids).delete()
+
+        return Response({
+            'message': f'成功清空 {deleted_count} 条请求历史',
+            'deleted_count': deleted_count
+        })
 
 
 class TestSuiteViewSet(viewsets.ModelViewSet):
@@ -765,9 +855,8 @@ class TestSuiteViewSet(viewsets.ModelViewSet):
                     end_time = time.time()
                     response_time = (end_time - start_time) * 1000
                     
-                    # 执行断言验证
-                    assertions = api_request.assertions or []
-                    # 添加响应时间到断言中
+                    # 套件级断言优先生效；未配置时回退到接口自身断言，避免旧套件执行行为中断。
+                    assertions = copy.deepcopy(suite_request.assertions or api_request.assertions or [])
                     for assertion in assertions:
                         if assertion.get('type') == 'response_time':
                             assertion['actual_time'] = response_time
@@ -778,19 +867,8 @@ class TestSuiteViewSet(viewsets.ModelViewSet):
                     # 检查所有断言是否通过
                     passed = True
                     error_message = ''
-                    
-                    # 检查套件请求的断言
-                    for assertion in suite_request.assertions:
-                        # 简单的状态码断言
-                        if assertion.get('type') == 'status_code':
-                            expected = assertion.get('value')
-                            if response.status_code != expected:
-                                passed = False
-                                error_message = f'状态码断言失败: 期望 {expected}, 实际 {response.status_code}'
-                                break
-                    
-                    # 检查接口自身的断言
-                    if passed and assertions_results:
+
+                    if assertions_results:
                         for assertion_result in assertions_results:
                             if not assertion_result.get('passed', True):
                                 passed = False
@@ -911,7 +989,10 @@ class TestSuiteViewSet(viewsets.ModelViewSet):
         
         try:
             for request_id in request_ids:
-                api_request = ApiRequest.objects.get(id=request_id)
+                api_request = ApiRequest.objects.get(
+                    id=request_id,
+                    collection__project=test_suite.project
+                )
                 TestSuiteRequest.objects.get_or_create(
                     test_suite=test_suite,
                     request=api_request,
@@ -978,6 +1059,41 @@ class TestSuiteRequestViewSet(viewsets.ModelViewSet):
                 models.Q(owner=user) | models.Q(members=user)
             )
         ).distinct()
+
+    def perform_update(self, serializer):
+        """更新套件请求时记录日志"""
+        instance = serializer.save()
+        log_operation(
+            operation_type='edit',
+            resource_type='suite',
+            resource_id=instance.test_suite.id,
+            resource_name=instance.test_suite.name,
+            description=f'更新测试套件「{instance.test_suite.name}」中的用例配置：{instance.request.name}',
+            user=self.request.user
+        )
+
+    @action(detail=True, methods=['post'], url_path='assertions')
+    def update_assertions(self, request, pk=None):
+        """保存测试套件内单个用例的套件级断言"""
+        suite_request = self.get_object()
+        assertions = request.data.get('assertions', [])
+
+        if not isinstance(assertions, list):
+            return Response({'error': '断言配置必须是数组'}, status=status.HTTP_400_BAD_REQUEST)
+
+        suite_request.assertions = assertions
+        suite_request.save(update_fields=['assertions'])
+
+        log_operation(
+            operation_type='edit',
+            resource_type='suite',
+            resource_id=suite_request.test_suite.id,
+            resource_name=suite_request.test_suite.name,
+            description=f'更新测试套件「{suite_request.test_suite.name}」中的断言：{suite_request.request.name}',
+            user=request.user
+        )
+
+        return Response(TestSuiteRequestSerializer(suite_request, context={'request': request}).data)
 
 
 class TestExecutionViewSet(viewsets.ReadOnlyModelViewSet):

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="scheduled-tasks">
     <div class="header">
       <h3>APP定时任务</h3>
@@ -129,7 +129,7 @@
 
     <!-- 创建/编辑对话框 -->
     <el-dialog v-model="showDialog" :title="editingTask ? '编辑定时任务' : '新建定时任务'" width="720px" :close-on-click-modal="false" @close="resetForm">
-      <el-form :model="form" label-width="110px">
+      <el-form @submit.prevent :model="form" label-width="110px">
         <el-form-item label="任务名称" required>
           <el-input v-model="form.name" placeholder="请输入任务名称" />
         </el-form-item>

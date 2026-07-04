@@ -93,7 +93,7 @@ const gridStyle = computed(() => {
 .workspace-shell {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--th-space-20);
   min-height: 100%;
 }
 
@@ -101,7 +101,7 @@ const gridStyle = computed(() => {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 16px;
+  gap: var(--th-space-16);
 }
 
 .shell-heading {
@@ -109,62 +109,62 @@ const gridStyle = computed(() => {
 }
 
 .shell-eyebrow {
-  margin-bottom: 8px;
+  margin-bottom: var(--th-space-8);
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  color: #409eff;
+  color: var(--th-color-primary);
 }
 
 .shell-title {
   margin: 0;
   font-size: 28px;
   font-weight: 700;
-  color: #1f2d3d;
+  color: var(--th-text-primary);
 }
 
 .shell-description {
   margin: 10px 0 0;
   font-size: 14px;
   line-height: 1.7;
-  color: #606266;
+  color: var(--th-text-secondary);
 }
 
 .shell-actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--th-space-12);
 }
 
 .workspace-grid {
   display: grid;
-  gap: 20px;
+  gap: var(--th-space-20);
   min-height: 640px;
 }
 
 .workspace-panel {
   min-width: 0;
   min-height: 0;
-  padding: 20px;
-  border: 1px solid #e8eef5;
-  border-radius: 18px;
+  padding: var(--th-space-20);
+  border: 1px solid var(--th-border-color);
+  border-radius: var(--th-radius-lg);
   background: #fff;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--th-shadow-card);
 }
 
 .workspace-main {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--th-space-16);
 }
 
 .workspace-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #eef2f7;
+  gap: var(--th-space-12);
+  padding-bottom: var(--th-space-16);
+  border-bottom: 1px solid var(--th-border-color);
 }
 
 .workspace-content {
@@ -193,7 +193,7 @@ const gridStyle = computed(() => {
   }
 
   .workspace-panel {
-    padding: 16px;
+    padding: var(--th-space-16);
   }
 }
 </style>

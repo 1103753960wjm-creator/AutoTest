@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="element-manager">
     <div class="element-layout">
       <!-- 左侧页面树 -->
@@ -81,7 +81,7 @@
           <!-- 元素基本信息 -->
           <div class="element-header">
             <div class="element-info">
-              <el-form ref="elementHeaderFormRef" :model="selectedElement" :rules="elementHeaderRules" inline>
+              <el-form @submit.prevent ref="elementHeaderFormRef" :model="selectedElement" :rules="elementHeaderRules" inline>
                 <el-form-item prop="name" :label="$t('uiAutomation.element.elementName')" required>
                   <el-input
                     v-model="selectedElement.name"
@@ -116,7 +116,7 @@
 
           <!-- 元素配置 -->
           <div class="element-form">
-            <el-form ref="elementFormRef" :key="formKey" :model="selectedElement" :rules="elementRules" label-width="100px">
+            <el-form @submit.prevent ref="elementFormRef" :key="formKey" :model="selectedElement" :rules="elementRules" label-width="100px">
               <el-row :gutter="20">
                 <el-col :span="12">
                   <el-form-item :label="$t('uiAutomation.element.page')">
@@ -200,7 +200,7 @@
 
     <!-- 创建页面对话框 -->
     <el-dialog v-model="showCreatePageDialog" :title="$t('uiAutomation.element.createPageTitle')" width="500px" :close-on-click-modal="false">
-      <el-form ref="pageFormRef" :model="pageForm" :rules="pageRules" label-width="100px">
+      <el-form @submit.prevent ref="pageFormRef" :model="pageForm" :rules="pageRules" label-width="100px">
         <el-form-item :label="$t('uiAutomation.element.pageName')" prop="name">
           <el-input v-model="pageForm.name" :placeholder="$t('uiAutomation.element.pageNamePlaceholder')" />
         </el-form-item>
@@ -243,7 +243,7 @@
 
     <!-- 编辑页面对话框 -->
     <el-dialog v-model="showEditPageDialog" :title="$t('uiAutomation.element.editPageTitle')" width="500px" :close-on-click-modal="false">
-      <el-form ref="editPageFormRef" :model="editPageForm" :rules="pageRules" label-width="100px">
+      <el-form @submit.prevent ref="editPageFormRef" :model="editPageForm" :rules="pageRules" label-width="100px">
         <el-form-item :label="$t('uiAutomation.element.pageName')" prop="name">
           <el-input v-model="editPageForm.name" :placeholder="$t('uiAutomation.element.pageNamePlaceholder')" />
         </el-form-item>

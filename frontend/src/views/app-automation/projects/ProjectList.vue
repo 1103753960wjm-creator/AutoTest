@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="list-page">
     <div class="list-page__panel">
       <FilterBar>
@@ -124,7 +124,7 @@
       width="520px"
       :close-on-click-modal="false"
     >
-      <el-form ref="formRef" :model="form" :rules="formRules" label-width="80px">
+      <el-form @submit.prevent ref="formRef" :model="form" :rules="formRules" label-width="80px">
         <el-form-item label="项目名称" prop="name">
           <el-input v-model="form.name" placeholder="请输入项目名称" />
         </el-form-item>

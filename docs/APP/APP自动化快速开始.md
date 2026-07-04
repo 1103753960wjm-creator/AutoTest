@@ -628,8 +628,8 @@ CELERY_BEAT_SCHEDULE = {
 
 ## 📞 获取帮助
 
-- **文档**: `docs/APP自动化集成说明.md`
-- **完成报告**: `docs/Phase3-4集成完成报告.md`
+- **文档**: `docs/APP/APP自动化集成说明.md`
+- **完成报告**: `docs/APP/APP自动化集成完成报告.md`
 - **模块README**: `apps/app_automation/README.md`
 
 ---

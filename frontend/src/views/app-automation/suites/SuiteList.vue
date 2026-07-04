@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="suite-list">
     <div class="page-header">
       <h3>测试套件</h3>
@@ -13,7 +13,7 @@
     </div>
 
     <el-card class="config-card">
-      <el-form :model="runConfig" label-width="100px" size="small">
+      <el-form @submit.prevent :model="runConfig" label-width="100px" size="small">
         <el-row :gutter="16">
           <el-col :span="5">
             <el-form-item label="所属项目">
@@ -188,7 +188,7 @@
       :close-on-click-modal="false"
       destroy-on-close
     >
-      <el-form :model="suiteForm" label-width="80px" size="default">
+      <el-form @submit.prevent :model="suiteForm" label-width="80px" size="default">
         <el-form-item label="套件名称" required>
           <el-input v-model="suiteForm.name" placeholder="请输入套件名称" />
         </el-form-item>

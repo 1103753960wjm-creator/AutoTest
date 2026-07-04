@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <div class="auto-review-list">
     <div class="filter-bar">
-      <el-form :inline="true" class="filter-form">
+      <el-form @submit.prevent :inline="true" class="filter-form">
         <el-form-item label="项目">
           <el-select
             v-model="filters.project"

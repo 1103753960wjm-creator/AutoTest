@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">{{ $t('reviewTemplate.title') }}</h1>
@@ -11,7 +11,7 @@
     </div>
 
     <div class="filter-bar">
-      <el-form :inline="true" :model="filters" class="filter-form">
+      <el-form @submit.prevent :inline="true" :model="filters" class="filter-form">
         <el-form-item :label="$t('reviewTemplate.project')">
           <el-select v-model="filters.project" :placeholder="$t('reviewTemplate.selectProject')" clearable @change="fetchTemplates">
             <el-option
@@ -118,7 +118,7 @@
       width="800px"
       :close-on-click-modal="false"
     >
-      <el-form :model="templateForm" :rules="templateRules" ref="templateFormRef" label-width="120px">
+      <el-form @submit.prevent :model="templateForm" :rules="templateRules" ref="templateFormRef" label-width="120px">
         <el-row :gutter="24">
           <el-col :span="12">
             <el-form-item :label="$t('reviewTemplate.templateName')" prop="name">

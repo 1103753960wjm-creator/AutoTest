@@ -9,7 +9,7 @@
       :default-sort="defaultSort"
       :highlight-current-row="selectionMode === 'single'"
       :border="true"
-      :header-cell-style="{ backgroundColor: '#f5f7fa', color: '#606266' }"
+      :header-cell-style="{ backgroundColor: 'var(--th-bg-color)', color: 'var(--th-text-secondary)' }"
       @row-click="handleRowClick"
       @row-dblclick="handleRowDblClick"
       @sort-change="emit('sort-change', $event)"
@@ -304,7 +304,7 @@ function emitPageSizeChange() {
 .unified-list-table {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--th-space-16);
 }
 
 .unified-list-table__pagination {
@@ -320,7 +320,7 @@ function emitPageSizeChange() {
 .unified-list-table__actions-inline {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--th-space-8);
   align-items: center;
 }
 

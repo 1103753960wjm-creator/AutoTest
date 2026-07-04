@@ -117,7 +117,7 @@
 
         <!-- 测试数据工具 - 无需输入参数 -->
         <div v-if="currentCategory === 'test_data'" class="tool-form">
-          <el-form label-width="120px">
+          <el-form @submit.prevent label-width="120px">
             <el-form-item :label="$t('dataFactory.form.count')">
               <el-input-number v-model="toolForm.count" :min="1" :max="100" />
               <span class="form-tip">{{ $t('dataFactory.form.countTip') }}</span>
@@ -147,7 +147,7 @@
 
         <!-- 字符工具 -->
         <div v-else-if="currentCategory === 'string'" class="tool-form">
-          <el-form label-width="120px">
+          <el-form @submit.prevent label-width="120px">
             <el-form-item v-if="currentTool.name !== 'text_diff'" :label="$t('dataFactory.form.inputText')">
               <el-input
                 v-model="toolForm.text"
@@ -229,7 +229,7 @@
 
         <!-- 随机工具 -->
         <div v-else-if="currentCategory === 'random'" class="tool-form">
-          <el-form label-width="120px">
+          <el-form @submit.prevent label-width="120px">
             <el-form-item v-if="currentTool.name === 'random_int'" :label="$t('dataFactory.form.minValue')">
               <el-input-number v-model="toolForm.min_val" :min="-999999" :max="999999" />
             </el-form-item>
@@ -322,7 +322,7 @@
 
         <!-- 编码工具 -->
         <div v-else-if="currentCategory === 'encoding'" class="tool-form">
-          <el-form label-width="120px">
+          <el-form @submit.prevent label-width="120px">
             <el-form-item v-if="['generate_barcode', 'generate_qrcode'].includes(currentTool.name)" :label="$t('dataFactory.form.data')">
               <el-input v-model="toolForm.data" :placeholder="$t('dataFactory.form.data')" />
             </el-form-item>
@@ -499,7 +499,7 @@
 
         <!-- 加密工具 -->
         <div v-else-if="currentCategory === 'encryption'" class="tool-form">
-          <el-form label-width="120px">
+          <el-form @submit.prevent label-width="120px">
             <el-form-item v-if="['md5_hash', 'sha1_hash', 'sha256_hash', 'sha512_hash', 'password_strength'].includes(currentTool.name)" :label="$t('dataFactory.form.text')">
               <el-input v-model="toolForm.text" type="textarea" :rows="4" :placeholder="$t('dataFactory.form.inputText')" />
             </el-form-item>
@@ -615,7 +615,7 @@
           </el-row>
           <el-row :gutter="20" class="diff-options">
             <el-col :span="24">
-              <el-form label-width="120px">
+              <el-form @submit.prevent label-width="120px">
                 <el-form-item :label="$t('dataFactory.form.ignoreWhitespace')">
                   <el-switch v-model="toolForm.ignore_whitespace" @change="handleJsonDiffInput" />
                 </el-form-item>
@@ -720,7 +720,7 @@
 
         <!-- 其他JSON工具 -->
         <div v-else-if="currentCategory === 'json' && !['format_json', 'jsonpath_query', 'json_diff_enhanced'].includes(currentTool.name)" class="tool-form json-tool">
-          <el-form label-width="120px">
+          <el-form @submit.prevent label-width="120px">
             <el-form-item v-if="['format_json', 'validate_json', 'json_to_xml', 'json_to_yaml', 'json_to_csv', 'json_path_list', 'json_flatten'].includes(currentTool.name)" :label="$t('dataFactory.form.jsonData')">
               <el-input
                 v-model="toolForm.json_str"
@@ -759,7 +759,7 @@
 
         <!-- Mock数据工具 -->
         <div v-else-if="currentCategory === 'mock'" class="tool-form">
-          <el-form label-width="120px">
+          <el-form @submit.prevent label-width="120px">
             <el-form-item :label="$t('dataFactory.form.count')">
               <el-input-number v-model="toolForm.count" :min="1" :max="100" />
             </el-form-item>
@@ -800,7 +800,7 @@
 
         <!-- Crontab工具 -->
         <div v-else-if="currentCategory === 'crontab'" class="tool-form">
-          <el-form label-width="120px">
+          <el-form @submit.prevent label-width="120px">
             <el-form-item v-if="currentTool.name === 'generate_expression'" :label="$t('dataFactory.form.minute')">
               <el-input v-model="toolForm.minute" placeholder="0-59, *, */5, 1,3,5, 1-10" />
               <span class="form-tip">{{ $t('dataFactory.form.minuteTip') }}</span>
@@ -830,7 +830,7 @@
           </el-form>
         </div>
 
-        <el-form label-width="120px" class="tool-options">
+        <el-form @submit.prevent label-width="120px" class="tool-options">
           <el-form-item :label="$t('dataFactory.form.saveResult')">
             <el-switch v-model="toolForm.isSaved" />
             <span class="form-tip">{{ $t('dataFactory.form.saveResultTip') }}</span>
@@ -1002,8 +1002,14 @@ import {
   Document, List, Lock, User, MagicStick, VideoPlay, ChatDotSquare, Picture, Connection,
   Phone, Message, Location, Ticket, OfficeBuilding, CreditCard, CircleCheck, DocumentCopy, Search, Delete, Edit, Unlock, DataLine as DataLineIcon, Sort, Share, View, Upload
 } from '@element-plus/icons-vue'
-import axios from 'axios'
 import { debounce } from 'lodash-es'
+import {
+  deleteRecord as deleteDataFactoryRecord,
+  executeTool as executeDataFactoryTool,
+  getCategories as getDataFactoryCategories,
+  getHistory as getDataFactoryHistory,
+  getStatistics as getDataFactoryStatistics
+} from '@/api/data-factory'
 
 // 缓存工具
 const cache = {
@@ -1195,7 +1201,7 @@ const getScenarioIcon = (scenario) => {
 
 const fetchCategories = async () => {
   try {
-    const response = await axios.get('/api/data-factory/categories/')
+    const response = await getDataFactoryCategories()
     categories.value = response.data.categories
   } catch (error) {
     ElMessage.error(t('dataFactory.messages.fetchCategoriesFailed'))
@@ -1581,7 +1587,7 @@ const executeTool = async () => {
   try {
     const input_data = buildInputData()
     console.log('Executing tool:', currentTool.value.name, 'with input:', input_data)
-    const response = await axios.post('/api/data-factory/', {
+    const response = await executeDataFactoryTool({
       tool_name: currentTool.value.name,
       tool_category: currentCategory.value,
       tool_scenario: currentTool.value.scenario || 'other',
@@ -1700,7 +1706,7 @@ const handleJsonInput = async () => {
   debounceTimer = setTimeout(async () => {
     if (currentTool.value?.name === 'format_json' && toolForm.value.json_str) {
       try {
-        const response = await axios.post('/api/data-factory/', {
+        const response = await executeDataFactoryTool({
           tool_name: 'format_json',
           tool_category: 'json',
           tool_scenario: 'data_validation',
@@ -1892,7 +1898,7 @@ const handleJsonDiffInput = async () => {
       return
     }
     try {
-      const response = await axios.post('/api/data-factory/', {
+      const response = await executeDataFactoryTool({
         tool_name: 'json_diff_enhanced',
         tool_category: 'json',
         tool_scenario: 'data_validation',
@@ -1914,7 +1920,7 @@ const handleJsonDiffInput = async () => {
 const handleJsonPathInput = async () => {
   if (currentTool.value?.name === 'jsonpath_query' && toolForm.value.json_str && toolForm.value.jsonpath_expr) {
     try {
-      const response = await axios.post('/api/data-factory/', {
+      const response = await executeDataFactoryTool({
         tool_name: 'jsonpath_query',
         tool_category: 'json',
         tool_scenario: 'data_validation',
@@ -2031,12 +2037,10 @@ const debouncedFetchHistory = debounce(async () => {
   
   historyLoading.value = true
   try {
-    const response = await axios.get('/api/data-factory/', {
-      params: {
-        page: historyCurrentPage.value,
-        page_size: historyPageSize.value,
-        _t: Date.now()
-      }
+    const response = await getDataFactoryHistory({
+      page: historyCurrentPage.value,
+      page_size: historyPageSize.value,
+      _t: Date.now()
     })
     
     historyRecords.value = response.data.results
@@ -2057,12 +2061,10 @@ const fetchHistoryImmediate = async () => {
   
   historyLoading.value = true
   try {
-    const response = await axios.get('/api/data-factory/', {
-      params: {
-        page: historyCurrentPage.value,
-        page_size: historyPageSize.value,
-        _t: Date.now()
-      }
+    const response = await getDataFactoryHistory({
+      page: historyCurrentPage.value,
+      page_size: historyPageSize.value,
+      _t: Date.now()
     })
     
     historyRecords.value = response.data.results
@@ -2090,10 +2092,8 @@ const fetchStatistics = async () => {
   
   statsLoading.value = true
   try {
-    const response = await axios.get('/api/data-factory/statistics/', {
-      params: {
-        _t: Date.now()
-      }
+    const response = await getDataFactoryStatistics({
+      _t: Date.now()
     })
     
     statistics.value = response.data
@@ -2111,7 +2111,7 @@ const deleteRecord = async (record) => {
       ElMessage.error('记录ID不存在')
       return
     }
-    const response = await axios.delete(`/api/data-factory/${record.id}/`)
+    await deleteDataFactoryRecord(record.id)
     ElMessage.success(t('dataFactory.history.deleteSuccess'))
     
     // 清除统计信息缓存

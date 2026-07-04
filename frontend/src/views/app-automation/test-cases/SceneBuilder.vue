@@ -1,4 +1,4 @@
-<template>
+﻿<template>
     <div class="ui-test-scene-builder">
         <div class="page-header">
             <h3>App自动化用例编排</h3>
@@ -19,7 +19,7 @@
         </div>
 
         <el-card class="scene-config">
-            <el-form :model="sceneForm" label-width="120px" size="small">
+            <el-form @submit.prevent :model="sceneForm" label-width="120px" size="small">
                 <el-row :gutter="16">
                     <el-col :span="8">
                         <el-form-item label="场景名称" required>
@@ -332,7 +332,7 @@
                     </div>
                     <!-- 选中自定义组件父级时提示展开编辑 -->
                     <div v-else-if="activeParentStep && activeParentStep.kind === 'custom' && selectedSubIndex === null" class="config-form">
-                        <el-form label-width="110px" size="small">
+                        <el-form @submit.prevent label-width="110px" size="small">
                             <el-form-item label="步骤名称">
                                 <el-input v-model.trim="activeParentStep.name" />
                             </el-form-item>
@@ -352,7 +352,7 @@
                         </el-form>
                     </div>
                     <div v-else class="config-form">
-                        <el-form :model="activeStep" label-width="110px" size="small">
+                        <el-form @submit.prevent :model="activeStep" label-width="110px" size="small">
                             <el-form-item label="步骤名称">
                                 <el-input v-model.trim="activeStep.name" />
                             </el-form-item>
@@ -501,7 +501,7 @@
             :close-on-click-modal="false"
             @close="resetPackageDialog"
         >
-            <el-form label-width="110px" size="small">
+            <el-form @submit.prevent label-width="110px" size="small">
                 <el-form-item label="覆盖已有组件">
                     <el-switch v-model="packageOverwrite" />
                 </el-form-item>
@@ -546,7 +546,7 @@
             :close-on-click-modal="false"
             @close="resetExportDialog"
         >
-            <el-form label-width="110px" size="small">
+            <el-form @submit.prevent label-width="110px" size="small">
                 <el-form-item label="导出含禁用">
                     <el-switch v-model="packageIncludeDisabled" />
                 </el-form-item>
@@ -567,7 +567,7 @@
             :close-on-click-modal="false"
             @close="resetCustomDialog"
         >
-            <el-form ref="customFormRef" :model="customForm" :rules="customRules" label-width="110px">
+            <el-form @submit.prevent ref="customFormRef" :model="customForm" :rules="customRules" label-width="110px">
                 <el-form-item label="组件名称" prop="name">
                     <el-input v-model.trim="customForm.name" placeholder="请输入组件名称" />
                 </el-form-item>
@@ -637,7 +637,7 @@
                                 请选择步骤进行配置
                             </div>
                             <div v-else class="config-form">
-                                <el-form :model="editingActiveStep" label-width="110px" size="small">
+                                <el-form @submit.prevent :model="editingActiveStep" label-width="110px" size="small">
                                     <el-form-item label="步骤名称">
                                         <el-input v-model.trim="editingActiveStep.name" />
                                     </el-form-item>

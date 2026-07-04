@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="test-case-manager">
     <div class="page-header">
       <h1 class="page-title">{{ t('uiAutomation.testCase.title') }}</h1>
@@ -406,7 +406,7 @@
       :close-on-click-modal="false"
       width="500px"
     >
-      <el-form :model="testCaseForm" label-width="100px">
+      <el-form @submit.prevent :model="testCaseForm" label-width="100px">
         <el-form-item :label="t('uiAutomation.testCase.caseName')" required>
           <el-input v-model="testCaseForm.name" :placeholder="t('uiAutomation.testCase.caseNamePlaceholder')" />
         </el-form-item>

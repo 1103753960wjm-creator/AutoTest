@@ -45,7 +45,7 @@
       width="600px"
       :close-on-click-modal="false"
     >
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
+      <el-form @submit.prevent ref="formRef" :model="form" :rules="rules" label-width="120px">
         <el-form-item :label="$t('apiTesting.aiServiceConfig.configName')" prop="name">
           <el-input v-model="form.name" :placeholder="$t('apiTesting.aiServiceConfig.inputConfigName')" />
         </el-form-item>
@@ -100,7 +100,13 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { Plus } from '@element-plus/icons-vue'
-import api from '@/utils/api'
+import {
+  createAIServiceConfig,
+  deleteAIServiceConfig,
+  getAIServiceConfigs,
+  testAIServiceConnection,
+  updateAIServiceConfig
+} from '@/api/api-testing'
 
 const { t } = useI18n()
 const loading = ref(false)
@@ -147,7 +153,7 @@ const formatDate = (dateString) => {
 const loadConfigs = async () => {
   loading.value = true
   try {
-    const res = await api.get('/api-testing/ai-service-configs/')
+    const res = await getAIServiceConfigs()
     configs.value = res.data.results || res.data
   } catch (error) {
     ElMessage.error(t('apiTesting.aiServiceConfig.messages.loadFailed'))
@@ -184,10 +190,10 @@ const saveConfig = async () => {
   saving.value = true
   try {
     if (editingConfig.value) {
-      await api.put(`/api-testing/ai-service-configs/${editingConfig.value.id}/`, form)
+      await updateAIServiceConfig(editingConfig.value.id, form)
       ElMessage.success(t('apiTesting.aiServiceConfig.messages.updateSuccess'))
     } else {
-      await api.post('/api-testing/ai-service-configs/', form)
+      await createAIServiceConfig(form)
       ElMessage.success(t('apiTesting.aiServiceConfig.messages.createSuccess'))
     }
     showCreateDialog.value = false
@@ -205,7 +211,7 @@ const deleteConfig = async (id) => {
     await ElMessageBox.confirm(t('apiTesting.aiServiceConfig.messages.confirmDelete'), t('apiTesting.common.tip'), {
       type: 'warning'
     })
-    await api.delete(`/api-testing/ai-service-configs/${id}/`)
+    await deleteAIServiceConfig(id)
     ElMessage.success(t('apiTesting.aiServiceConfig.messages.deleteSuccess'))
     await loadConfigs()
   } catch (error) {
@@ -218,9 +224,7 @@ const deleteConfig = async (id) => {
 const testConnection = async (config) => {
   testing.value[config.id] = true
   try {
-    await api.post('/api-testing/ai-service-configs/test_connection/', {
-      config_id: config.id
-    })
+    await testAIServiceConnection(config.id)
     ElMessage.success(t('apiTesting.aiServiceConfig.messages.testSuccess'))
   } catch (error) {
     ElMessage.error(error.response?.data?.error || t('apiTesting.aiServiceConfig.messages.testFailed'))

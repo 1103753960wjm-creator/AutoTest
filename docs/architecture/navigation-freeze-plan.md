@@ -23,7 +23,7 @@
 | --- | --- | --- | --- | --- |
 | 工作台 | 保留 | `/home` | 平台总览、快捷入口、轻工具入口 | 不承载业务资产管理 |
 | 测试设计 | 保留 | 暂承接 `/ai-generation/*` 中的设计域页面 | 需求分析、项目、用例、评审、版本、套件等设计资产 | 当前只是导航归类，不立即改路由前缀 |
-| 接口自动化 | 保留 | `/api-testing/*` | 接口项目、接口调试、接口自动化执行工作台 | 配置和执行聚合能力后续收敛 |
+| 接口自动化 | 保留 | `/api-testing/*` | 接口项目、接口测试用例和测试套件执行工作台 | 配置和执行聚合能力后续收敛 |
 | Web 自动化 | 保留 | `/ui-automation/*` + `/ai-intelligent-mode/*` | Web UI 自动化资产与 AI Web 测试能力 | `AI 智能模式` 不再单独做一级导航 |
 | App 自动化 | 保留 | `/app-automation/*` | App 自动化资产、编排与运行能力 | 设备域后续可向云真机演进 |
 | 云真机 | 预留 | 暂无 | 设备池、预约、远控、设备资源运营 | 本次只冻结名称和职责 |
@@ -72,14 +72,16 @@
 
 ### 4.3 接口自动化
 
-边界定义：承载接口项目、接口调试与接口自动化执行工作台；平台级配置、报告聚合、通知聚合后续外移。
+边界定义：承载接口项目、接口测试用例与测试套件执行工作台；平台级配置、报告聚合、通知聚合后续外移。
 
 | 二级页面 | 当前路径 | 处理策略 | 说明 |
 | --- | --- | --- | --- |
 | 仪表盘 | `/api-testing/dashboard` | 保留入口 | 子系统首页 |
 | 项目管理 | `/api-testing/projects` | 保留入口 | 业务资产 |
-| 接口管理 | `/api-testing/interfaces` | 保留入口 | 调试与编排工作台 |
-| 自动化测试 | `/api-testing/automation` | 保留入口 | 接口自动化执行工作台 |
+| 接口测试用例 | `/api-testing/test-cases` | 保留入口 | 以 `ApiRequest` 承接可执行接口测试用例 |
+| 接口管理 | `/api-testing/interfaces` | 隐藏入口 | 旧入口兼容，重定向到接口测试用例 |
+| 测试套件 | `/api-testing/test-suites` | 保留入口 | 接口测试套件编排与执行工作台 |
+| 测试套件旧入口 | `/api-testing/automation` | 隐藏入口 | 旧入口兼容，重定向到测试套件 |
 | 请求历史 | `/api-testing/history` | 保留入口 | 贴近接口调试，不迁入平台执行中心 |
 | 环境管理 | `/api-testing/environments` | 保留入口 | 业务环境，暂不视为平台级配置 |
 | 测试报告 | `/api-testing/reports` | 未来迁移入口 | 后续进入 `执行中心` |
@@ -201,8 +203,8 @@
 - `/ai-generation/review-templates`
 - `/api-testing/dashboard`
 - `/api-testing/projects`
-- `/api-testing/interfaces`
-- `/api-testing/automation`
+- `/api-testing/test-cases`
+- `/api-testing/test-suites`
 - `/api-testing/history`
 - `/api-testing/environments`
 - `/ui-automation/dashboard`

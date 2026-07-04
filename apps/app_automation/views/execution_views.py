@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
 """APP测试执行管理视图"""
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.filters import SearchFilter
 from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
-from django.http import FileResponse, Http404
-from django.views.decorators.csrf import csrf_exempt
+from django.http import FileResponse, Http404, HttpResponseForbidden
 import logging
 import os
 
@@ -115,11 +114,33 @@ class AppTestExecutionViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@csrf_exempt
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def serve_report_file(request, execution_id, file_path=''):
     """提供 Allure 报告文件访问"""
     try:
-        execution = AppTestExecution.objects.get(id=execution_id)
+        execution = AppTestExecution.objects.select_related(
+            'user',
+            'test_case__project',
+            'test_suite__project',
+        ).get(id=execution_id)
+
+        user = request.user
+        project = None
+        if execution.test_case_id and execution.test_case and execution.test_case.project_id:
+            project = execution.test_case.project
+        elif execution.test_suite_id and execution.test_suite and execution.test_suite.project_id:
+            project = execution.test_suite.project
+
+        has_report_permission = (
+            user.is_staff or
+            user.is_superuser or
+            execution.user_id == user.id or
+            (project and (project.owner_id == user.id or project.members.filter(id=user.id).exists()))
+        )
+        if not has_report_permission:
+            return HttpResponseForbidden("无权访问该执行报告")
+
         if not execution.report_path:
             raise Http404("报告路径不存在")
 
@@ -131,7 +152,10 @@ def serve_report_file(request, execution_id, file_path=''):
 
         report_dir_abs = os.path.abspath(report_dir)
         full_path_abs = os.path.abspath(full_path)
-        if not full_path_abs.startswith(report_dir_abs):
+        try:
+            if os.path.commonpath([report_dir_abs, full_path_abs]) != report_dir_abs:
+                raise Http404("无效的文件路径")
+        except ValueError:
             raise Http404("无效的文件路径")
 
         if not os.path.exists(full_path_abs) or not os.path.isfile(full_path_abs):

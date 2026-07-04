@@ -207,7 +207,7 @@
       :close-on-click-modal="false"
       @close="resetSuiteForm"
     >
-      <el-form
+      <el-form @submit.prevent
         ref="suiteFormRef"
         :model="suiteForm"
         :rules="suiteRules"
@@ -359,6 +359,89 @@
         <el-button @click="showExecutionDialog = false">{{ $t('apiTesting.common.close') }}</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="showAssertionDialog"
+      title="编辑套件级断言"
+      width="720px"
+      align-center
+      :close-on-click-modal="false"
+      @close="resetAssertionDialog"
+    >
+      <el-form @submit.prevent label-width="110px">
+        <el-form-item label="接口测试用例">
+          <el-input :model-value="editingSuiteRequest?.request?.name || '-'" readonly />
+        </el-form-item>
+        <div class="assertion-dialog-toolbar">
+          <el-button size="small" type="primary" @click="addSuiteAssertion">
+            <el-icon><Plus /></el-icon>
+            添加断言
+          </el-button>
+        </div>
+        <div class="suite-assertion-list">
+          <el-empty v-if="assertionForm.assertions.length === 0" description="暂无套件级断言" />
+          <div
+            v-for="(assertion, index) in assertionForm.assertions"
+            :key="index"
+            class="suite-assertion-item"
+          >
+            <div class="suite-assertion-header">
+              <el-input
+                v-model="assertion.name"
+                placeholder="断言名称"
+                class="suite-assertion-name"
+              />
+              <el-button link type="danger" @click="removeSuiteAssertion(index)">删除</el-button>
+            </div>
+            <el-row :gutter="12">
+              <el-col :span="8">
+                <el-select
+                  v-model="assertion.type"
+                  placeholder="断言类型"
+                  style="width: 100%"
+                  @change="onSuiteAssertionTypeChange(assertion)"
+                >
+                  <el-option label="状态码" value="status_code" />
+                  <el-option label="响应时间" value="response_time" />
+                  <el-option label="包含文本" value="contains" />
+                  <el-option label="JSON路径" value="json_path" />
+                  <el-option label="响应头" value="header" />
+                  <el-option label="完全匹配" value="equals" />
+                </el-select>
+              </el-col>
+              <el-col v-if="assertion.type === 'json_path'" :span="8">
+                <el-input v-model="assertion.json_path" placeholder="JSONPath，例如 $.code" />
+              </el-col>
+              <el-col v-if="assertion.type === 'header'" :span="8">
+                <el-input v-model="assertion.header_name" placeholder="响应头名称" />
+              </el-col>
+              <el-col :span="assertion.type === 'json_path' || assertion.type === 'header' ? 8 : 16">
+                <el-input
+                  v-if="assertion.type !== 'status_code' && assertion.type !== 'response_time'"
+                  v-model="assertion.expected"
+                  placeholder="期望值"
+                />
+                <el-input-number
+                  v-else
+                  v-model="assertion.expected"
+                  :min="0"
+                  :max="assertion.type === 'status_code' ? 999 : 600000"
+                  controls-position="right"
+                  style="width: 100%"
+                />
+              </el-col>
+            </el-row>
+          </div>
+        </div>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="showAssertionDialog = false">{{ $t('apiTesting.common.cancel') }}</el-button>
+        <el-button type="primary" :loading="savingAssertions" @click="saveSuiteAssertions">
+          {{ $t('apiTesting.common.save') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -370,7 +453,23 @@ import {
   Plus, Refresh, MoreFilled, VideoPlay, Edit,
   Folder, Document
 } from '@element-plus/icons-vue'
-import api from '@/utils/api'
+import {
+  addApiRequestsToTestSuite,
+  createTestSuite,
+  deleteTestSuite,
+  deleteTestSuiteRequest,
+  executeTestSuite,
+  getApiCollections,
+  getApiProjects,
+  getApiRequests,
+  getEnvironments,
+  getTestExecutions,
+  getTestSuite,
+  getTestSuites,
+  updateTestSuite,
+  updateTestSuiteRequest,
+  updateTestSuiteRequestAssertions
+} from '@/api/api-testing'
 import dayjs from 'dayjs'
 
 const { t } = useI18n()
@@ -387,12 +486,19 @@ const executionsLoading = ref(false)
 const showCreateSuiteDialog = ref(false)
 const showAddRequestDialog = ref(false)
 const showExecutionDialog = ref(false)
+const showAssertionDialog = ref(false)
 const editingSuite = ref(null)
+const editingSuiteRequest = ref(null)
 const submittingSuite = ref(false)
 const addingRequests = ref(false)
+const savingAssertions = ref(false)
 const currentExecution = ref(null)
 const suiteFormRef = ref()
 const requestTreeRef = ref()
+
+const assertionForm = reactive({
+  assertions: []
+})
 
 const suiteForm = reactive({
   name: '',
@@ -488,7 +594,7 @@ const getEnvironmentName = (environmentId) => {
 
 const loadProjects = async () => {
   try {
-    const response = await api.get('/api-testing/projects/')
+    const response = await getApiProjects()
     projects.value = response.data.results || response.data
 
     // 过滤出HTTP项目
@@ -510,9 +616,7 @@ const loadTestSuites = async () => {
   if (!selectedProject.value) return
 
   try {
-    const response = await api.get('/api-testing/test-suites/', {
-      params: { project: selectedProject.value }
-    })
+    const response = await getTestSuites({ project: selectedProject.value })
     testSuites.value = response.data.results || response.data
   } catch (error) {
     ElMessage.error(t('apiTesting.messages.error.loadTestSuites'))
@@ -522,9 +626,7 @@ const loadTestSuites = async () => {
 const loadEnvironments = async () => {
   try {
     // 获取全局环境 + 当前项目环境
-    const response = await api.get('/api-testing/environments/', {
-      // 不传递project参数，让后端返回所有可访问的环境（全局+当前项目）
-    })
+    const response = await getEnvironments()
     const allEnvironments = response.data.results || response.data
 
     // 过滤当前项目相关或全局环境
@@ -542,13 +644,11 @@ const loadRequestTree = async () => {
 
   try {
     // 加载集合
-    const collectionsRes = await api.get('/api-testing/collections/', {
-      params: { project: selectedProject.value }
-    })
+    const collectionsRes = await getApiCollections({ project: selectedProject.value })
     const collections = collectionsRes.data.results || collectionsRes.data
 
     // 加载请求
-    const requestsRes = await api.get('/api-testing/requests/')
+    const requestsRes = await getApiRequests({ project: selectedProject.value, request_type: 'HTTP', page_size: 1000 })
     const requests = requestsRes.data.results || requestsRes.data
 
     // 构建树形结构
@@ -599,9 +699,7 @@ const loadExecutions = async () => {
 
   executionsLoading.value = true
   try {
-    const response = await api.get('/api-testing/test-executions/', {
-      params: { test_suite: selectedSuite.value.id }
-    })
+    const response = await getTestExecutions({ test_suite: selectedSuite.value.id })
     executions.value = response.data.results || response.data
   } catch (error) {
     ElMessage.error(t('apiTesting.messages.error.loadExecutionHistory'))
@@ -658,7 +756,7 @@ const handleSuiteAction = async ({ action, suite }) => {
 const runTestSuite = async (suite) => {
   running.value = true
   try {
-    const response = await api.post(`/api-testing/test-suites/${suite.id}/execute/`)
+    const response = await executeTestSuite(suite.id)
     currentExecution.value = response.data
     showExecutionDialog.value = true
     await loadExecutions()
@@ -688,7 +786,7 @@ const duplicateSuite = async (suite) => {
       project: suite.project,
       environment: suite.environment || null  // 修复：直接使用environment ID
     }
-    await api.post('/api-testing/test-suites/', newSuite)
+    await createTestSuite(newSuite)
     ElMessage.success(t('apiTesting.messages.success.copy'))
     await loadTestSuites()
   } catch (error) {
@@ -708,7 +806,7 @@ const deleteSuite = async (suite) => {
       }
     )
 
-    await api.delete(`/api-testing/test-suites/${suite.id}/`)
+    await deleteTestSuite(suite.id)
     ElMessage.success(t('apiTesting.messages.success.delete'))
 
     if (selectedSuite.value?.id === suite.id) {
@@ -731,10 +829,10 @@ const submitSuiteForm = async () => {
   submittingSuite.value = true
   try {
     if (editingSuite.value) {
-      await api.put(`/api-testing/test-suites/${editingSuite.value.id}/`, suiteForm)
+      await updateTestSuite(editingSuite.value.id, suiteForm)
       ElMessage.success(t('apiTesting.messages.success.suiteUpdated'))
     } else {
-      await api.post('/api-testing/test-suites/', suiteForm)
+      await createTestSuite(suiteForm)
       ElMessage.success(t('apiTesting.messages.success.suiteCreated'))
     }
 
@@ -771,9 +869,7 @@ const showAddRequest = async () => {
           `request_${sr.request.id}`
         ) || []
         
-        // 设置已关联接口为已勾选状态
         requestTreeRef.value.setCheckedKeys(existingRequestIds, false)
-        console.log('设置已关联接口ID:', existingRequestIds)
       }
     }, 200)
   })
@@ -796,10 +892,7 @@ const addSelectedRequests = async () => {
 
   addingRequests.value = true
   try {
-    // 这里需要调用添加请求到套件的API
-    await api.post(`/api-testing/test-suites/${selectedSuite.value.id}/add-requests/`, {
-      request_ids: requestIds
-    })
+    await addApiRequestsToTestSuite(selectedSuite.value.id, requestIds)
 
     ElMessage.success(t('apiTesting.messages.success.addSuccess'))
     showAddRequestDialog.value = false
@@ -814,7 +907,7 @@ const addSelectedRequests = async () => {
 
 const updateRequestEnabled = async (suiteRequest) => {
   try {
-    await api.put(`/api-testing/test-suite-requests/${suiteRequest.id}/`, {
+    await updateTestSuiteRequest(suiteRequest.id, {
       enabled: suiteRequest.enabled
     })
   } catch (error) {
@@ -824,7 +917,100 @@ const updateRequestEnabled = async (suiteRequest) => {
 }
 
 const editAssertions = (suiteRequest) => {
-  ElMessage.info(t('apiTesting.messages.info.featureInDevelopment'))
+  editingSuiteRequest.value = suiteRequest
+  assertionForm.assertions = JSON.parse(JSON.stringify(suiteRequest.assertions || []))
+  showAssertionDialog.value = true
+}
+
+const resetAssertionDialog = () => {
+  editingSuiteRequest.value = null
+  assertionForm.assertions = []
+  savingAssertions.value = false
+}
+
+const addSuiteAssertion = () => {
+  assertionForm.assertions.push({
+    name: `断言${assertionForm.assertions.length + 1}`,
+    type: 'status_code',
+    expected: 200
+  })
+}
+
+const removeSuiteAssertion = (index) => {
+  assertionForm.assertions.splice(index, 1)
+}
+
+const onSuiteAssertionTypeChange = (assertion) => {
+  delete assertion.json_path
+  delete assertion.header_name
+  delete assertion.expected_value
+
+  if (assertion.type === 'status_code') {
+    assertion.expected = 200
+  } else if (assertion.type === 'response_time') {
+    assertion.expected = 1000
+  } else {
+    assertion.expected = ''
+  }
+
+  if (assertion.type === 'json_path') {
+    assertion.json_path = ''
+  }
+  if (assertion.type === 'header') {
+    assertion.header_name = ''
+  }
+}
+
+const normalizeSuiteAssertions = () => {
+  return assertionForm.assertions.map((assertion, index) => {
+    const normalized = {
+      name: assertion.name || `断言${index + 1}`,
+      type: assertion.type,
+      expected: assertion.expected
+    }
+
+    if (assertion.type === 'json_path') {
+      normalized.json_path = assertion.json_path || ''
+    }
+    if (assertion.type === 'header') {
+      normalized.header_name = assertion.header_name || ''
+      normalized.expected_value = assertion.expected
+    }
+
+    return normalized
+  })
+}
+
+const saveSuiteAssertions = async () => {
+  if (!editingSuiteRequest.value) return
+
+  const invalidAssertion = assertionForm.assertions.find((assertion) => {
+    if (!assertion.type) return true
+    if (assertion.type === 'json_path' && !assertion.json_path) return true
+    if (assertion.type === 'header' && !assertion.header_name) return true
+    return assertion.expected === undefined || assertion.expected === null || assertion.expected === ''
+  })
+
+  if (invalidAssertion) {
+    ElMessage.warning('请补齐断言类型和期望值')
+    return
+  }
+
+  savingAssertions.value = true
+  try {
+    const response = await updateTestSuiteRequestAssertions(editingSuiteRequest.value.id, normalizeSuiteAssertions())
+    const updatedSuiteRequest = response.data
+    const suiteRequestIndex = selectedSuite.value?.suite_requests?.findIndex(item => item.id === updatedSuiteRequest.id)
+    if (suiteRequestIndex > -1) {
+      selectedSuite.value.suite_requests[suiteRequestIndex] = updatedSuiteRequest
+    }
+    showAssertionDialog.value = false
+    ElMessage.success('套件级断言已保存')
+  } catch (error) {
+    ElMessage.error(error.response?.data?.error || error.response?.data?.detail || '套件级断言保存失败')
+  } finally {
+    savingAssertions.value = false
+  }
 }
 
 const removeRequest = async (suiteRequest) => {
@@ -835,7 +1021,7 @@ const removeRequest = async (suiteRequest) => {
       type: 'warning'
     })
 
-    await api.delete(`/api-testing/test-suite-requests/${suiteRequest.id}/`)
+    await deleteTestSuiteRequest(suiteRequest.id)
     ElMessage.success(t('apiTesting.messages.success.removeSuccess'))
     // 重新加载当前测试套件详情
     await reloadCurrentSuite()
@@ -851,7 +1037,7 @@ const reloadCurrentSuite = async () => {
 
   try {
     // 重新加载当前测试套件的详细信息
-    const response = await api.get(`/api-testing/test-suites/${selectedSuite.value.id}/`)
+    const response = await getTestSuite(selectedSuite.value.id)
     const updatedSuite = response.data
 
     // 强制重新设置响应式数据
@@ -1093,5 +1279,37 @@ onMounted(() => {
 .execution-results h4 {
   margin: 0 0 15px 0;
   color: #303133;
+}
+
+.assertion-dialog-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.suite-assertion-list {
+  max-height: 48vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.suite-assertion-item {
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  padding: 14px;
+  background: #fff;
+}
+
+.suite-assertion-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.suite-assertion-name {
+  flex: 1;
 }
 </style>

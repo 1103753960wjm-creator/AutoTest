@@ -1,6 +1,6 @@
 # TestHub 决策日志
 
-更新时间：2026-06-16
+更新时间：2026-06-19
 
 ## 1. 文件职责
 
@@ -107,3 +107,51 @@
 - 决策内容：移除 `xlsx`，新增 `frontend/src/utils/excelExport.js`，统一基于 `write-excel-file` 导出 Excel。测试用例列表、需求分析页、任务详情页已经迁移；后续文档模板和新页面示例不得继续引入 `xlsx`。
 - 影响范围：`frontend/package.json`、`frontend/src/utils/excelExport.js`、所有前端 Excel 导出页面和文档模板。
 - 不再采用的替代方案：继续在页面内直接 `import * as XLSX from 'xlsx'` 并手写 workbook / worksheet。
+
+### 3.11 接口自动化 P0-1 以 ApiRequest 承接接口测试用例
+
+- 决策时间：2026-06-17
+- 背景：接口自动化没有正式“接口测试用例”子模块，导致接口自动化测试闭环只能靠“接口管理”心智承接；同时前端封装存在旧执行路径，单接口断言结果只返回不落库。
+- 决策内容：P0-1 不新增 `ApiTestCase` 表，继续以 `ApiRequest` 作为接口测试用例技术载体；正式可见入口改为 `/api-testing/test-cases`，旧 `/api-testing/interfaces` 仅作为隐藏兼容入口重定向；单接口执行断言结果必须写入 `RequestHistory.assertions_results`。
+- 影响范围：接口自动化路由、导航真源、API 封装、接口测试用例工作区、请求历史断言展示。
+- 不再采用的替代方案：继续把“接口管理”作为唯一正式用例入口；新增空壳 `ApiTestCase` 表但不补迁移和执行闭环；前端继续调用 `/api-testing/api-requests/{id}/execute/`。
+
+### 3.12 接口测试用例入口必须是资产列表，不得退回旧调试树首页
+
+- 决策时间：2026-06-17
+- 背景：P0-1 初版虽然补了“接口测试用例”入口，但页面形态仍接近旧接口调试工作台，用户会感知为“只是把测试套件或接口管理改了名字”，不符合测试用例资产管理心智。
+- 决策内容：`/api-testing/test-cases` 固定为接口测试用例资产列表页，承接查询、分页、新建、执行、加入套件、历史和删除等资产管理动作；旧 `InterfaceManagement.vue` 仅作为隐藏调试工作区复用，路径固定为 `/api-testing/test-cases/workspace?caseId={id}&projectId={projectId}`。
+- 影响范围：接口自动化导航、路由、资产列表页、隐藏调试工作区、请求历史过滤和测试套件加入链路。
+- 不再采用的替代方案：把旧树形调试工作台继续作为接口测试用例首页；用页面标题或菜单名称包装旧功能但不改变产品形态。
+
+### 3.13 AI 生成接口测试用例只生成原子用例，不直接生成测试套件
+
+- 决策时间：2026-06-18
+- 背景：P0-2 讨论中发现，如果让 AI 同时兼顾接口测试用例字段和测试套件编排结构，会导致 Prompt、结果页展示、采纳落库和套件加入逻辑全部耦合，改动面过大，也会混淆接口自动化中“用例资产”和“套件编排”的对象边界。
+- 决策内容：接口测试用例继续由 `ApiRequest` 承接，测试套件继续由 `TestSuite + TestSuiteRequest` 承接。AI 生成 `api_test_case` 时只输出 `ApiRequest` 兼容字段，例如 `name/method/url/headers/params/body/auth/assertions/pre_request_script/post_request_script`。生成结果先进入接口测试用例采纳链路，后续是否加入测试套件由用户在接口测试用例资产列表或套件页中操作。
+- 影响范围：`docs/api-automation/api-automation-p0-2-ai-target-type-spec.md`、`GeneratedTestCaseList.vue`、P0-3 接口测试用例采纳、后续测试套件加入链路。
+- 不再采用的替代方案：AI 直接生成 `TestSuite` / `TestSuiteRequest`；在接口测试用例生成结果里混入 `suite_id`、`suite_name`、`suite_order` 等套件编排字段；采纳接口测试用例时自动加入套件。
+
+### 3.14 P0-2 只允许套用现有 AI 生成链路，禁止重写
+
+- 决策时间：2026-06-18
+- 背景：用户明确要求“当前的 AI 生成测试用例逻辑严禁更改，只需要套用进去”。P0-2 涉及目标类型、Prompt 选择和结果字段展示，容易被误扩张为重写 AI 生成系统。
+- 决策内容：P0-2 只能在现有生成链路外层增加 `target_type`、按 `prompt_type + target_type` 选择 Prompt、任务固化目标类型、结果响应 / 页面展示字段适配和非功能采纳保护。禁止重写生成任务创建、模型调用、流式输出、取消、自动评审、轮询恢复和功能测试采纳主链。
+- 影响范围：`apps/requirement_analysis`、`frontend/src/views/requirement-analysis/*`、P0-2 TDD / Execution 验证口径。
+- 不再采用的替代方案：新建一条并行 AI 模型调用链；为了接口测试用例生成替换原功能测试生成解析路径；绕过既有 Prompt 配置和模型配置直接调用模型。
+
+### 3.15 接口自动化阶段 A 不新增 ApiTestCase 表，优先补齐 ApiRequest / TestSuiteRequest 闭环
+
+- 决策时间：2026-06-19
+- 背景：阶段 A 的目标是修复用户已能看到但操作不闭环的接口自动化断点，包括移动集合、清空历史、套件级断言、负责人字段契约和删除风险提示。如果此时新增 `ApiTestCase` 表，会扩大迁移和采纳链路范围，并与当前 P0-1 已冻结的 `ApiRequest` 技术载体冲突。
+- 决策内容：阶段 A 不新增 `ApiTestCase` 表，继续以 `ApiRequest` 作为接口测试用例原子资产，以 `TestSuite + TestSuiteRequest` 作为套件编排资产。移动集合落到 `ApiRequest.collection`；套件级断言落到 `TestSuiteRequest.assertions`；请求历史清空落到 `RequestHistory` 当前筛选范围。
+- 影响范围：接口自动化 P0 对象闭环、P0-2 AI 目标类型字段契约、P0-3 接口测试用例采纳设计。
+- 不再采用的替代方案：为了阶段 A 新增独立接口测试用例表；把接口测试用例和测试套件混成一个对象；让套件级断言继续作为“开发中”假入口。
+
+### 3.16 接口自动化测试套件正式入口固定为 `/api-testing/test-suites`
+
+- 决策时间：2026-06-19
+- 背景：接口测试用例和测试套件功能页面已经存在，但侧边栏仍没有正式“测试套件”入口，旧 `/api-testing/automation` 继续作为可见入口，导致用户感知为“两个模块没有拆出来”。
+- 决策内容：接口自动化侧边栏正式可见入口固定为 `/api-testing/test-cases` 和 `/api-testing/test-suites`；旧 `/api-testing/interfaces`、`/api-testing/automation` 仅作为隐藏兼容重定向保留。拆分用户可见子模块时，必须同步导航真源、路由、route meta、Dashboard 快捷入口、i18n 文案和文档。
+- 影响范围：`frontend/src/config/navigation.js`、`frontend/src/router/index.js`、接口自动化 Dashboard、项目记忆、导航冻结文档、smoke 基线和后续接口自动化开发。
+- 不再采用的替代方案：继续把 `/api-testing/automation` 作为侧边栏可见“自动化测试”入口；只新增路由或复用页面组件但不更新导航真源；用页面标题包装旧入口造成假拆分。

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <ListShell>
     <!-- 1. 搜索筛选区 (排版与 ProjectManagement 严格对齐) -->
     <div class="filters">
@@ -167,7 +167,7 @@
     </template>
 
     <el-dialog v-model="reviewDialogVisible" :title="$t('reviewList.submitReview')" width="600px">
-      <el-form :model="reviewForm" label-width="80px">
+      <el-form @submit.prevent :model="reviewForm" label-width="80px">
         <el-form-item :label="$t('reviewList.reviewResult')" required>
           <el-radio-group v-model="reviewForm.status">
             <el-radio-button label="approved">{{ $t('reviewList.approved') }}</el-radio-button>

@@ -1,11 +1,11 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">{{ $t('testcase.create') }}</h1>
     </div>
 
     <div class="card-container">
-      <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
+      <el-form @submit.prevent ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item :label="$t('testcase.caseTitle')" prop="title">
           <el-input v-model="form.title" :placeholder="$t('testcase.caseTitlePlaceholder')" />
         </el-form-item>

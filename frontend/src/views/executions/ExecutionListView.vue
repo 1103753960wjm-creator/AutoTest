@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="execution-list">
     <div class="header">
       <h1>{{ $t('execution.testPlan') }}</h1>
@@ -19,7 +19,7 @@
     </div>
 
     <div class="filter-bar">
-      <el-form :inline="true">
+      <el-form @submit.prevent :inline="true">
         <el-form-item :label="$t('execution.project')">
           <el-select v-model="filters.project" :placeholder="$t('execution.selectProject')" clearable style="width: 200px">
             <el-option v-for="item in projects" :key="item.id" :label="item.name" :value="item.id"></el-option>
@@ -129,7 +129,7 @@
 
     <!-- 创建测试计划对话框 -->
     <el-dialog :title="$t('execution.createPlanDialog')" v-model="isCreatePlanDialogOpen" width="600px" :close-on-click-modal="false">
-      <el-form :model="newPlanForm" :rules="planRules" ref="planFormRef" label-width="100px">
+      <el-form @submit.prevent :model="newPlanForm" :rules="planRules" ref="planFormRef" label-width="100px">
         <el-form-item :label="$t('execution.planName')" prop="name">
           <el-input v-model="newPlanForm.name" :placeholder="$t('execution.planNamePlaceholder')"></el-input>
         </el-form-item>
@@ -187,7 +187,7 @@
 
     <!-- 编辑测试计划对话框 -->
     <el-dialog :title="$t('execution.editPlanDialog')" v-model="isEditPlanDialogOpen" width="600px" :close-on-click-modal="false">
-      <el-form :model="editPlanForm" :rules="planRules" ref="editPlanFormRef" label-width="100px">
+      <el-form @submit.prevent :model="editPlanForm" :rules="planRules" ref="editPlanFormRef" label-width="100px">
         <el-form-item :label="$t('execution.planName')" prop="name">
           <el-input v-model="editPlanForm.name" :placeholder="$t('execution.planNamePlaceholder')"></el-input>
         </el-form-item>

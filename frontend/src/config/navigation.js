@@ -149,8 +149,10 @@ export const NAVIGATION_MODULES = [
     children: [
       { title: '仪表盘', path: '/api-testing/dashboard', status: NAV_ENTRY_STATUS.KEEP },
       { title: '项目管理', path: '/api-testing/projects', status: NAV_ENTRY_STATUS.KEEP },
-      { title: '接口管理', path: '/api-testing/interfaces', status: NAV_ENTRY_STATUS.KEEP },
-      { title: '自动化测试', path: '/api-testing/automation', status: NAV_ENTRY_STATUS.KEEP },
+      { title: '接口测试用例', path: '/api-testing/test-cases', status: NAV_ENTRY_STATUS.KEEP },
+      { title: '接口管理', path: '/api-testing/interfaces', status: NAV_ENTRY_STATUS.HIDE, note: '旧入口兼容，正式入口改为接口测试用例。' },
+      { title: '测试套件', path: '/api-testing/test-suites', status: NAV_ENTRY_STATUS.KEEP },
+      { title: '测试套件旧入口', path: '/api-testing/automation', status: NAV_ENTRY_STATUS.HIDE, note: '旧入口兼容，访问后重定向到测试套件。' },
       { title: '请求历史', path: '/api-testing/history', status: NAV_ENTRY_STATUS.KEEP },
       { title: '环境管理', path: '/api-testing/environments', status: NAV_ENTRY_STATUS.KEEP }
     ]

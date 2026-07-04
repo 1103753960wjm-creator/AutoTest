@@ -186,8 +186,8 @@ const sidebarCollapsed = ref(false)
 const activeProductivityPanel = ref('')
 const mainContentRef = ref(null)
 const pendingNavigationPath = ref('')
+const pendingNavigationId = ref(0)
 const optimisticModuleKey = ref('')
-const queuedNavigationRequest = ref(null)
 const pageHeaderController = createPlatformPageHeaderController()
 
 providePlatformPageHeader(pageHeaderController)
@@ -341,17 +341,14 @@ const resolveNavigationRequest = (target, source = 'navigation') => {
 }
 
 const syncOptimisticModule = () => {
-  if (queuedNavigationRequest.value?.moduleKey) {
-    optimisticModuleKey.value = queuedNavigationRequest.value.moduleKey
-    return
-  }
-
   if (!pendingNavigationPath.value && optimisticModuleKey.value === getActualModuleKey()) {
     optimisticModuleKey.value = ''
   }
 }
 
 const runNavigationRequest = async (request) => {
+  const navigationId = pendingNavigationId.value + 1
+  pendingNavigationId.value = navigationId
   pendingNavigationPath.value = request.fullPath
 
   if (request.moduleKey) {
@@ -374,24 +371,11 @@ const runNavigationRequest = async (request) => {
       console.warn(`${request.source} navigation failed:`, error)
     }
   } finally {
-    if (pendingNavigationPath.value === request.fullPath) {
+    if (pendingNavigationId.value === navigationId && pendingNavigationPath.value === request.fullPath) {
       pendingNavigationPath.value = ''
     }
 
     syncOptimisticModule()
-  }
-}
-
-const flushQueuedNavigation = async () => {
-  while (queuedNavigationRequest.value) {
-    const nextRequest = queuedNavigationRequest.value
-    queuedNavigationRequest.value = null
-
-    if (nextRequest.fullPath !== route.fullPath) {
-      await runNavigationRequest(nextRequest)
-    } else {
-      syncOptimisticModule()
-    }
   }
 }
 
@@ -410,16 +394,7 @@ const navigateToLocation = async (target, source = 'navigation') => {
     return
   }
 
-  if (pendingNavigationPath.value) {
-    queuedNavigationRequest.value = request
-    if (request.moduleKey) {
-      optimisticModuleKey.value = request.moduleKey
-    }
-    return
-  }
-
   await runNavigationRequest(request)
-  await flushQueuedNavigation()
 }
 
 const handleHomeNavigate = () => {

@@ -7,7 +7,7 @@ export default {
     title: 'API Testing',
     projects: 'Project Management',
     interfaces: 'Interface Management',
-    automation: 'Automation Testing',
+    automation: 'Test Suites',
     history: 'Request History',
     environments: 'Environment Management',
     scheduledTasks: 'Scheduled Tasks',
@@ -66,7 +66,7 @@ export default {
       title: 'Quick Actions',
       projectManagement: 'Project Management',
       interfaceManagement: 'Interface Management',
-      automationTesting: 'Automation Testing',
+      automationTesting: 'Test Suites',
       requestHistory: 'Request History',
       environmentManagement: 'Environment Management',
       testReport: 'Test Reports'
@@ -77,8 +77,8 @@ export default {
         description: 'Supports HTTP/HTTPS protocols, quick import of Swagger/Postman data for unified API management.'
       },
       automationTesting: {
-        title: 'Automation Testing',
-        description: 'Visual test flow orchestration with assertions, variable extraction, pre/post scripts and more.'
+        title: 'Test Suites',
+        description: 'Organize API test cases, maintain suite-level configuration, and run suites.'
       },
       scheduledTask: {
         title: 'Scheduled Tasks',
@@ -275,9 +275,9 @@ export default {
     assertion: 'Assertion'
   },
 
-  // Automation Testing
+  // Test Suites
   automation: {
-    title: 'Automation Testing',
+    title: 'Test Suites',
     createSuite: 'Create Test Suite',
     createTestSuite: 'Create Test Suite',
     editTestSuite: 'Edit Test Suite',

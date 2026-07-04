@@ -171,8 +171,10 @@
 | --- | --- | --- | --- |
 | 接口自动化 | `/api-testing/dashboard` | 打开页面 | 仪表盘正常显示，不白屏。 |
 | 接口自动化 | `/api-testing/projects` | 打开页面 | 项目列表可见。 |
-| 接口自动化 | `/api-testing/interfaces` | 打开页面 | 接口管理主工作区正常显示。 |
-| 接口自动化 | `/api-testing/automation` | 打开页面 | 自动化测试页面正常显示。 |
+| 接口自动化 | `/api-testing/test-cases` | 打开页面 | 接口测试用例工作区正常显示。 |
+| 接口自动化 | `/api-testing/interfaces` | 打开页面 | 旧入口兼容跳转到 `/api-testing/test-cases`，不直接 404。 |
+| 接口自动化 | `/api-testing/test-suites` | 打开页面 | 测试套件页面正常显示。 |
+| 接口自动化 | `/api-testing/automation` | 打开页面 | 旧入口兼容跳转到 `/api-testing/test-suites`，不直接 404。 |
 | 接口自动化 | `/api-testing/history` | 打开页面 | 请求历史页面正常显示。 |
 | 接口自动化 | `/api-testing/environments` | 打开页面 | 环境管理列表或空态可见。 |
 | 接口自动化 | `/api-testing/reports` | 打开页面 | 测试报告页面可见。 |
@@ -265,7 +267,7 @@
   - `配置中心 -> Dify 配置`，最终停在 `/configuration/dify`
   - `App 自动化 -> 项目管理`，最终停在 `/app-automation/projects`
   - `Web 自动化 -> 测试用例`，最终停在 `/ui-automation/test-cases`
-  - `接口自动化 -> 接口管理`，最终停在 `/api-testing/interfaces`
+  - `接口自动化 -> 接口测试用例`，最终停在 `/api-testing/test-cases`
   - 验证过程中不应出现 `beforeunload`、`pagehide` 或新的主文档请求
 
 ## 8. 后续扩展建议

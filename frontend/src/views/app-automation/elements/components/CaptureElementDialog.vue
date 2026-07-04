@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <el-dialog
     v-model="dialogVisible"
     title="从设备截图创建元素"
@@ -31,7 +31,7 @@
             :style="selectionStyle"
             @mousedown.stop="handleSelectionMouseDown"
           >
-            <button class="selection-close" @click.stop="clearSelection">×</button>
+            <button type="button" class="selection-close" @click.stop="clearSelection">×</button>
             <div class="selection-info">{{ selectionInfo }}</div>
             <!-- 8个调整手柄 -->
             <span
@@ -50,7 +50,7 @@
 
       <!-- 右侧：配置表单 -->
       <div class="capture-right">
-        <el-form :model="formData" ref="formRef" label-width="110px" size="small">
+        <el-form @submit.prevent :model="formData" ref="formRef" label-width="110px" size="small">
           <!-- 设备选择和截图 -->
           <el-form-item label="选择设备">
             <el-select v-model="selectedDevice" placeholder="选择设备" style="width: 100%" :loading="devicesLoading">
@@ -209,7 +209,7 @@
     title="创建图片分类"
     width="400px"
   >
-    <el-form>
+    <el-form @submit.prevent>
       <el-form-item label="分类名称">
         <el-input 
           v-model="newCategoryName" 

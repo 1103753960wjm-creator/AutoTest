@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="interface-management">
     <div class="interface-layout">
       <!-- 左侧集合树 -->
@@ -168,6 +168,12 @@
 
       <!-- 右侧请求详情 -->
       <div class="main-content">
+        <div class="workspace-toolbar">
+          <el-button plain @click="backToCaseList">
+            返回用例列表
+          </el-button>
+        </div>
+
         <div v-if="!selectedRequest" class="empty-state">
           <el-empty :description="$t('apiTesting.interface.selectInterface')">
             <el-button type="primary" @click="createEmptyRequest">{{ $t('apiTesting.interface.createNewInterface') }}</el-button>
@@ -245,6 +251,20 @@
                 size="small"
                 class="name-input"
               />
+              <el-select
+                v-model="selectedRequest.collection"
+                placeholder="请选择所属集合"
+                size="small"
+                class="collection-select"
+                filterable
+              >
+                <el-option
+                  v-for="collection in flatCollections"
+                  :key="collection.id"
+                  :label="collection.name"
+                  :value="collection.id"
+                />
+              </el-select>
               <div class="action-buttons">
                 <el-button size="small" @click="saveRequest" :loading="saving" ref="saveButtonRef">
                   {{ $t('apiTesting.common.save') }}
@@ -808,7 +828,7 @@
 
     <!-- 创建集合对话框 -->
     <el-dialog v-model="showCreateCollectionDialog" :title="$t('apiTesting.interface.createCollection')" :close-on-click-modal="false" :close-on-press-escape="false" :modal="true" :destroy-on-close="false" width="500px">
-      <el-form ref="collectionFormRef" :model="collectionForm" :rules="collectionRules" label-width="100px">
+      <el-form @submit.prevent ref="collectionFormRef" :model="collectionForm" :rules="collectionRules" label-width="100px">
         <el-form-item :label="$t('apiTesting.interface.collectionName')" prop="name">
           <el-input v-model="collectionForm.name" :placeholder="$t('apiTesting.interface.inputCollectionName')" />
         </el-form-item>
@@ -835,7 +855,7 @@
 
     <!-- 编辑集合对话框 -->
     <el-dialog v-model="showEditCollectionDialog" :title="$t('apiTesting.interface.editCollection')" :close-on-click-modal="false" width="500px">
-      <el-form ref="editCollectionFormRef" :model="editCollectionForm" :rules="collectionRules" label-width="100px">
+      <el-form @submit.prevent ref="editCollectionFormRef" :model="editCollectionForm" :rules="collectionRules" label-width="100px">
         <el-form-item :label="$t('apiTesting.interface.collectionName')" prop="name">
           <el-input v-model="editCollectionForm.name" :placeholder="$t('apiTesting.interface.inputCollectionName')" />
         </el-form-item>
@@ -988,21 +1008,40 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Folder, Document, MagicStick, Search, Close } from '@element-plus/icons-vue'
-import api from '@/utils/api'
 import KeyValueEditor from './components/KeyValueEditor.vue'
 import DataFactorySelector from '@/components/DataFactorySelector.vue'
 import { RequestModelParser } from '@/utils/requestModel'
 import { getVariableFunctions } from '@/api/data-factory'
+import {
+  createApiCollection,
+  createApiTestCase,
+  deleteApiCollection,
+  deleteApiTestCase,
+  executeApiTestCase,
+  getApiCollections,
+  getApiProjects,
+  getApiTestCase,
+  getApiTestCases,
+  getEnvironments,
+  searchApiTestCases,
+  updateApiCollection,
+  updateApiTestCase
+} from '@/api/api-testing'
 import { CodeGenerator } from '@/utils/codeGenerator'
 import { debounce } from 'lodash-es'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
+defineOptions({
+  name: 'ApiTestCaseWorkspace'
+})
+
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 
 const treeRef = ref(null)
@@ -1057,6 +1096,7 @@ const currentAssertionIndex = ref(-1)
 const currentScriptField = ref('')
 const variableCategories = ref([])
 const loading = ref(false)
+let requestSelectSeq = 0
 
 // CURL导入相关
 const showCurlImportDialog = ref(false)
@@ -1125,14 +1165,31 @@ const onSearch = async (value) => {
   searchErrorMessage.value = ''
 
   try {
-    const response = await api.get('/api-testing/collections/search', {
-      params: {
-        project: selectedProject.value,
-        keyword
+    const keywordUpper = keyword.toUpperCase()
+    const params = availableMethods.includes(keywordUpper)
+      ? { project: selectedProject.value, method: keywordUpper }
+      : { project: selectedProject.value, search: keyword }
+    const response = await searchApiTestCases(params)
+    const requests = response.data.results || response.data || []
+    filteredCollections.value = requests.map((item) => {
+      const name = item.name || ''
+      const method = item.method || ''
+      const url = item.url || ''
+      let matchType = 'url'
+
+      if (name.toLowerCase().includes(keyword.toLowerCase())) {
+        matchType = 'name'
+      } else if (method.toLowerCase().includes(keyword.toLowerCase())) {
+        matchType = 'method'
+      }
+
+      return {
+        ...item,
+        type: 'request',
+        matchType,
+        url
       }
     })
-    // 后端可能返回分页格式 { results: [...] } 或直接返回数组
-    filteredCollections.value = response.data.results || response.data || []
     searchState.value = filteredCollections.value.length ? UI_PAGE_STATE.READY : UI_PAGE_STATE.SEARCH_EMPTY
   } catch (error) {
     filteredCollections.value = []
@@ -1143,12 +1200,20 @@ const onSearch = async (value) => {
   }
 }
 
-const selectSearchResult = (item) => {
-  selectedRequest.value = item
+const selectSearchResult = async (item) => {
   searchKeyword.value = ''
   filteredCollections.value = []
   searchState.value = UI_PAGE_STATE.READY
   searchErrorMessage.value = ''
+
+  await onNodeClick({
+    ...item,
+    type: 'request'
+  })
+}
+
+const backToCaseList = () => {
+  router.push('/api-testing/test-cases')
 }
 
 const onProjectChange = async (projectId) => {
@@ -1177,12 +1242,14 @@ const loadProjects = async () => {
   sidebarErrorMessage.value = ''
 
   try {
-    const response = await api.get('/api-testing/projects/')
+    const response = await getApiProjects()
     // 后端可能返回分页格式 { results: [...] } 或直接返回数组
     projects.value = response.data.results || response.data || []
 
     if (projects.value.length > 0) {
-      selectedProject.value = projects.value[0].id
+      const targetProjectId = route.query.projectId ? Number(route.query.projectId) : null
+      const hasTargetProject = targetProjectId && projects.value.some(project => project.id === targetProjectId)
+      selectedProject.value = hasTargetProject ? targetProjectId : projects.value[0].id
       await loadCollections(selectedProject.value)
       await loadEnvironments(selectedProject.value)
       return
@@ -1220,11 +1287,7 @@ const loadCollections = async (projectId) => {
   sidebarErrorMessage.value = ''
 
   try {
-    const response = await api.get('/api-testing/collections/', {
-      params: {
-        project: projectId
-      }
-    })
+    const response = await getApiCollections({ project: projectId })
     // 后端可能返回分页格式 { results: [...] } 或直接返回数组
     const collectionsData = response.data.results || response.data || []
 
@@ -1248,11 +1311,7 @@ const loadCollections = async (projectId) => {
 
 const loadEnvironments = async (projectId) => {
   try {
-    const response = await api.get('/api-testing/environments/', {
-      params: {
-        project: projectId
-      }
-    })
+    const response = await getEnvironments({ project: projectId })
     // 后端可能返回分页格式 { results: [...] } 或直接返回数组
     environments.value = response.data.results || response.data || []
   } catch (error) {
@@ -1308,7 +1367,7 @@ const loadRequests = async () => {
   if (!selectedProject.value) return
 
   try {
-    const response = await api.get('/api-testing/requests/')
+    const response = await getApiTestCases({ project: selectedProject.value })
     const requests = response.data.results || response.data || []
 
     // 清空所有集合的子节点（请求）
@@ -1341,10 +1400,62 @@ const loadRequests = async () => {
         })
       }
     })
+
+    await selectCaseFromRoute()
   } catch (error) {
     ElMessage.error('加载请求失败')
     console.error('加载请求失败:', error)
   }
+}
+
+const findRequestInTree = (items, requestId) => {
+  for (const item of items) {
+    if (item.type === 'request' && String(item.id) === String(requestId)) {
+      return item
+    }
+
+    if (item.children?.length) {
+      const found = findRequestInTree(item.children, requestId)
+      if (found) return found
+    }
+  }
+
+  return null
+}
+
+const selectCaseFromRoute = async () => {
+  const caseId = route.query.caseId
+  if (!caseId) return
+
+  if (selectedRequest.value?.id && String(selectedRequest.value.id) === String(caseId)) return
+
+  const targetNode = findRequestInTree(collections.value, caseId)
+  if (!targetNode) {
+    await onNodeClick({
+      id: caseId,
+      type: 'request'
+    })
+    return
+  }
+
+  await onNodeClick(targetNode)
+  await nextTick()
+  treeRef.value?.setCurrentKey?.(targetNode.id)
+}
+
+const syncRouteCaseSelection = async () => {
+  const targetProjectId = route.query.projectId ? Number(route.query.projectId) : null
+
+  if (targetProjectId && targetProjectId !== selectedProject.value) {
+    const projectExists = projects.value.some(project => project.id === targetProjectId)
+    if (projectExists) {
+      selectedProject.value = targetProjectId
+      await onProjectChange(targetProjectId)
+      return
+    }
+  }
+
+  await selectCaseFromRoute()
 }
 
 const flattenCollections = (items, parent = null) => {
@@ -1362,8 +1473,11 @@ const flattenCollections = (items, parent = null) => {
 
 const onNodeClick = async (data) => {
   if (data.type === 'request') {
+    const selectSeq = ++requestSelectSeq
     try {
-      const apiResponse = await api.get(`/api-testing/requests/${data.id}/`)
+      const apiResponse = await getApiTestCase(data.id)
+      if (selectSeq !== requestSelectSeq) return
+
       const requestData = apiResponse.data
 
       // 初始化currentHeaders
@@ -1433,6 +1547,8 @@ const onNodeClick = async (data) => {
       response.value = null
       selectedRequest.value = requestData
     } catch (error) {
+      if (selectSeq !== requestSelectSeq) return
+
       ElMessage.error('加载请求失败')
       console.error('加载请求失败:', error)
     }
@@ -1458,6 +1574,11 @@ const onNodeCollapse = (node) => {
 const createEmptyRequest = () => {
   if (!selectedProject.value) {
     ElMessage.warning('请先选择项目')
+    return
+  }
+
+  if (flatCollections.value.length === 0) {
+    ElMessage.warning('请先创建集合，再新建接口测试用例')
     return
   }
 
@@ -1582,21 +1703,24 @@ const deleteNode = () => {
   }
 
   const nodeName = node.name
+  const confirmMessage = node.type === 'collection'
+    ? `确认删除集合「${nodeName}」？删除后会同时影响该集合下的子集合和接口测试用例，此操作不可恢复。`
+    : `确认删除接口测试用例「${nodeName}」？如果该用例已加入测试套件，删除会影响套件执行，此操作不可恢复。`
 
   ElMessageBox.confirm(
-    `确定要删除${node.type === 'collection' ? '集合' : '接口'}「${nodeName}」吗？`,
+    confirmMessage,
     '确认删除',
     {
-      confirmButtonText: '确定',
+      confirmButtonText: '确认删除',
       cancelButtonText: '取消',
       type: 'warning'
     }
   ).then(async () => {
     try {
       if (node.type === 'collection') {
-        await api.delete(`/api-testing/collections/${node.id}/`)
+        await deleteApiCollection(node.id)
       } else {
-        await api.delete(`/api-testing/requests/${node.id}/`)
+        await deleteApiTestCase(node.id)
       }
       ElMessage.success('删除成功')
       await loadCollections(selectedProject.value)
@@ -1618,7 +1742,7 @@ const saveCollectionName = async () => {
   }
 
   try {
-    await api.put(`/api-testing/collections/${editingNodeId.value}/`, {
+    await updateApiCollection(editingNodeId.value, {
       name: editingNodeName.value.trim()
     })
     ElMessage.success('保存成功')
@@ -1772,6 +1896,11 @@ const sendRequest = async () => {
     return
   }
 
+  if (!selectedRequest.value.id) {
+    ElMessage.warning('请先保存接口测试用例后再执行')
+    return
+  }
+
   try {
     sending.value = true
 
@@ -1825,6 +1954,7 @@ const sendRequest = async () => {
       method: selectedRequest.value.method,
       params: convertKeyValueArrayToObject(selectedRequest.value.params || []),
       headers: selectedRequest.value.headers,
+      assertions: selectedRequest.value.assertions || [],
       environment_id: selectedEnvironment.value
     }
     
@@ -1833,7 +1963,7 @@ const sendRequest = async () => {
       requestData.body = bodyData
     }
 
-    const apiResponse = await api.post(`/api-testing/requests/${selectedRequest.value.id}/execute/`, requestData)
+    const apiResponse = await executeApiTestCase(selectedRequest.value.id, requestData)
     response.value = apiResponse.data
 
     ElMessage.success('请求成功')
@@ -1855,6 +1985,11 @@ const onHeadersUpdate = (headers) => {
 const saveRequest = async () => {
   if (!selectedRequest.value || !selectedRequest.value.url) {
     ElMessage.warning('请填写请求URL')
+    return
+  }
+
+  if (!selectedRequest.value.collection) {
+    ElMessage.warning('请选择所属集合')
     return
   }
 
@@ -1935,9 +2070,9 @@ const saveRequest = async () => {
 
     let response
     if (selectedRequest.value.id) {
-      response = await api.put(`/api-testing/requests/${selectedRequest.value.id}/`, requestData)
+      response = await updateApiTestCase(selectedRequest.value.id, requestData)
     } else {
-      response = await api.post('/api-testing/requests/', requestData)
+      response = await createApiTestCase(requestData)
     }
 
     selectedRequest.value = response.data
@@ -2110,7 +2245,7 @@ const createCollection = async () => {
   }
 
   try {
-    const response = await api.post('/api-testing/collections/', {
+    const response = await createApiCollection({
       ...collectionForm,
       project: selectedProject.value
     })
@@ -2133,7 +2268,7 @@ const updateCollection = async () => {
   }
 
   try {
-    await api.put(`/api-testing/collections/${editCollectionForm.id}/`, editCollectionForm)
+    await updateApiCollection(editCollectionForm.id, editCollectionForm)
     ElMessage.success('更新成功')
     await loadCollections(selectedProject.value)
     showEditCollectionDialog.value = false
@@ -2755,6 +2890,14 @@ onMounted(async () => {
   document.addEventListener('contextmenu', handleGlobalClick)
 })
 
+watch(
+  () => [route.query.caseId, route.query.projectId],
+  async ([caseId]) => {
+    if (!caseId || projects.value.length === 0) return
+    await syncRouteCaseSelection()
+  }
+)
+
 onBeforeUnmount(() => {
   // 移除全局点击事件监听器
   document.removeEventListener('click', handleGlobalClick)
@@ -3021,6 +3164,14 @@ const useLocalVariableCategories = () => {
   flex-direction: column;
   overflow: auto;
   background: #f8f9fa;
+}
+
+.workspace-toolbar {
+  padding: 12px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  align-items: center;
 }
 
 .empty-state {

@@ -92,6 +92,13 @@ class ApiCollectionSerializer(serializers.ModelSerializer):
 
 class ApiRequestSerializer(serializers.ModelSerializer):
     created_by = UserSerializer(read_only=True)
+    collection_name = serializers.SerializerMethodField()
+    project_id = serializers.SerializerMethodField()
+    project_name = serializers.SerializerMethodField()
+    source_label = serializers.SerializerMethodField()
+    latest_execution_status = serializers.SerializerMethodField()
+    latest_execution_status_code = serializers.SerializerMethodField()
+    latest_executed_at = serializers.SerializerMethodField()
     collection = serializers.PrimaryKeyRelatedField(
         queryset=ApiCollection.objects.all(),
         required=False,
@@ -104,9 +111,51 @@ class ApiRequestSerializer(serializers.ModelSerializer):
             'id', 'name', 'description', 'request_type', 'method', 'url',
             'headers', 'params', 'body', 'auth', 'pre_request_script',
             'post_request_script', 'assertions', 'collection', 'order', 'created_by',
-            'created_at', 'updated_at'
+            'collection_name', 'project_id', 'project_name', 'source_label',
+            'latest_execution_status', 'latest_execution_status_code',
+            'latest_executed_at', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+
+    def get_collection_name(self, obj):
+        return obj.collection.name if obj.collection else '未分组'
+
+    def get_project_id(self, obj):
+        return obj.collection.project_id if obj.collection else None
+
+    def get_project_name(self, obj):
+        return obj.collection.project.name if obj.collection and obj.collection.project else '未归属项目'
+
+    def get_source_label(self, obj):
+        source_metadata = getattr(obj, 'source_metadata', None)
+        if isinstance(source_metadata, dict):
+            source_type = source_metadata.get('source_type')
+            if source_type == 'ai':
+                return 'AI 生成'
+            if source_type == 'import':
+                return '导入'
+            if source_type == 'manual':
+                return '手工创建'
+        return '来源未记录'
+
+    def get_latest_execution_status_code(self, obj):
+        return getattr(obj, 'latest_status_code', None)
+
+    def get_latest_executed_at(self, obj):
+        value = getattr(obj, 'latest_executed_at', None)
+        return value
+
+    def get_latest_execution_status(self, obj):
+        status_code = getattr(obj, 'latest_status_code', None)
+        error_message = getattr(obj, 'latest_error_message', None)
+
+        if status_code is None and error_message is None:
+            return '未执行'
+        if error_message:
+            return '失败'
+        if 200 <= int(status_code) < 400:
+            return '通过'
+        return '失败'
 
     def create(self, validated_data):
         validated_data['created_by'] = self.context['request'].user

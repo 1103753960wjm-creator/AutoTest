@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="notification-logs">
     <!-- 搜索栏 -->
     <div class="filters">
@@ -93,7 +93,7 @@
 
     <!-- 详情弹窗 -->
     <el-dialog v-model="detailVisible" title="通知详情" width="600px">
-      <el-form v-if="selectedLog" label-position="top">
+      <el-form @submit.prevent v-if="selectedLog" label-position="top">
         <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="任务名称"><span>{{ selectedLog.task_name }}</span></el-form-item>

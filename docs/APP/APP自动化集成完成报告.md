@@ -461,7 +461,7 @@ curl http://localhost:8000/api/app-automation/dashboard/statistics/ \
 ## 📚 相关文档
 
 1. **模块文档**: `apps/app_automation/README.md`
-2. **集成说明**: `docs/APP自动化集成说明.md`
+2. **集成说明**: `docs/APP/APP自动化集成说明.md`
 3. **主项目 README**: `README.md`（已更新）
 
 ---
@@ -639,7 +639,7 @@ test_case = AppTestCase.objects.create(
 ## 📞 技术支持
 
 - **模块文档**: `apps/app_automation/README.md`
-- **集成说明**: `docs/APP自动化集成说明.md`
+- **集成说明**: `docs/APP/APP自动化集成说明.md`
 - **Airtest 文档**: https://airtest.doc.io.netease.com/
 
 ---

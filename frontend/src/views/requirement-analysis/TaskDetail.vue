@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="task-detail">
     <div class="task-object-strip">
       <div class="task-object-card">
@@ -61,7 +61,7 @@
         <span class="task-context-card__label">AI 自动评审</span>
         <strong class="task-context-card__value">{{ autoReviewSummary.label }}</strong>
         <span class="task-context-card__desc">{{ autoReviewSummary.detail }}</span>
-        <button
+        <button type="button"
           v-if="autoReviewSummary.has_record"
           class="asset-btn"
           @click="goToAutoReviews">
@@ -160,8 +160,8 @@
             </div>
             <div class="body-cell">
               <div class="action-buttons">
-                <button class="view-btn" @click="viewCaseDetail(testCase, index)">{{ $t('taskDetail.viewDetail') }}</button>
-                <button
+                <button type="button" class="view-btn" @click="viewCaseDetail(testCase, index)">{{ $t('taskDetail.viewDetail') }}</button>
+                <button type="button"
                   v-if="testCase.result_status === 'adopted' && testCase.adopted_testcase_id"
                   class="asset-btn"
                   @click="goToAdoptedAsset(testCase)">
@@ -193,9 +193,9 @@
             </select>
           </div>
           <div class="pagination-buttons">
-            <button :disabled="currentPage <= 1" @click="currentPage--">{{ $t('taskDetail.previousPage') }}</button>
+            <button type="button" :disabled="currentPage <= 1" @click="currentPage--">{{ $t('taskDetail.previousPage') }}</button>
             <span class="current-page">{{ $t('taskDetail.currentPageInfo', { current: currentPage, total: totalPages }) }}</span>
-            <button :disabled="currentPage >= totalPages" @click="currentPage++">{{ $t('taskDetail.nextPage') }}</button>
+            <button type="button" :disabled="currentPage >= totalPages" @click="currentPage++">{{ $t('taskDetail.nextPage') }}</button>
           </div>
         </div>
       </div>
@@ -206,7 +206,7 @@
       <div class="modal-content" @click.stop>
         <div class="modal-header">
           <h3>{{ $t('taskDetail.modalViewTitle') }}</h3>
-          <button class="close-btn" @click="closeCaseDetail">×</button>
+          <button type="button" class="close-btn" @click="closeCaseDetail">×</button>
         </div>
 
         <div class="modal-body">
@@ -242,16 +242,16 @@
 
         <!-- 底部操作栏 -->
         <div class="modal-footer">
-          <button
+          <button type="button"
             v-if="selectedCase.result_status === 'adopted' && selectedCase.adopted_testcase_id"
             class="action-btn edit-btn"
             @click="goToAdoptedAsset(selectedCase)">
             查看正式资产
           </button>
-          <button class="action-btn save-btn" @click="goToGeneratedResults">
+          <button type="button" class="action-btn save-btn" @click="goToGeneratedResults">
             前往结果批次页
           </button>
-          <button class="action-btn close-btn-footer" @click="closeCaseDetail">{{ $t('taskDetail.btnClose') }}</button>
+          <button type="button" class="action-btn close-btn-footer" @click="closeCaseDetail">{{ $t('taskDetail.btnClose') }}</button>
         </div>
       </div>
     </div>

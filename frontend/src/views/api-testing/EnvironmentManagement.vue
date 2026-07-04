@@ -135,7 +135,7 @@
       :close-on-click-modal="false"
       @close="resetForm"
     >
-      <el-form
+      <el-form @submit.prevent
         ref="formRef"
         :model="form"
         :rules="rules"
@@ -246,8 +246,14 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
 import { Plus, Delete } from '@element-plus/icons-vue'
-import api from '@/utils/api'
-import { getApiProjects, getEnvironments } from '@/api/api-testing'
+import {
+  activateEnvironment as activateEnvironmentApi,
+  createEnvironment,
+  deleteEnvironment as deleteEnvironmentApi,
+  getApiProjects,
+  getEnvironments,
+  updateEnvironment
+} from '@/api/api-testing'
 import EnvironmentTable from './components/EnvironmentTable.vue'
 import { ListShell } from '@/components/page-shells'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
@@ -545,16 +551,16 @@ const reloadCurrentTab = async () => {
 const deleteEnvironment = async (environment) => {
   try {
     await ElMessageBox.confirm(
-      t('apiTesting.environment.confirmDeleteEnv', { name: environment.name }),
+      `确认删除环境「${environment.name}」？删除后会影响使用该环境的测试套件、定时任务或执行配置，此操作不可恢复。`,
       t('apiTesting.messages.confirm.deleteTitle'),
       {
-        confirmButtonText: t('apiTesting.common.confirm'),
+        confirmButtonText: '确认删除',
         cancelButtonText: t('apiTesting.common.cancel'),
         type: 'warning'
       }
     )
 
-    await api.delete(`/api-testing/environments/${environment.id}/`)
+    await deleteEnvironmentApi(environment.id)
     ElMessage.success(t('apiTesting.messages.success.delete'))
     await reloadCurrentTab()
   } catch (error) {
@@ -566,7 +572,7 @@ const deleteEnvironment = async (environment) => {
 
 const activateEnvironment = async (environment) => {
   try {
-    await api.post(`/api-testing/environments/${environment.id}/activate/`)
+    await activateEnvironmentApi(environment.id)
     ElMessage.success(t('apiTesting.messages.success.environmentActivated'))
     await reloadCurrentTab()
   } catch (error) {
@@ -585,7 +591,7 @@ const duplicateEnvironment = async (environment) => {
   }
 
   try {
-    await api.post('/api-testing/environments/', newEnv)
+    await createEnvironment(newEnv)
     ElMessage.success(t('apiTesting.messages.success.copy'))
     if (environment.scope === 'GLOBAL') {
       globalCurrentPage.value = 1
@@ -624,10 +630,10 @@ const submitForm = async () => {
     }
 
     if (editingEnvironment.value) {
-      await api.put(`/api-testing/environments/${editingEnvironment.value.id}/`, data)
+      await updateEnvironment(editingEnvironment.value.id, data)
       ElMessage.success(t('apiTesting.messages.success.environmentUpdated'))
     } else {
-      await api.post('/api-testing/environments/', data)
+      await createEnvironment(data)
       ElMessage.success(t('apiTesting.messages.success.environmentCreated'))
       if (data.scope === 'GLOBAL') {
         globalCurrentPage.value = 1

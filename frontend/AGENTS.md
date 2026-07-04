@@ -29,15 +29,28 @@
 - 登录后的业务页面在 `frontend/src/App.vue` 根层必须共用稳定 `layout:authenticated`，禁止按业务模块、物理顶层路由、`fullPath` 或 `params` 销毁整套平台壳
 - `frontend/src/layout/index.vue` 内容层 `router-view` key 必须保持 `currentRoute.name || currentRoute.path`，并与 `<keep-alive :include="cachedViews">` 的路由名称维度一致
 - 顶部模块、侧边栏、全局搜索、最近访问、收藏和用户资料入口必须统一走 Layout 导航调度器，不能分散直接 `router.push`
+- 拆分或新增用户可见子模块时，必须同步 `frontend/src/config/navigation.js`、`frontend/src/router/index.js`、route meta、Dashboard 快捷入口、i18n 文案和相关文档；旧入口只能作为 `hidden + redirect + activeMenu` 兼容保留，不能继续作为可见入口。
 - 页面必须遵守“前端样式 UI 一致化”规则：任何模块新增或改造搜索筛选组件时，必须与 `ProjectManagement.vue` 的搜索框、查询/重置按钮在排版、位置、间距（如 `el-row :gutter=16`，底部 margin 等）上保持绝对一致，不得随意引入 ad-hoc 的自定义摆放样式。
 
-## 6. 认证与导出
+## 6. 表单与默认行为
+
+- SPA 页面中的 `<form>` 与 Element Plus `<el-form>` 必须显式添加 `@submit.prevent`，禁止依赖浏览器默认提交行为。
+- 原生 `<button>` 必须显式声明 `type="button"`；只有明确设计为表单提交按钮时才允许 `type="submit"`，并且必须有清晰的提交处理链路。
+- 禁止用 Enter 键触发浏览器默认提交、当前 URL 重新请求或整页刷新来兜底业务动作。
+
+## 7. 认证与导出
 
 - 认证失效、退出登录、refresh token 失败回登录必须走 `frontend/src/utils/authNavigation.js`
 - 禁止在 store、api 拦截器或页面中散写 `window.location.href`、`window.location.assign`、`location.reload` 作为登录跳转或导航兜底
 - Excel 导出统一走 `frontend/src/utils/excelExport.js`，禁止新增 `xlsx` 依赖或在页面模板中直接引入 `XLSX`
 
-## 7. 最低验证要求
+## 8. 服务式组件样式
+
+- 直接调用 Element Plus 服务式 API（如 `ElMessage`、`ElMessageBox`、`ElNotification`、`ElLoading`）时，必须确认对应样式已在 `frontend/src/main.js` 或统一样式入口引入。
+- 当前已显式引入 `loading`、`message`、`message-box` 样式；后续新增其他服务式 API 时必须同步补对应 `element-plus/es/components/*/style/css`。
+- 禁止在单个业务页面通过手写 `.el-message-box` 等覆盖样式来替代官方服务组件样式入口。
+
+## 9. 最低验证要求
 
 - 至少完成构建级、类型级或页面级验证中的一种
 - 影响列表、详情、编辑、结果页主链路时，至少核对主流程与一个异常流程

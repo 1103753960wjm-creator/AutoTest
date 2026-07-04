@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page-container">
     <div class="page-header">
       <h1 class="page-title">{{ isEdit ? $t('reviewForm.editTitle') : $t('reviewForm.createTitle') }}</h1>
@@ -9,7 +9,7 @@
     </div>
 
     <div class="form-container">
-      <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+      <el-form @submit.prevent :model="form" :rules="rules" ref="formRef" label-width="120px">
         <el-row :gutter="24">
           <el-col :span="12">
             <el-form-item :label="$t('reviewForm.reviewTitle')" prop="title">

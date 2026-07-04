@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="prompt-config">
     <div class="config-source-strip">
       <div class="config-source-card">
@@ -29,10 +29,10 @@
         <div class="section-header">
           <h2>{{ $t('promptConfig.configListTitle') }}</h2>
           <div class="header-actions">
-            <button class="load-defaults-btn" @click="loadDefaultPrompts">
+            <button type="button" class="load-defaults-btn" @click="loadDefaultPrompts">
               {{ $t('promptConfig.loadDefaults') }}
             </button>
-            <button class="add-config-btn" @click="openAddModal">
+            <button type="button" class="add-config-btn" @click="openAddModal">
               {{ $t('promptConfig.addConfig') }}
             </button>
           </div>
@@ -53,9 +53,9 @@
                 </div>
               </div>
               <div class="config-actions">
-                <button class="preview-btn" @click="previewPrompt(config)">{{ $t('promptConfig.preview') }}</button>
-                <button class="edit-btn" @click="editConfig(config)">{{ $t('promptConfig.edit') }}</button>
-                <button class="delete-btn" @click="deleteConfig(config.id)">{{ $t('promptConfig.delete') }}</button>
+                <button type="button" class="preview-btn" @click="previewPrompt(config)">{{ $t('promptConfig.preview') }}</button>
+                <button type="button" class="edit-btn" @click="editConfig(config)">{{ $t('promptConfig.edit') }}</button>
+                <button type="button" class="delete-btn" @click="deleteConfig(config.id)">{{ $t('promptConfig.delete') }}</button>
               </div>
             </div>
 
@@ -89,10 +89,10 @@
           <h3>{{ $t('promptConfig.noConfigs') }}</h3>
           <p>{{ $t('promptConfig.emptyHint') }}</p>
           <div class="empty-actions">
-            <button class="add-first-config-btn" @click="openAddModal">
+            <button type="button" class="add-first-config-btn" @click="openAddModal">
               {{ $t('promptConfig.addFirstConfig') }}
             </button>
-            <button class="load-defaults-first-btn" @click="loadDefaultPrompts">
+            <button type="button" class="load-defaults-first-btn" @click="loadDefaultPrompts">
               {{ $t('promptConfig.loadDefaults') }}
             </button>
           </div>
@@ -105,7 +105,7 @@
       <div class="modal-content large" @click.stop>
         <div class="modal-header">
           <h3>{{ isEditing ? $t('promptConfig.editConfig') : $t('promptConfig.addConfig') }}</h3>
-          <button class="close-btn" @click="closeModals">×</button>
+          <button type="button" class="close-btn" @click="closeModals">×</button>
         </div>
         <div class="modal-body">
           <form @submit.prevent="saveConfig">
@@ -183,7 +183,7 @@
       <div class="modal-content large" @click.stop>
         <div class="modal-header">
           <h3>{{ $t('promptConfig.previewTitle', { name: previewConfig.name }) }}</h3>
-          <button class="close-btn" @click="closePreview">×</button>
+          <button type="button" class="close-btn" @click="closePreview">×</button>
         </div>
         <div class="modal-body">
           <div class="preview-content">
@@ -215,18 +215,18 @@
       <div class="modal-content large" @click.stop>
         <div class="modal-header">
           <h3>{{ $t('promptConfig.defaultPromptsPreview') }}</h3>
-          <button class="close-btn" @click="closeDefaultsModal">×</button>
+          <button type="button" class="close-btn" @click="closeDefaultsModal">×</button>
         </div>
         <div class="modal-body">
           <div class="defaults-content">
             <div class="tabs">
-              <button
+              <button type="button"
                 class="tab-btn"
                 :class="{ active: activeTab === 'writer' }"
                 @click="activeTab = 'writer'">
                 {{ $t('promptConfig.writerTab') }}
               </button>
-              <button
+              <button type="button"
                 class="tab-btn"
                 :class="{ active: activeTab === 'reviewer' }"
                 @click="activeTab = 'reviewer'">
@@ -242,8 +242,8 @@
           </div>
 
           <div class="modal-actions">
-            <button class="cancel-btn" @click="closeDefaultsModal">{{ $t('promptConfig.cancel') }}</button>
-            <button
+            <button type="button" class="cancel-btn" @click="closeDefaultsModal">{{ $t('promptConfig.cancel') }}</button>
+            <button type="button"
               class="confirm-btn"
               @click="confirmLoadDefaults"
               :disabled="isLoadingDefaults">

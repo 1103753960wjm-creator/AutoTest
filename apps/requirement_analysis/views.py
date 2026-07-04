@@ -9,7 +9,6 @@ from django.conf import settings  # Added import
 from rest_framework.decorators import action, permission_classes
 from rest_framework.response import Response
 from rest_framework.renderers import BaseRenderer
-from rest_framework.permissions import AllowAny
 
 
 class PassThroughRenderer(BaseRenderer):
@@ -24,8 +23,7 @@ class PassThroughRenderer(BaseRenderer):
 
 
 from rest_framework.parsers import MultiPartParser, FormParser
-from django.http import JsonResponse, StreamingHttpResponse
-from django.views.decorators.csrf import csrf_exempt
+from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from asgiref.sync import sync_to_async
@@ -636,14 +634,10 @@ class AnalysisTaskViewSet(viewsets.ReadOnlyModelViewSet):
         })
 
 
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from django.views.decorators.csrf import csrf_exempt
+from rest_framework.decorators import api_view
 
 
-@csrf_exempt
 @api_view(['POST'])
-@permission_classes([AllowAny])
 def upload_and_analyze(request):
     """上传文档并立即开始分析"""
     try:
@@ -735,9 +729,7 @@ def upload_and_analyze(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@csrf_exempt
 @api_view(['POST'])
-@permission_classes([AllowAny])
 def analyze_text(request):
     """直接分析文本内容"""
     try:
@@ -753,7 +745,7 @@ def analyze_text(request):
             title=title,
             document_type='txt',
             status='analyzing',
-            uploaded_by_id=1,  # 使用默认用户ID，或者从request.user获取
+            uploaded_by=request.user,
             project_id=project_id if project_id else None,
             extracted_text=description
         )
@@ -829,9 +821,7 @@ def analyze_text(request):
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@csrf_exempt
 @api_view(['POST'])
-@permission_classes([AllowAny])
 def analyze_text(request):
     """分析手动输入的需求文本"""
     try:
@@ -848,7 +838,7 @@ def analyze_text(request):
             file=None,  # 手动输入没有文件
             document_type='txt',
             status='analyzing',
-            uploaded_by_id=1,  # 使用默认用户ID，或者从request.user获取
+            uploaded_by=request.user,
             project_id=project_id if project_id else None,
             extracted_text=description
         )
@@ -1134,9 +1124,9 @@ class PromptConfigViewSet(viewsets.ModelViewSet):
         """加载默认提示词"""
         try:
             # 读取用例编写提示词
-            writer_prompt_path = os.path.join(settings.BASE_DIR, 'docs/tester.md')
+            writer_prompt_path = os.path.join(settings.BASE_DIR, 'docs/guides/tester.md')
             # 读取用例评审提示词
-            reviewer_prompt_path = os.path.join(settings.BASE_DIR, 'docs/tester_pro.md')
+            reviewer_prompt_path = os.path.join(settings.BASE_DIR, 'docs/guides/tester_pro.md')
 
             defaults = {}
 
@@ -1346,6 +1336,17 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
             'writer_prompt_config',
             'reviewer_prompt_config',
         ).prefetch_related('auto_review_records')
+
+        user = getattr(self.request, 'user', None)
+        if not user or not user.is_authenticated:
+            return queryset.none()
+
+        if not getattr(user, 'is_staff', False) and not getattr(user, 'is_superuser', False):
+            queryset = queryset.filter(
+                models.Q(created_by=user) |
+                models.Q(project__owner=user) |
+                models.Q(project__members=user)
+            ).distinct()
 
         # 安全检查：确保request有query_params属性
         if not hasattr(self.request, 'query_params'):
@@ -2069,6 +2070,10 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
             })
             return Response(serializer_data, status=status.HTTP_200_OK)
 
+        except Http404:
+            if TestCaseGenerationTask.objects.filter(task_id=task_id).exists():
+                return Response({'error': '无权访问该任务'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': '任务未找到'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             logger.error(f"获取任务进度时出错: {e}")
             return Response(
@@ -2081,7 +2086,6 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
         methods=['get'],
         url_path='stream_progress',
         renderer_classes=[PassThroughRenderer],
-        permission_classes=[]  # 允许访问，task_id本身就是安全标识
     )
     def stream_progress_sse(self, request, task_id=None):
         """
@@ -2131,15 +2135,19 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                 response['Access-Control-Max-Age'] = '86400'
                 return response
 
-            # 获取任务对象
-            task = TestCaseGenerationTask.objects.filter(task_id=task_id).first()
-            if not task:
-                logger.warning(f"SSE连接失败: 任务未找到, task_id={task_id}")
+            # 通过 get_object 复用登录态和项目/创建者权限过滤，避免仅凭 task_id 访问进度。
+            try:
+                task = self.get_object()
+            except Http404:
+                task_exists = TestCaseGenerationTask.objects.filter(task_id=task_id).exists()
+                status_code = 403 if task_exists else 404
+                error_message = '无权访问该任务' if task_exists else '任务未找到'
+                logger.warning(f"SSE连接失败: {error_message}, task_id={task_id}")
                 # 返回JSON错误而不是SSE
                 from django.http import HttpResponse
                 response = HttpResponse(
-                    json.dumps({'error': '任务未找到'}),
-                    status=404,
+                    json.dumps({'error': error_message}),
+                    status=status_code,
                     content_type='application/json'
                 )
                 response['Access-Control-Allow-Origin'] = cors_origin
@@ -3561,7 +3569,6 @@ class TaskAutoReviewRecordViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ConfigStatusViewSet(viewsets.ViewSet):
     """配置状态检查视图集"""
-    permission_classes = []  # 允许未认证用户访问
 
     @action(detail=False, methods=['get'])
     def check(self, request):

@@ -1,4 +1,4 @@
-# TestHub Agent 入口规则
+#TestHub Agent 入口规则
 
 ## 1. 文件职责
 
@@ -7,6 +7,7 @@
 - 说明读取顺序
 - 说明规则优先级
 - 说明默认流程闸门
+- 说明受控自治与 Loop 规则入口
 - 说明全仓硬红线
 - 提供常用验证命令入口
 - 指引进入子目录后继续读取最近的 `AGENTS.md`
@@ -20,15 +21,28 @@
 1. `C:\Users\Administrator\.gemini\GEMINI.md`
 2. 当前仓库 `.cursor/prompt.md`
 3. 当前仓库 `.cursor/workflow_rules.md`
-4. 当前仓库 `.cursor/architecture.md`
-5. 当前仓库 `.cursor/storage_rules.md`
-6. 当前仓库 `.cursor/project_rules.md`
-7. `docs/project-memory/current_phase.md`（如存在）
-8. `docs/project-memory/decision_log.md`（如存在，用于查看已冻结决策）
-9. `docs/project-memory/module_memory.md`（如存在，用于查看模块局部记忆）
-10. `docs/project-memory/task_handoff.md`（如存在，用于查看最近任务交接）
-11. `docs/project-memory/error_prevention_log.md`（如存在，用于查看已沉淀的错误模式与防复发规则）
-12. `docs/project-memory/dialogue_bootstrap.md`（如存在，仅用于快速进入上下文）
+4. 当前仓库 `.cursor/autonomy_rules.md`
+5. 当前仓库 `.cursor/loop_rules.md`
+6. 当前仓库 `.cursor/architecture.md`
+7. 当前仓库 `.cursor/storage_rules.md`
+8. 当前仓库 `.cursor/project_rules.md`
+9. `docs/project-memory/development_checklist.md`（如存在，用于开发前短清单）
+10. `docs/task-templates/README.md`（如存在，用于查看任务文档模板规则）
+11. `docs/project-memory/error_event_log.md`（如存在，用于查看最近错误事件现场记录）
+12. `docs/project-memory/error_prevention_log.md`（如存在，用于查看已沉淀的错误模式与防复发规则）
+13. `docs/project-memory/current_phase.md`（如存在）
+14. `docs/project-memory/decision_log.md`（如存在，用于查看已冻结决策）
+15. `docs/project-memory/module_memory.md`（如存在，用于查看模块局部记忆）
+16. `docs/project-memory/task_handoff.md`（如存在，用于查看最近任务交接）
+17. `docs/project-memory/loop_run_log.md`（如存在，用于查看受控 Loop 执行记录）
+18. `docs/project-memory/dialogue_bootstrap.md`（如存在，仅用于快速进入上下文）
+
+读取硬规则：
+
+- 读取中文规则、文档、日志和源码时，必须显式使用 UTF-8 或确认工具默认按 UTF-8 处理
+- 用户是中国国内的软件测试工程师，所有需求确认、`Spec/SDD`、`TDD`、`VDD` 和交付说明必须使用中文大白话、细颗粒度表达
+- 技术名词、接口名、字段名、路径和库名可以保留英文原文，但必须补充业务含义或测试视角解释
+- 非“小修小改”任务的 `Spec/SDD`、`TDD`、`VDD` 必须按 `docs/task-templates/` 模板编写，并默认落盘到 `docs/tasks/YYYY-MM-DD-任务名/`
 
 ## 3. 项目基线
 
@@ -67,9 +81,24 @@
 开始正式修改前，必须明确：
 
 - 当前生效规则
+- 本轮自治等级 L0-L4
+- 是否允许进入受控 Loop
 - 范围边界
 - 验收标准
 - 验证目标与失败场景
+
+受控自治与 Loop 闸门：
+
+- 未判断自治等级前，不得进入实现
+- L0 / L4 场景只能审计、解释、提方案和等待用户确认，不能直接实现
+- L3 受控 Loop 必须先写清 Loop 合同，并在 `docs/project-memory/loop_run_log.md` 记录执行过程
+- AI 可以决定已确认范围内的实现细节，不能替用户决定范围扩大、契约变化、风险接受或验证降级
+
+错误记录闸门：
+
+- 进入任何开发任务前，必须先读取 `docs/project-memory/error_event_log.md` 与 `docs/project-memory/error_prevention_log.md`
+- 开发中遇到命令失败、构建失败、接口异常、页面报错、控制台红错、验证失败、环境阻塞或规则执行偏差时，必须第一时间写入 `docs/project-memory/error_event_log.md`
+- 任务收尾时必须判断本轮错误事件是否需要升级沉淀到 `docs/project-memory/error_prevention_log.md`
 
 ## 5. 全仓硬红线
 
@@ -108,6 +137,9 @@
 - 已确认的关键取舍、冻结口径、不可回退决策：更新 `docs/project-memory/decision_log.md`
 - 模块级边界、局部风险、开发注意事项变化：更新 `docs/project-memory/module_memory.md`
 - 一轮任务完成后的最近进展、未完成项、阻塞项与下一步建议：更新 `docs/project-memory/task_handoff.md`
+- L3 受控 Loop 的执行过程、循环次数、验证证据与暂停原因：更新 `docs/project-memory/loop_run_log.md`
+- 非“小修小改”任务的 `Spec/SDD`、`TDD`、`VDD`：写入 `docs/tasks/YYYY-MM-DD-任务名/`
+- 任意错误现场、命令失败、构建失败、接口异常、页面报错、控制台红错、验证失败、环境阻塞或规则执行偏差：先更新 `docs/project-memory/error_event_log.md`
 - 已证明会重复出现的错误模式、根因分析、防复发规则与最低验证动作：更新 `docs/project-memory/error_prevention_log.md`
 - 对话启动摘要变化：更新 `docs/project-memory/dialogue_bootstrap.md`
 - 显著规则、功能或文档变更：更新 `更新日志.md`

@@ -1,6 +1,6 @@
 # TestHub 项目开发记忆
 
-更新时间：2026-06-16
+更新时间：2026-06-19
 
 ## 1. 文件职责
 
@@ -37,7 +37,7 @@
 
 已经产出平台地图文档：
 
-- `docs/平台现状地图.md`
+- `docs/overview/平台现状地图.md`
 
 该文档明确了：
 
@@ -65,7 +65,7 @@
 
 相关文件：
 
-- `docs/navigation-freeze-plan.md`
+- `docs/architecture/navigation-freeze-plan.md`
 - `frontend/src/config/navigation.js`
 
 当前重要边界：
@@ -86,7 +86,7 @@
 
 相关文件：
 
-- `docs/page-shell-spec.md`
+- `docs/architecture/page-shell-spec.md`
 - `frontend/src/components/page-shells/*`
 
 当前状态：
@@ -112,7 +112,7 @@
 
 相关文件：
 
-- `docs/route-meta-spec.md`
+- `docs/architecture/route-meta-spec.md`
 - `frontend/src/router/route-meta.js`
 - `frontend/src/router/index.js`
 - `frontend/src/layout/index.vue`
@@ -130,7 +130,7 @@
 
 相关文件：
 
-- `docs/config-vs-system-boundary.md`
+- `docs/architecture/config-vs-system-boundary.md`
 
 当前关键结论：
 
@@ -144,7 +144,7 @@
 
 相关文件：
 
-- `docs/platform-smoke-baseline.md`
+- `docs/architecture/platform-smoke-baseline.md`
 
 当前基线覆盖：
 
@@ -168,7 +168,7 @@
 
 相关文件：
 
-- `docs/ui-state-spec.md`
+- `docs/architecture/ui-state-spec.md`
 - `frontend/src/components/ui-states/*`
 
 已冻结状态类型：
@@ -194,7 +194,7 @@
 
 相关文件：
 
-- `docs/log-audit-boundary.md`
+- `docs/architecture/log-audit-boundary.md`
 
 当前关键结论：
 
@@ -327,7 +327,7 @@
 
 相关文件：
 
-- `docs/ai-generation-chain-spec.md`
+- `docs/ai/ai-generation-chain-spec.md`
 - `frontend/src/views/requirement-analysis/AIModelConfig.vue`
 - `frontend/src/views/requirement-analysis/PromptConfig.vue`
 - `frontend/src/views/requirement-analysis/GenerationConfigView.vue`
@@ -436,9 +436,9 @@
 
 相关文件：
 
-- `docs/ai-generation-chain-spec.md`
-- `docs/ai-generation-cancel-spec.md`
-- `docs/ai-review-link-spec.md`
+- `docs/ai/ai-generation-chain-spec.md`
+- `docs/ai/ai-generation-cancel-spec.md`
+- `docs/ai/ai-review-link-spec.md`
 - `apps/requirement_analysis/models.py`
 - `apps/requirement_analysis/serializers.py`
 - `apps/requirement_analysis/views.py`
@@ -521,6 +521,179 @@
 - `frontend/src/locales/lang/zh-cn/review.js`
 - `frontend/src/locales/lang/en/review.js`
 
+### 3.25 2026-06-17 接口自动化 P0-1 用例闭环
+
+2026-06-17 已完成接口自动化 P0-1 自身闭环，以下结论后续开发必须继承。
+
+#### 当前冻结结论：
+
+- 接口自动化正式可见入口为“接口测试用例”，路径固定为 `/api-testing/test-cases`。
+- 旧 `/api-testing/interfaces` 只作为隐藏兼容入口保留，并重定向到 `/api-testing/test-cases`，不得继续作为唯一正式用例入口。
+- P0-1 阶段不新增 `ApiTestCase` 数据表，`ApiRequest` 是接口测试用例的技术承载。
+- 单接口执行真实路径为 `/api-testing/requests/{id}/execute/`，前端不得再调用 `/api-testing/api-requests/{id}/execute/`。
+- 执行结果详情真实路径为 `/api-testing/test-executions/{id}/`，前端不得再调用 `/api-testing/executions/{id}/`。
+- 单接口执行成功后必须把断言结果写入 `RequestHistory.assertions_results`，否则请求历史无法闭环展示断言。
+- 请求历史详情页必须展示 `RequestHistory.assertions_results`，否则仅落库不算完整用户可见闭环。
+- `/api-testing/test-cases` 必须是接口测试用例资产列表页，不得重新退回旧接口调试树作为首页。
+- `InterfaceManagement.vue` 当前只作为隐藏调试工作区复用，正式路径为 `/api-testing/test-cases/workspace?caseId={id}`，并通过 `activeMenu` 高亮“接口测试用例”。
+- 从接口测试用例资产列表进入隐藏调试工作区时，必须携带 `projectId`；调试工作区作为 `keepAlive` 页面时必须监听 `caseId/projectId` 变化并重新选中目标用例，不能依赖外层 `router-view` key 变化销毁重建。
+- 接口测试用例资产列表在快速筛选、分页或项目切换时必须保证“最后一次请求优先”，旧响应晚返回不得覆盖最新列表状态。
+- 接口测试用例页搜索走真实 `ApiRequest` 列表搜索，不使用不存在的 `/api-testing/collections/search`。
+- 新建接口测试用例必须选择集合，因为 P0 阶段 `ApiRequest` 的项目归属来自 `ApiCollection`；不应继续制造无项目归属的半闭环接口用例资产。
+- 接口测试用例列表可以把用例加入同项目测试套件，后端必须限制 `TestSuite.project == ApiRequest.collection.project`。
+- 接口测试用例列表“加入套件”必须形成明确反馈闭环：阻断原因、加载失败、未选择套件、加入成功和加入失败都用弹窗提示；行操作必须阻止表格行事件冒泡；加载套件时禁用选择与确认，避免重复提交或静默失败。
+- 接口测试用例隐藏调试工作区必须提供“返回用例列表”入口，不能只依赖浏览器返回。
+- Element Plus 服务式 API 的样式已在前端入口补齐；后续新增服务式组件时要同步确认样式入口，避免 `ElMessageBox` 一类弹窗裸样式或不居中。
+- 最近执行状态暂不做列表逐行请求；后续如需展示，应在后端 `ApiRequest` 列表聚合最近一条 `RequestHistory`。
+
+#### 相关文件：
+
+- `docs/api-automation/api-automation-testcase-loop-ai-generation-spec.md`
+- `docs/api-automation/api-automation-p0-1-testcase-loop-tdd.md`
+- `docs/api-automation/api-automation-p0-1-testcase-loop-vdd.md`
+- `apps/api_testing/views.py`
+- `frontend/src/api/api-testing.js`
+- `frontend/src/router/index.js`
+- `frontend/src/config/navigation.js`
+- `frontend/src/views/api-testing/ApiTestCaseList.vue`
+- `frontend/src/views/api-testing/InterfaceManagement.vue`
+- `frontend/src/views/api-testing/RequestHistory.vue`
+- `frontend/src/views/api-testing/Dashboard.vue`
+- `frontend/src/main.js`
+
+### 3.26 2026-06-17 平台壳快速导航稳定性修复
+
+2026-06-17 已修复顶部大模块与侧边栏子模块快速切换时页面卡住、刷新后才恢复的问题。
+
+#### 当前冻结结论：
+
+- 侧边栏一次点击只能触发一次导航，正式触发源固定为 `el-menu @select`。
+- `PlatformSidebar.vue` 不得重新添加 `pointerdown.capture` 或 `click.capture` 导航抢跑逻辑。
+- `layout/index.vue` 的导航调度以“最后一次点击优先”为准；旧导航被后续点击取消是正常行为，不得继续用 pending 队列阻塞最新目标。
+- `pendingNavigationPath` 只能辅助表达当前导航态，不能作为阻止新导航的全局锁。
+- `router.afterEach` 写 `document.title` 前必须确认当前真实路由仍等于本次目标，避免旧导航晚到覆盖新页面标题。
+- 涉及平台壳导航的回归验证必须覆盖跨顶部模块和侧边栏子模块的快速连续点击，不只验证单模块内切换。
+
+#### 已验证：
+
+- `cd frontend && cmd /c npm run build` 通过；仍只有既有 `web-tree-sitter` 警告。
+- Playwright 精确快速切换路径验证通过：最终停在 `/api-testing/history`，浏览器标题为“请求历史 - TestHub”，顶部模块、侧栏高亮和页面正文一致，未出现 `beforeunload`、`pagehide`、`visibilitychange(hidden)` 或整页刷新事件。
+
+#### 相关文件：
+
+- `frontend/src/layout/index.vue`
+- `frontend/src/layout/components/PlatformSidebar.vue`
+- `frontend/src/router/index.js`
+
+### 3.27 2026-06-17 SPA 表单默认行为硬化
+
+2026-06-17 已完成前端全局表单默认提交风险收口，作为平台壳“卡住 / 刷新体感”问题的第二类根因处理。
+
+#### 当前冻结结论：
+
+- Element Plus `<el-form>` 会渲染为原生 `<form>`，不能默认认为它不会提交页面。
+- 所有 `<form>` / `<el-form>` 必须显式添加 `@submit.prevent`。
+- 所有原生 `<button>` 必须显式声明 `type`；默认使用 `type="button"`，只有明确业务提交链路时才允许 `type="submit"`。
+- SPA 页面不得依赖浏览器默认提交、当前 URL 重新请求或整页刷新兜底业务动作。
+- 后续新增表单、弹窗表单、筛选区、自定义按钮时，必须同时检查 Enter 键和按钮默认类型。
+
+#### 已验证：
+
+- 静态扫描 `frontend/src/**/*.vue`，结果为 `NO_UNPROTECTED_FORMS`。
+- 静态扫描 `frontend/src/**/*.vue`，结果为 `NO_UNTYPED_BUTTONS`。
+- 静态扫描未发现 `native-type="submit"`、`type="submit"` 或 submit input。
+- `git diff --check -- frontend/src frontend/AGENTS.md docs/project-memory/error_prevention_log.md docs/project-memory/task_handoff.md docs/project-memory/module_memory.md docs/project-memory/dialogue_bootstrap.md 更新日志.md` 通过；仅有 Windows 行尾提示。
+- `cd frontend && cmd /c npm run build` 通过；仍只有既有 `web-tree-sitter` 的 `fs/path` externalized 与 `eval` 警告。
+
+#### 相关文件：
+
+- `frontend/AGENTS.md`
+- `frontend/src/views/**/*.vue`
+- `docs/project-memory/error_prevention_log.md`
+
+### 3.28 2026-06-18 接口自动化 P0-2 AI 生成目标类型边界
+
+2026-06-18 已补充接口自动化 P0-2 Spec/TDD 的关键边界，后续开发必须继承。
+
+#### 当前冻结结论：
+
+- 接口测试用例是原子资产，继续由 `ApiRequest` 承接。
+- 测试套件是编排资产，继续由 `TestSuite + TestSuiteRequest` 承接。
+- AI 生成接口测试用例时只生成 `ApiRequest` 兼容字段，不直接生成或修改测试套件。
+- 生成后的接口测试用例先进入接口测试用例资产列表；是否加入测试套件，由用户后续通过“加入套件 / 导入套件”动作完成。
+- P0-2 只做目标类型下拉、Prompt 按类型选择、任务固化目标类型、结果页按目标类型展示和非功能采纳保护。
+- P0-3 再做 `api_test_case` 结果采纳到 `ApiRequest`，采纳时由用户选择 `ApiProject + ApiCollection`。
+- **现有 AI 生成测试用例逻辑严禁重写**：生成任务创建、模型调用、流式输出、取消、自动评审、轮询恢复和功能测试采纳主链必须保留，只允许在外层套用 `target_type`、Prompt 选择和字段展示契约。
+
+#### 相关文件：
+
+- `docs/api-automation/api-automation-p0-2-ai-target-type-spec.md`
+- `docs/api-automation/api-automation-p0-2-ai-target-type-tdd.md`
+- `docs/api-automation/api-automation-object-closure-audit.md`
+
+### 3.29 2026-06-19 接口自动化阶段 A 对象闭环 P0 补强
+
+2026-06-19 已完成阶段 A Execution 和 VDD 文档回写，以下结论后续开发必须继承。
+
+#### 当前冻结结论：
+
+- `/api-testing/test-cases` 继续固定为接口测试用例资产列表，技术承接为 `ApiRequest`。
+- `/api-testing/test-suites` 继续固定为测试套件编排和执行页面，技术承接为 `TestSuite + TestSuiteRequest`。
+- `/api-testing/automation` 仅作为旧入口兼容重定向保留，不再作为侧边栏正式入口。
+- 阶段 A 不新增 `ApiTestCase` 表，不修改当前 AI 生成测试用例主链，不进入 P0-2 目标类型下拉和 P0-3 采纳入库。
+- 已存在接口测试用例可以通过 `POST /api-testing/requests/{id}/move-collection/` 移动到同项目集合；后端必须校验同项目和用户项目权限。
+- 调试工作区必须展示并保存所属集合；P0 阶段新建接口测试用例必须选择集合，不继续制造新的无项目归属用例。
+- 请求历史“清空历史”必须走真实后端接口 `POST /api-testing/histories/clear/`，按当前筛选范围清空，不允许再保留假入口或只做前端隐藏。
+- 套件级断言必须保存到 `TestSuiteRequest.assertions`，执行时优先使用套件级断言；如果为空，再回退到 `ApiRequest.assertions`，保证旧套件兼容。
+- 项目负责人字段前端只读展示，不再提交后端只读字段造成误导。
+- 删除项目、集合、接口测试用例、环境前必须提示级联风险。
+- 接口自动化页面业务请求继续收口到 `frontend/src/api/api-testing.js`，不得重新直接导入 `@/utils/api`。
+
+#### 已验证：
+
+- `python -m py_compile apps\api_testing\models.py apps\api_testing\serializers.py apps\api_testing\views.py apps\api_testing\urls.py apps\api_testing\utils.py` 通过。
+- `cd frontend && cmd /c npm run build` 通过；仍只有既有 `web-tree-sitter` 警告。
+- 阶段 A 静态检索未发现新增整页刷新兜底、未实现假入口或接口自动化页面直接业务请求。
+
+#### 相关文件：
+
+- `docs/api-automation/api-automation-p0-object-closure-fix-tdd.md`
+- `docs/api-automation/api-automation-p0-object-closure-fix-vdd.md`
+- `apps/api_testing/views.py`
+- `apps/api_testing/utils.py`
+- `frontend/src/api/api-testing.js`
+- `frontend/src/views/api-testing/ApiTestCaseList.vue`
+- `frontend/src/views/api-testing/InterfaceManagement.vue`
+- `frontend/src/views/api-testing/RequestHistory.vue`
+- `frontend/src/views/api-testing/AutomationTesting.vue`
+
+### 3.30 2026-06-19 接口自动化测试套件导航正式拆分
+
+2026-06-19 已完成接口自动化“接口测试用例 / 测试套件”侧边栏入口补强，以下结论后续开发必须继承。
+
+#### 当前冻结结论：
+
+- `frontend/src/config/navigation.js` 是侧边栏可见入口真源；只新增页面或路由，不把 `NAV_ENTRY_STATUS.KEEP` 同步到导航真源，就不会在侧边栏显示。
+- 接口自动化侧边栏正式可见入口为：
+  - `/api-testing/test-cases` = 接口测试用例
+  - `/api-testing/test-suites` = 测试套件
+- 旧 `/api-testing/automation` 保留为隐藏兼容入口，访问后重定向到 `/api-testing/test-suites`。
+- 页面标题、Dashboard 快捷入口、中文 / 英文 i18n 文案必须统一使用“测试套件 / Test Suites”，不得继续把套件页作为可见“自动化测试”入口。
+
+#### 已验证：
+
+- 静态检索确认 `/api-testing/test-suites` 已进入导航真源和路由，`/api-testing/automation` 仅作为隐藏兼容路由保留。
+- 静态检索确认接口自动化可见页面文案不再残留 `Automation Testing` 作为套件页标题。
+
+#### 相关文件：
+
+- `frontend/src/config/navigation.js`
+- `frontend/src/router/index.js`
+- `frontend/src/locales/lang/zh-cn/api-testing.js`
+- `frontend/src/locales/lang/en/api-testing.js`
+- `frontend/src/views/api-testing/Dashboard.vue`
+- `frontend/src/views/api-testing/ApiTestCaseList.vue`
+
 ## 4. 当前代码层已落地、但仍需继续推进的点
 
 以下内容已经有“基座”或“真源”，但尚未全站完成：
@@ -531,6 +704,7 @@
 - 状态组件已落地，但只在少量样例页面接入
 - 配置中心 / 系统管理边界已文档化，但系统管理前端页面群仍未真正建设
 - AI 生成链路第一阶段和“处理状态”已成立，但结果层、正式资产层和业务链 AI 助手嵌入仍未完整深化
+- 接口自动化 P0-1 已完成自身闭环；阶段 A 对象闭环 P0 补强已完成 Execution/VDD，但真实浏览器人工回归待补；P0-2 Spec 已补充 AI 生成目标类型与接口用例 / 套件拆分边界，等待确认后进入后续实现；接口测试用例采纳、Web/App 自动化采纳仍未实现
 
 ## 5. 最近一轮稳定 bug 修复结论
 
@@ -576,6 +750,7 @@
 3. 分批把旧页面迁移到统一页面壳
 4. 继续深化 2.2 结果层 / 资产层 / 业务链 AI 助手
 5. 再进入 2.3 自动化草稿中心与更下游链路
+6. 接口自动化需求主线下一步先补阶段 A 真实浏览器回归，再继续 P0-2：AI 需求分析生成目标类型下拉、Prompt 按类型选择、接口用例字段展示；P0-3 再做接口测试用例采纳闭环
 
 
 

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="requirement-analysis">
     <div class="analysis-object-strip">
       <div class="analysis-object-card">
@@ -97,7 +97,7 @@
       </div>
 
         <div class="guide-actions">
-          <button class="generate-manual-btn" @click="goToConfig">
+          <button type="button" class="generate-manual-btn" @click="goToConfig">
             {{ $t('configGuide.goToConfig') }}
           </button>
           <div class="skip-action" @click="showConfigGuide = false">
@@ -132,13 +132,13 @@
     </div>
 
     <div class="analysis-action-bar">
-      <button v-if="currentProjectId" class="secondary-btn" @click="goToProjectDetail">
+      <button type="button" v-if="currentProjectId" class="secondary-btn" @click="goToProjectDetail">
         返回项目
       </button>
-      <button class="secondary-btn" @click="goToConfig">
+      <button type="button" class="secondary-btn" @click="goToConfig">
         查看配置来源
       </button>
-      <button v-if="currentTaskRouteId" class="secondary-btn" @click="goToCurrentTask">
+      <button type="button" v-if="currentTaskRouteId" class="secondary-btn" @click="goToCurrentTask">
         查看当前任务
       </button>
     </div>
@@ -178,7 +178,7 @@
               </select>
             </div>
 
-            <button
+            <button type="button"
               class="generate-manual-btn"
               @click="generateFromManualInput"
               :disabled="!canGenerateManual || isGenerating">
@@ -214,7 +214,7 @@
                 @change="handleFileSelect"
                 accept=".pdf,.doc,.docx,.txt,.md"
                 style="display: none;">
-              <button class="select-file-btn" @click="$refs.fileInput.click()">
+              <button type="button" class="select-file-btn" @click="$refs.fileInput.click()">
                 {{ $t('requirementAnalysis.selectFile') }}
               </button>
             </div>
@@ -226,7 +226,7 @@
                   <p class="file-name">{{ selectedFile.name }}</p>
                   <p class="file-size">{{ formatFileSize(selectedFile.size) }}</p>
                 </div>
-                <button class="remove-file" @click="removeFile">❌</button>
+                <button type="button" class="remove-file" @click="removeFile">❌</button>
               </div>
             </div>
           </div>
@@ -251,7 +251,7 @@
               </select>
             </div>
 
-            <button
+            <button type="button"
               class="generate-btn"
               @click="generateFromDocument"
               :disabled="!documentTitle || isGenerating">
@@ -333,17 +333,17 @@
 
           <!-- 任务完成后的操作按钮 -->
           <div v-if="showResults" class="completion-actions">
-            <button class="download-btn" @click="downloadTestCases">
+            <button type="button" class="download-btn" @click="downloadTestCases">
               <span>📥 {{ $t('requirementAnalysis.downloadExcel') }}</span>
             </button>
-            <button class="save-btn" @click="saveToTestCaseRecords">
+            <button type="button" class="save-btn" @click="saveToTestCaseRecords">
               <span>💾 {{ $t('requirementAnalysis.saveToRecords') }}</span>
             </button>
-            <button class="new-generation-btn" @click="resetGeneration">
+            <button type="button" class="new-generation-btn" @click="resetGeneration">
               <span>📝 {{ $t('requirementAnalysis.newGeneration') }}</span>
             </button>
           </div>
-          <button v-else-if="canCancelCurrentTask" class="cancel-generation-btn" @click="cancelGeneration">
+          <button type="button" v-else-if="canCancelCurrentTask" class="cancel-generation-btn" @click="cancelGeneration">
             {{ $t('requirementAnalysis.cancelGeneration') }}
           </button>
         </div>

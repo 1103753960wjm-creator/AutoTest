@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <ListShell>
     <!-- 1. 搜索筛选区 -->
     <div class="filters">
@@ -123,7 +123,7 @@
       width="500px"
       :close-on-click-modal="false"
     >
-      <el-form :ref="setCreateFormRef" :model="createForm" :rules="formRules" label-width="80px">
+      <el-form @submit.prevent :ref="setCreateFormRef" :model="createForm" :rules="formRules" label-width="80px">
         <el-form-item :label="$t('uiAutomation.project.projectName')" prop="name">
           <el-input v-model="createForm.name" :placeholder="$t('uiAutomation.project.rules.nameRequired')" />
         </el-form-item>
@@ -161,7 +161,7 @@
       width="500px"
       :close-on-click-modal="false"
     >
-      <el-form :ref="setEditFormRef" :model="editForm" :rules="formRules" label-width="80px">
+      <el-form @submit.prevent :ref="setEditFormRef" :model="editForm" :rules="formRules" label-width="80px">
         <el-form-item :label="$t('uiAutomation.project.projectName')" prop="name">
           <el-input v-model="editForm.name" :placeholder="$t('uiAutomation.project.rules.nameRequired')" />
         </el-form-item>

@@ -9,7 +9,7 @@
         >
           {{ $t('apiTesting.history.batchDelete') }}
         </el-button>
-        <el-button @click="clearHistory" type="danger" plain>
+        <el-button @click="clearHistory" type="danger" plain :loading="clearingHistory">
           {{ $t('apiTesting.history.clearHistory') }}
         </el-button>
       </template>
@@ -198,6 +198,44 @@
               <el-empty :description="$t('apiTesting.history.noResponseData')" />
             </div>
           </el-tab-pane>
+
+          <el-tab-pane :label="$t('apiTesting.interface.assertionResults')" name="assertions">
+            <div v-if="hasAssertionResults" class="detail-section">
+              <div
+                v-for="(result, index) in selectedHistory.assertions_results"
+                :key="`${result.name || result.type || 'assertion'}-${index}`"
+                class="assertion-result-item"
+                :class="{ 'is-passed': result.passed, 'is-failed': !result.passed }"
+              >
+                <div class="assertion-result-header">
+                  <span class="assertion-result-title">
+                    {{ result.name || `${$t('apiTesting.interface.assertions')} ${index + 1}` }}
+                  </span>
+                  <el-tag :type="result.passed ? 'success' : 'danger'" size="small">
+                    {{ result.passed ? $t('apiTesting.interface.passed') : $t('apiTesting.interface.failed') }}
+                  </el-tag>
+                </div>
+                <el-descriptions :column="2" border size="small">
+                  <el-descriptions-item :label="$t('apiTesting.interface.selectAssertionType')">
+                    {{ formatAssertionType(result.type) }}
+                  </el-descriptions-item>
+                  <el-descriptions-item :label="$t('apiTesting.interface.expected')">
+                    {{ formatAssertionValue(result.expected) }}
+                  </el-descriptions-item>
+                  <el-descriptions-item :label="$t('apiTesting.interface.actual')">
+                    {{ formatAssertionValue(result.actual) }}
+                  </el-descriptions-item>
+                  <el-descriptions-item v-if="result.error" :label="$t('apiTesting.interface.error')">
+                    {{ result.error }}
+                  </el-descriptions-item>
+                </el-descriptions>
+              </div>
+            </div>
+
+            <div v-else class="empty-response">
+              <el-empty :description="$t('apiTesting.interface.noAssertions')" />
+            </div>
+          </el-tab-pane>
         </el-tabs>
       </div>
 
@@ -213,17 +251,17 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from 'vue-i18n'
-import api from '@/utils/api'
-import { deleteRequestHistory, batchDeleteRequestHistory } from '@/api/api-testing'
+import { deleteRequestHistory, batchDeleteRequestHistory, clearRequestHistory, executeApiTestCase, getRequestHistory } from '@/api/api-testing'
 import dayjs from 'dayjs'
 import HistoryTable from './components/HistoryTable.vue'
 import { DetailResultShell } from '@/components/page-shells'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const activeTab = ref('HTTP')
 const httpHistory = ref([])
@@ -240,6 +278,7 @@ const selectedIds = ref([])
 const hasLoaded = ref(false)
 const requestState = ref(`${UI_PAGE_STATE.READY}`)
 const requestErrorMessage = ref('')
+const clearingHistory = ref(false)
 
 const currentHistory = computed(() => {
   return activeTab.value === 'HTTP' ? httpHistory.value : websocketHistory.value
@@ -275,6 +314,10 @@ const responseBodyText = computed(() => {
   }
 })
 
+const hasAssertionResults = computed(() => {
+  return Array.isArray(selectedHistory.value?.assertions_results) && selectedHistory.value.assertions_results.length > 0
+})
+
 const getMethodType = (method) => {
   const typeMap = {
     'GET': 'success',
@@ -306,6 +349,31 @@ const formatHeaders = (headers) => {
   }))
 }
 
+const formatAssertionValue = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return t('apiTesting.interface.notSet')
+  }
+
+  if (typeof value === 'object') {
+    return JSON.stringify(value)
+  }
+
+  return String(value)
+}
+
+const formatAssertionType = (type) => {
+  const typeMap = {
+    status_code: t('apiTesting.interface.assertionTypes.statusCode'),
+    response_time: t('apiTesting.interface.assertionTypes.responseTime'),
+    contains: t('apiTesting.interface.assertionTypes.contains'),
+    json_path: t('apiTesting.interface.assertionTypes.jsonPath'),
+    header: t('apiTesting.interface.assertionTypes.header'),
+    equals: t('apiTesting.interface.assertionTypes.equals')
+  }
+
+  return typeMap[type] || type || t('apiTesting.interface.notSet')
+}
+
 const loadHistory = async () => {
   loading.value = true
   requestState.value = UI_PAGE_STATE.READY
@@ -318,11 +386,15 @@ const loadHistory = async () => {
       request__request_type: activeTab.value
     }
 
+    if (route.query.requestId) {
+      params.request = route.query.requestId
+    }
+
     if (searchText.value) {
       params.search = searchText.value
     }
 
-    const response = await api.get('/api-testing/histories/', { params })
+    const response = await getRequestHistory(params)
     const data = response.data.results || response.data
 
     if (activeTab.value === 'HTTP') {
@@ -386,7 +458,7 @@ const viewDetail = (history) => {
 
 const retryRequest = async (history) => {
   try {
-    const response = await api.post(`/api-testing/requests/${history.request.id}/execute/`, {
+    await executeApiTestCase(history.request.id, {
       environment_id: history.environment?.id
     })
     ElMessage.success(t('apiTesting.messages.success.requestRetried'))
@@ -399,9 +471,13 @@ const retryRequest = async (history) => {
 }
 
 const clearHistory = async () => {
+  let confirmed = false
   try {
+    const scopeText = route.query.requestId
+      ? '当前接口测试用例的请求历史'
+      : `当前 ${activeTab.value} 页签和搜索筛选范围内的请求历史`
     await ElMessageBox.confirm(
-      t('apiTesting.history.confirmClearHistory'),
+      `确定要清空${scopeText}吗？此操作不可恢复。`,
       t('apiTesting.messages.confirm.clearTitle'),
       {
         confirmButtonText: t('apiTesting.common.confirm'),
@@ -409,14 +485,33 @@ const clearHistory = async () => {
         type: 'warning'
       }
     )
+    confirmed = true
 
-    // 这里需要后端提供批量删除接口
-    // 目前先用批量删除当前页的方式模拟，或者需要后端增加清空接口
-    // 暂时提示未实现
-    ElMessage.warning(t('apiTesting.history.clearNotImplemented'))
+    clearingHistory.value = true
+    const params = {
+      request__request_type: activeTab.value
+    }
+
+    if (route.query.requestId) {
+      params.request = route.query.requestId
+    }
+    if (searchText.value) {
+      params.search = searchText.value
+    }
+
+    const response = await clearRequestHistory(params)
+    ElMessage.success(response.data?.message || '请求历史已清空')
+    selectedIds.value = []
+    currentPage.value = 1
+    await loadHistory()
   } catch (error) {
     if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || error.response?.data?.detail || '清空请求历史失败')
       console.error(error)
+    }
+  } finally {
+    if (confirmed) {
+      clearingHistory.value = false
     }
   }
 }

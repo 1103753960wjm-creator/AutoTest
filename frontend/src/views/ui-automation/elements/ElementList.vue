@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <ListShell>
     <!-- 1. 搜索筛选区 -->
     <div class="filters">
@@ -86,7 +86,7 @@
     
     <!-- 创建元素对话框 -->
     <el-dialog v-model="showCreateDialog" :title="$t('uiAutomation.element.createElement')" width="600px" :close-on-click-modal="false">
-      <el-form ref="createFormRef" :model="createForm" :rules="formRules" label-width="100px">
+      <el-form @submit.prevent ref="createFormRef" :model="createForm" :rules="formRules" label-width="100px">
         <el-form-item :label="$t('uiAutomation.element.elementName')" prop="name">
           <el-input v-model="createForm.name" :placeholder="$t('uiAutomation.element.rules.nameRequired')" />
         </el-form-item>
@@ -130,7 +130,7 @@
     
     <!-- 编辑元素对话框 -->
     <el-dialog v-model="showEditDialog" :title="$t('uiAutomation.element.editElement')" width="600px" :close-on-click-modal="false">
-      <el-form ref="editFormRef" :model="editForm" :rules="formRules" label-width="100px">
+      <el-form @submit.prevent ref="editFormRef" :model="editForm" :rules="formRules" label-width="100px">
         <el-form-item :label="$t('uiAutomation.element.elementName')" prop="name">
           <el-input v-model="editForm.name" :placeholder="$t('uiAutomation.element.rules.nameRequired')" />
         </el-form-item>

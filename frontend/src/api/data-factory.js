@@ -27,10 +27,11 @@ export function getHistory(params) {
 }
 
 // 获取统计信息
-export function getStatistics() {
+export function getStatistics(params) {
   return request({
     url: '/data-factory/statistics/',
-    method: 'get'
+    method: 'get',
+    params
   })
 }
 
@@ -55,6 +56,14 @@ export function batchGenerate(data) {
 export function getVariableFunctions() {
   return request({
     url: '/data-factory/variable_functions/',
+    method: 'get'
+  })
+}
+
+// 获取已保存数据标签
+export function getTags() {
+  return request({
+    url: '/data-factory/tags/',
     method: 'get'
   })
 }

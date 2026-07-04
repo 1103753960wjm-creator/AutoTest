@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <ListShell>
     <!-- 1. 搜索筛选区 -->
     <div class="filters">
@@ -146,7 +146,7 @@
 
     <!-- 重命名对话框 -->
     <el-dialog v-model="showRenameDialog" :title="$t('uiAutomation.script.renameScript')" width="400px">
-      <el-form :model="renameForm" label-width="80px">
+      <el-form @submit.prevent :model="renameForm" label-width="80px">
         <el-form-item :label="$t('uiAutomation.script.newName')">
           <el-input v-model="renameForm.newName" :placeholder="$t('uiAutomation.script.newNamePlaceholder')" />
         </el-form-item>

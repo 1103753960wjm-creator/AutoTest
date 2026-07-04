@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="list-page">
     <div class="list-page__panel">
       <FilterBar>
@@ -143,7 +143,7 @@
       width="600px"
       @close="handleDialogClose"
     >
-      <el-form :ref="setFormRef" :model="form" :rules="rules" label-width="100px">
+      <el-form @submit.prevent :ref="setFormRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item :label="$t('project.projectName')" prop="name">
           <el-input v-model="form.name" :placeholder="$t('project.projectNamePlaceholder')" />
         </el-form-item>
