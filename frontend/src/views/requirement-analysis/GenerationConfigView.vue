@@ -262,9 +262,7 @@ export default {
 
     async loadConfigs() {
       try {
-        console.log('Loading generation configs...')
         const response = await getGenerationConfigs()
-        console.log('Generation configs API response:', response.data)
 
         // 处理分页API响应格式
         if (response.data && response.data.results && Array.isArray(response.data.results)) {
@@ -272,13 +270,10 @@ export default {
         } else if (response.data && Array.isArray(response.data)) {
           this.configs = response.data
         } else {
-          console.warn('Unexpected API response format:', response.data)
           this.configs = []
         }
 
-        console.log('Final configs count:', this.configs.length)
       } catch (error) {
-        console.error('Failed to load config:', error)
         this.configs = []
 
         if (error.response?.status === 401) {
@@ -327,7 +322,6 @@ export default {
         this.closeModals()
         this.loadConfigs()
       } catch (error) {
-        console.error('Failed to save config:', error)
         ElMessage.error(this.t('generationConfig.saveFailed') + ': ' + (error.response?.data?.error || error.message))
       } finally {
         this.isSaving = false
@@ -340,7 +334,6 @@ export default {
         ElMessage.success(this.t('generationConfig.enableSuccess'))
         this.loadConfigs()
       } catch (error) {
-        console.error('Failed to enable config:', error)
         ElMessage.error(this.t('generationConfig.enableFailed') + ': ' + (error.response?.data?.error || error.message))
       }
     },
@@ -355,7 +348,6 @@ export default {
         ElMessage.success(this.t('generationConfig.deleteSuccess'))
         this.loadConfigs()
       } catch (error) {
-        console.error('Failed to delete config:', error)
         ElMessage.error(this.t('generationConfig.deleteFailed') + ': ' + (error.response?.data?.error || error.message))
       }
     },

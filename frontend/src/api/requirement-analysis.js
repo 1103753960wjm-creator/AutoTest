@@ -166,3 +166,66 @@ export function getAutoReviewRecordDetail(id) {
     method: 'get'
   })
 }
+
+// ==================== AI 生成测试用例任务 ====================
+
+// 获取测试用例生成任务进度和结果
+export function getTestcaseGenerationProgress(taskId) {
+  return request({
+    url: `/requirement-analysis/testcase-generation/${taskId}/progress/`,
+    method: 'get'
+  })
+}
+
+// 采纳当前任务全部待处理生成结果
+export function adoptAllGeneratedTestCases(taskId, data = {}) {
+  return request({
+    url: `/requirement-analysis/testcase-generation/${taskId}/batch_adopt/`,
+    method: 'post',
+    data
+  })
+}
+
+// 采纳当前任务选中的生成结果
+export function adoptSelectedGeneratedTestCases(taskId, data) {
+  return request({
+    url: `/requirement-analysis/testcase-generation/${taskId}/batch-adopt-selected/`,
+    method: 'post',
+    data
+  })
+}
+
+// 弃用当前任务全部待处理生成结果
+export function discardAllGeneratedTestCases(taskId) {
+  return request({
+    url: `/requirement-analysis/testcase-generation/${taskId}/batch_discard/`,
+    method: 'post'
+  })
+}
+
+// 弃用当前任务选中的生成结果
+export function discardSelectedGeneratedTestCases(taskId, data) {
+  return request({
+    url: `/requirement-analysis/testcase-generation/${taskId}/discard-selected-cases/`,
+    method: 'post',
+    data
+  })
+}
+
+// 弃用当前任务单条生成结果
+export function discardSingleGeneratedTestCase(taskId, data) {
+  return request({
+    url: `/requirement-analysis/testcase-generation/${taskId}/discard-single-case/`,
+    method: 'post',
+    data
+  })
+}
+
+// 更新当前任务的生成测试用例正文
+export function updateGeneratedTestCases(taskId, data) {
+  return request({
+    url: `/requirement-analysis/testcase-generation/${taskId}/update-test-cases/`,
+    method: 'post',
+    data
+  })
+}

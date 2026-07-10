@@ -2,6 +2,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { redirectToLogin } from '@/utils/authNavigation'
+import { getErrorMessage } from '@/utils/errorMessage'
 
 const api = axios.create({
   baseURL: '/api',
@@ -49,17 +50,14 @@ api.interceptors.request.use(
         // 如果没有正在刷新，开始刷新
         if (!isRefreshing) {
           isRefreshing = true
-          console.log('Token即将过期，开始刷新...')
 
           try {
             const newToken = await userStore.refreshAccessToken()
-            console.log('Token刷新成功')
             processQueue(null, newToken)
 
             // 更新当前请求的token
             config.headers.Authorization = `Bearer ${newToken}`
           } catch (error) {
-            console.error('Token刷新失败:', error)
             processQueue(error, null)
             // 刷新失败会在user store中自动logout
             return Promise.reject(error)
@@ -68,7 +66,6 @@ api.interceptors.request.use(
           }
         } else {
           // 如果正在刷新，将请求加入队列
-          console.log('Token正在刷新，请求加入队列等待...')
           return new Promise((resolve, reject) => {
             failedQueue.push({ resolve, reject })
           }).then(token => {
@@ -104,7 +101,6 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && !originalRequest._retry) {
       // 如果是logout请求失败，直接清除本地状态不再重试logout，防止死循环
       if (originalRequest.url === '/auth/logout/') {
-        console.error('Logout请求401，直接清除本地状态')
         userStore.$patch((state) => {
           state.accessToken = ''
           state.refreshToken = ''
@@ -121,7 +117,6 @@ api.interceptors.response.use(
 
       // 如果是刷新token的请求失败
       if (originalRequest.url === '/auth/token/refresh/') {
-        console.error('Refresh token失败，跳转登录页')
         await userStore.logout()
         return Promise.reject(error)
       }
@@ -132,9 +127,7 @@ api.interceptors.response.use(
         isRefreshing = true
 
         try {
-          console.log('收到401响应，尝试刷新token...')
           const newToken = await userStore.refreshAccessToken()
-          console.log('Token刷新成功，重试原请求')
           processQueue(null, newToken)
 
           // 更新当前请求的token
@@ -143,7 +136,6 @@ api.interceptors.response.use(
           // 重试原请求
           return api(originalRequest)
         } catch (refreshError) {
-          console.error('Token刷新失败:', refreshError)
           processQueue(refreshError, null)
           await userStore.logout()
           return Promise.reject(refreshError)
@@ -152,7 +144,6 @@ api.interceptors.response.use(
         }
       } else {
         // 没有refresh token，直接退出
-        console.error('没有refresh token，跳转登录页')
         await userStore.logout()
       }
 
@@ -163,11 +154,12 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       ElMessage.error('登录已过期，请重新登录')
     } else if (error.response?.status >= 500) {
-      ElMessage.error('服务器错误，请稍后重试')
-    } else if (error.response?.data?.error) {
-      ElMessage.error(error.response.data.error)
-    } else if (error.response?.data?.detail) {
-      ElMessage.error(error.response.data.detail)
+      ElMessage.error(getErrorMessage(error, '服务器错误，请稍后重试'))
+    } else {
+      const message = getErrorMessage(error, '')
+      if (message) {
+        ElMessage.error(message)
+      }
     }
 
     return Promise.reject(error)

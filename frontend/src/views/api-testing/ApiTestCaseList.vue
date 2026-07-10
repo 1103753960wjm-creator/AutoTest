@@ -908,6 +908,7 @@ const getLatestStatusTagType = (row) => {
 }
 
 const getAssertionCount = (row) => {
+  if (Number.isFinite(Number(row?.assertions_count))) return Number(row.assertions_count)
   return Array.isArray(row.assertions) ? row.assertions.length : 0
 }
 

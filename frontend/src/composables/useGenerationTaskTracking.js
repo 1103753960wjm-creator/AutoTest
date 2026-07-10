@@ -1,4 +1,5 @@
-import api from '@/utils/api'
+import { getTestcaseGenerationProgress } from '@/api/requirement-analysis'
+import { createManagedEventSource } from '@/composables/useEventSource'
 
 export const GENERATION_TERMINAL_STATUSES = Object.freeze(['completed', 'failed', 'cancelled'])
 
@@ -63,16 +64,16 @@ export function clearGenerationTaskContext(projectId) {
 }
 
 export function createGenerationTaskTracker() {
-  let eventSource = null
+  let eventSourceClient = null
   let pollTimer = null
   let activeTaskId = ''
   let disposed = false
   let fallbackStarted = false
 
   const cleanupSse = () => {
-    if (eventSource) {
-      eventSource.close()
-      eventSource = null
+    if (eventSourceClient) {
+      eventSourceClient.close()
+      eventSourceClient = null
     }
   }
 
@@ -101,7 +102,7 @@ export function createGenerationTaskTracker() {
 
     pollTimer = setInterval(async () => {
       try {
-        const response = await api.get(`/requirement-analysis/testcase-generation/${taskId}/progress/`)
+        const response = await getTestcaseGenerationProgress(taskId)
         const task = response.data
         callbacks.onPollData?.(task)
 
@@ -120,58 +121,42 @@ export function createGenerationTaskTracker() {
     }
     fallbackStarted = true
     cleanupSse()
+    callbacks.onFallback?.()
     startPolling(taskId, callbacks)
   }
 
   const startSse = (taskId, callbacks) => {
-    const currentOrigin = window.location.origin
-    const apiUrl = `${currentOrigin}/api/requirement-analysis/testcase-generation/${taskId}/stream_progress/`
-    eventSource = new EventSource(apiUrl, { withCredentials: true })
+    eventSourceClient = createManagedEventSource({
+      url: `/requirement-analysis/testcase-generation/${taskId}/stream_progress/`,
+      withCredentials: true,
+      maxReconnectAttempts: 1,
+      reconnectDelayMs: 5000,
+      onMessage: async (data) => {
+        if (disposed) {
+          return
+        }
 
-    eventSource.onmessage = async (event) => {
-      if (disposed) {
-        return
-      }
-
-      try {
-        const data = JSON.parse(event.data)
         callbacks.onSsePayload?.(data)
 
         if (data.type === 'status' && GENERATION_TERMINAL_STATUSES.includes(data.status)) {
-          const response = await api.get(`/requirement-analysis/testcase-generation/${taskId}/progress/`)
+          const response = await getTestcaseGenerationProgress(taskId)
           emitTerminal(callbacks, response.data)
           return
         }
 
         if (data.type === 'done') {
-          const response = await api.get(`/requirement-analysis/testcase-generation/${taskId}/progress/`)
+          const response = await getTestcaseGenerationProgress(taskId)
           emitTerminal(callbacks, response.data)
         }
-      } catch (error) {
+      },
+      onError: (error) => {
         callbacks.onError?.(error)
-      }
-    }
-
-    eventSource.onerror = () => {
-      if (disposed) {
-        return
-      }
-
-      if (!eventSource) {
-        return
-      }
-
-      if (eventSource.readyState === 2) {
+      },
+      onFallback: () => {
         ensurePollingFallback(taskId, callbacks)
-        return
       }
-
-      window.setTimeout(() => {
-        if (!disposed && eventSource && eventSource.readyState === 0) {
-          ensurePollingFallback(taskId, callbacks)
-        }
-      }, 5000)
-    }
+    })
+    eventSourceClient.connect()
   }
 
   const startTracking = ({ taskId, outputMode = 'stream', ...callbacks }) => {

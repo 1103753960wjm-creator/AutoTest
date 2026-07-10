@@ -4,22 +4,11 @@ from rest_framework.response import Response
 from django.contrib.auth import login, logout
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from .models import User, UserProfile
-from .serializers import UserSerializer, UserCreateSerializer, LoginSerializer, UserProfileSerializer
+from .models import User
+from .serializers import UserSerializer, UserCreateSerializer, LoginSerializer
 
 # JWT 相关导入
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def get_current_user(request):
-    serializer = UserSerializer(request.user)
-    return Response(serializer.data)
-
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.response import Response
-from django.contrib.auth import login, logout
 
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
@@ -38,17 +27,12 @@ class RegisterView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         
-        # 安全地创建token
-        try:
-            from rest_framework.authtoken.models import Token
-            token, created = Token.objects.get_or_create(user=user)
-            token_key = token.key
-        except ImportError:
-            token_key = f"temp_token_{user.id}"
+        refresh = RefreshToken.for_user(user)
         
         return Response({
             'user': UserSerializer(user).data,
-            'token': token_key
+            'access': str(refresh.access_token),
+            'refresh': str(refresh)
         }, status=status.HTTP_201_CREATED)
 
 @api_view(['POST'])
@@ -73,6 +57,7 @@ def login_view(request):
     })
 
 @api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
 @csrf_exempt
 def logout_view(request):
     """用户退出登录，将refresh token加入黑名单"""
@@ -102,10 +87,8 @@ def logout_view(request):
     return Response({'message': '退出成功'})
 
 @api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
 def profile_view(request):
-    if not request.user.is_authenticated:
-        return Response({'error': '未登录'}, status=status.HTTP_401_UNAUTHORIZED)
-    
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
 

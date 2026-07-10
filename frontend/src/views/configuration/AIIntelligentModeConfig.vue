@@ -255,7 +255,6 @@ const loadConfigs = async () => {
       }))
     }
   } catch (error) {
-    console.error('Load config failed:', error)
     ElMessage.error(t('configuration.aiMode.messages.loadFailed'))
   }
 }
@@ -356,7 +355,6 @@ const saveConfig = async () => {
     closeModals()
     await loadConfigs()
   } catch (error) {
-    console.error('Save config failed:', error)
     ElMessage.error(t('configuration.aiMode.messages.saveFailed') + ': ' + (error.response?.data?.error || error.message))
   } finally {
     isSaving.value = false
@@ -383,7 +381,6 @@ const deleteConfig = async (configId) => {
     ElMessage.success(t('configuration.aiMode.messages.deleteSuccess'))
     await loadConfigs()
   } catch (error) {
-    console.error('Delete config failed:', error)
     ElMessage.error(t('configuration.aiMode.messages.deleteFailed') + ': ' + (error.response?.data?.error || error.message))
   }
 }
@@ -422,7 +419,6 @@ const toggleActive = async (config) => {
     ElMessage.success(t('configuration.aiMode.messages.toggleSuccess', { status: config.is_active ? t('configuration.common.enabled') : t('configuration.common.disabled') }))
     await loadConfigs()
   } catch (error) {
-    console.error('Toggle status failed:', error)
     ElMessage.error(t('configuration.aiMode.messages.toggleFailed') + ': ' + (error.response?.data?.error || error.message))
     // 回滚状态
     config.is_active = !config.is_active
@@ -447,7 +443,6 @@ const testConnection = async (config) => {
     }
     showTestResult.value = true
   } catch (error) {
-    console.error('Test connection failed:', error)
     testResult.value = {
       success: false,
       message: error.response?.data?.error || error.message || t('configuration.aiMode.connectionFailed')
@@ -487,7 +482,6 @@ const testConnectionInModal = async () => {
       }
       showTestResult.value = true
     } catch (error) {
-      console.error('Test connection failed:', error)
       testResult.value = {
         success: false,
         message: error.response?.data?.error || error.message || t('configuration.aiMode.connectionFailed')
@@ -521,7 +515,6 @@ const testConnectionInModal = async () => {
     }
     showTestResult.value = true
   } catch (error) {
-    console.error('Test connection failed:', error)
     testResult.value = {
       success: false,
       message: error.response?.data?.error || error.message || t('configuration.aiMode.connectionFailed')

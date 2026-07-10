@@ -41,11 +41,15 @@
 - 业务页面或认证跳转中直接使用 `window.location.href`、`window.location.assign`、`window.location.reload`
 - 前端 Excel 导出散落页面并继续依赖 `xlsx`
 - Vite dev server 依赖优化配置错误，尤其是长期保留 `optimizeDeps.force: true`，会让首次访问懒加载页面时出现 `504 Outdated Optimize Dep`、动态 import 失败和整页刷新体感
+- 登录、token 刷新、路由守卫和 AI 配置页面的 `console` 输出很容易带出 token、用户对象、API Key 或完整错误对象，属于生产调试日志泄露风险
 
 ### 2.4 开发注意事项
 
 - 首屏数据优先通过单一 `refresh/load` 收口
 - 轮询必须具备最小间隔、终态停止、失焦暂停或降频、同对象去重
+- 调试日志不能输出 token、refresh token、用户对象、API Key、完整请求头、完整响应体或 axios error 对象；确需排障时只记录状态码、字段名、数量和脱敏摘要
+- P0.2 实时连接迁移当前状态：需求分析生成进度 SSE 已迁到 `useEventSource`；App 自动化实时进度 / 日志连接和接口测试工作区 WebSocket 已迁到 `useWebSocket`；后续只剩真实浏览器回归验证连接关闭、终态停止和失败提示
+- 前端错误提示优先使用 `frontend/src/utils/errorMessage.js`，不要在页面里继续手写多套 `error.response?.data?.error || detail || message` 猜字段逻辑
 - 新增 route meta 字段时同步更新 `frontend/src/types/router-meta.d.ts`
 - 根层 `App.vue` 登录后业务页面必须使用稳定 `layout:authenticated`，禁止按模块、物理顶层路由、`fullPath` 或 `params` 销毁平台壳
 - 内容层 `layout/index.vue` 的 `router-view` 组件 key 必须使用 `currentRoute.name || currentRoute.path`，禁止使用 `fullPath`
@@ -75,6 +79,8 @@
 - 项目负责人字段当前前端只读展示，不向后端提交 `owner`；后续如要支持负责人转移，必须单独做权限、接口和审计设计
 - 接口自动化测试套件正式侧边栏入口为 `/api-testing/test-suites`；旧 `/api-testing/automation` 只能作为隐藏兼容重定向，不得重新作为可见入口或 Dashboard 主入口
 - 修改 `frontend/vite.config.js` 的 `optimizeDeps` 时，必须保留对懒加载页面和 Element Plus 按需样式的预优化覆盖；不要长期恢复 `force: true`，否则本地开发首次切页会重新出现整页刷新体感
+- UI 自动化元素管理页的页面名称编辑当前只给“未接入保存接口”的明确提示，不会落库；后续如要支持改名，必须补真实 API、前端请求封装和请求级验证，不能静默假成功
+- UI 自动化元素定位器验证当前未接入真实浏览器执行环境时返回 501，前端展示后端错误原因；后续实现真实验证前不得恢复模拟通过
 
 ## 3. backend
 
@@ -103,11 +109,16 @@
 - `DEBUG`、`DISABLE_CSRF_FOR_API` 等关键布尔配置必须走项目级严格解析，非法值直接 `ImproperlyConfigured`
 - 生产环境必须显式配置 `ALLOWED_HOSTS`、`CORS_ALLOWED_ORIGINS` 和安全 `SECRET_KEY`，禁止 `ALLOWED_HOSTS=*`
 - 生产环境禁止开启 `DISABLE_CSRF_FOR_API=True`
+- 生产环境 `SECRET_KEY` 不得使用默认开发值、`.env.example` 示例值、`your-secret-key` 或长度小于 32 的弱密钥
 - 避免新增重复访问日志、重复异常日志与无上下文日志
+- 后端日志输出外部服务错误、AI 模型响应、请求头或配置对象前必须脱敏；优先复用 `apps/core/security.py` 的 `redact_text`、`redact_json_for_log`
+- 新错误响应试点优先复用 `apps/core/responses.py` 的 `error_response`，结构为 `code/message/error/details/request_id`；成功响应结构不要跟着改
 - 改共享字段、状态字段、来源标签时必须同步检查前端消费端与文档
 - 接口自动化单接口执行后，`RequestHistory.assertions_results` 必须真实落库；只在响应体临时补断言结果不算闭环
 - 接口自动化移动集合、清空历史和套件级断言保存都必须继续从当前用户可见 queryset 出发做权限过滤；不能只按传入 id 直接更新或删除
 - `RequestHistory` 清空范围必须由后端根据筛选参数执行，避免前端只传当前页 id 或只隐藏列表造成数据真源不一致
+- 用户注册接口和当前前端使用的测试注册接口统一返回 JWT `access/refresh`，不得恢复 `temp_token_*` 临时 token；如需兼容旧外部脚本，应追加兼容策略并先确认接口契约
+- 接口自动化 Allure 结果时间应来自 `TestExecution.start_time/end_time` 与请求 `response_time`，不得恢复“模拟开始 / 结束时间”这类固定偏移假数据
 
 ## 4. requirement_analysis
 
@@ -137,5 +148,20 @@
 - 从 `TaskDetail` 通过 `taskId` 进入 `GeneratedTestCaseList` 时，结果批次页必须真实按该任务收口数据，不能只显示“焦点任务”文案而仍加载全量列表
 - 正式测试资产层中的 `sourceTaskId` 当前只作为来源上下文提示，不作为正式资产列表的结果层过滤条件
 - `TaskDetail` 当前只保留结果预览、处理状态与结果批次入口；批量采纳、弃用等结果处理主动作应继续收口在结果批次页
+- AI 生成结果的行级处理主入口现在是 `GeneratedTestCaseList` 的“处理结果”抽屉；后续新增确认、采纳、弃用、不通过、编辑源结果等动作，应继续放在结果批次页，不要回退到 `TaskDetail` 的详情弹窗
+- 生成完成页的用户可见主动作应按当前状态机表达为“采纳全部待处理结果”，优先调用 `batch_adopt/`，不要把旧 `/save_to_records/` 恢复为主按钮；缺少项目归属时前端必须阻断并提示用户选择或绑定项目
+- 自动 AI 评审提示“待评审测试用例为空”时，直接触发点是 `AIModelService.review_test_cases[_stream]` 的空内容保护；排查时先确认生成阶段是否真实写入非空 `generated_test_cases/final_test_cases`，不要误判成结果批次页的采纳 / 弃用交互问题
+- AI 模型调用成功日志只记录响应摘要，不打印完整响应正文；异常日志必须脱敏后再写出，不能带出 API Key、token、Authorization、Cookie 或 password
+- OpenAI-like 响应兼容和空响应保护属于需求分析生成链路稳定性保护，后续清理日志或重构时不能回退
+- 需求分析生成进度 SSE 已收口到 `useGenerationTaskTracking -> useEventSource`；`RequirementAnalysisView.vue` 不应恢复页面内 `new EventSource`、`startStreamingProgress` 或旧 `pollInterval` 轮询方法
+- 需求分析生成任务错误结构试点已覆盖 `generate` 400 校验错误、`progress` 403 / 404 / 500、`stream_progress` 403 / 404 JSON 错误；后续扩展时保持成功响应不变
 - P0-2 AI 生成目标类型只能套用现有生成链路：允许新增 `target_type`、Prompt 按类型选择、任务固化和结果字段适配；禁止重写生成任务创建、模型调用、流式输出、取消、自动评审、轮询恢复和功能测试采纳主链
 - `api_test_case` 结果的字段适配应作为目标类型分支下的轻量归一化，不能替换原功能测试用例解析路径；旧功能测试生成和采纳必须作为回归主线
+
+## 5. P0.2 实时连接和错误结构补充记忆
+
+- 统一实时连接入口当前已有两个工具：`useEventSource` 用于需求分析生成进度 SSE，`useWebSocket` 用于 App 自动化执行进度和接口测试工作区 WebSocket。
+- App 自动化执行进度的业务兜底必须保留：WebSocket 连接失败时先有限重连，耗尽后降级轮询执行详情；不能把连接失败直接展示成测试执行失败。
+- 接口测试工作区 WebSocket 是用户手动调试连接，不应自动反复重连；失败时提示连接失败并保留消息历史即可。
+- 后续新增实时连接页面时，不要在页面里直接 `new EventSource` 或 `new WebSocket`；优先复用统一工具，并明确页面离开关闭、终态停止、失败提示和降级策略。
+- 接口错误结构当前仍是试点，不是全仓契约切换。新增试点必须保留旧 `error` 字段，成功响应不能顺手包一层。

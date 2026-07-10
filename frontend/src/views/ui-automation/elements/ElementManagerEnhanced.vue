@@ -1086,7 +1086,8 @@ const validateElement = async () => {
       ElMessage.error(`${t('uiAutomation.element.messages.validateFailed')}: ${result.validation_message}`)
     }
   } catch (error) {
-    ElMessage.error(t('uiAutomation.element.messages.validateFailed'))
+    const message = error.response?.data?.error || error.response?.data?.message || t('uiAutomation.element.messages.validateFailed')
+    ElMessage.error(message)
     console.error('验证元素失败:', error)
   } finally {
     validating.value = false
@@ -1110,7 +1111,7 @@ const generateSuggestions = async () => {
 
 // 保存页面名称
 const savePageName = () => {
-  // TODO: 实现页面名称保存
+  ElMessage.warning(t('uiAutomation.element.messages.pageNameUpdateUnavailable'))
   editingNodeId.value = null
 }
 

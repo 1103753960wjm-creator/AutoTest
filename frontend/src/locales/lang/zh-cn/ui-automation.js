@@ -289,6 +289,7 @@ export default {
       pageCreateFailed: '页面创建失败',
       pageUpdateSuccess: '页面更新成功',
       pageUpdateFailed: '页面更新失败',
+      pageNameUpdateUnavailable: '页面名称编辑尚未接入保存接口，当前不会修改页面名称',
       pageDeleteSuccess: '页面删除成功',
       validateSuccess: '元素定位器验证通过',
       elementsLoaded: '已加载 {count} 个元素',

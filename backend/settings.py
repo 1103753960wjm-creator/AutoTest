@@ -41,10 +41,15 @@ def env_list(name, default='', allow_wildcard=True, required_in_production=False
 
 
 SECRET_KEY = config('SECRET_KEY', default='django-insecure-your-secret-key-here')
+INSECURE_SECRET_KEYS = {
+    'django-insecure-your-secret-key-here',
+    'your-secret-key-here-change-in-production',
+    'your-secret-key',
+}
 
 DEBUG = env_bool('DEBUG', default=True)
 
-if not DEBUG and SECRET_KEY == 'django-insecure-your-secret-key-here':
+if not DEBUG and (SECRET_KEY in INSECURE_SECRET_KEYS or len(SECRET_KEY) < 32):
     raise ImproperlyConfigured("生产环境必须配置安全的 SECRET_KEY，不能使用默认开发密钥。")
 
 # 根据DEBUG模式设置ALLOWED_HOSTS，生产环境不应使用通配符

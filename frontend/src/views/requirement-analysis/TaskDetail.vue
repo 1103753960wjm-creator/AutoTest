@@ -248,8 +248,8 @@
             @click="goToAdoptedAsset(selectedCase)">
             查看正式资产
           </button>
-          <button type="button" class="action-btn save-btn" @click="goToGeneratedResults">
-            前往结果批次页
+          <button type="button" class="action-btn process-results-btn" @click="goToGeneratedResults">
+            处理生成结果
           </button>
           <button type="button" class="action-btn close-btn-footer" @click="closeCaseDetail">{{ $t('taskDetail.btnClose') }}</button>
         </div>
@@ -299,7 +299,7 @@ export default {
         vm.task?.task_id
           ? {
               key: 'go-generated-results',
-              label: '进入结果批次页',
+              label: '处理生成结果',
               type: 'primary',
               plain: true,
               onClick: () => vm.goToGeneratedResults()
@@ -1605,16 +1605,16 @@ export default {
   background: #66b1ff;
 }
 
-.save-btn {
+.process-results-btn {
   background: #67c23a;
   color: white;
 }
 
-.save-btn:hover:not(:disabled) {
+.process-results-btn:hover:not(:disabled) {
   background: #85ce61;
 }
 
-.save-btn:disabled {
+.process-results-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }

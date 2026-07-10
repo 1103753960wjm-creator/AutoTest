@@ -288,6 +288,7 @@ export default {
       pageCreateFailed: 'Failed to create page',
       pageUpdateSuccess: 'Page updated successfully',
       pageUpdateFailed: 'Failed to update page',
+      pageNameUpdateUnavailable: 'Page name editing is not connected to a save API yet. The page name was not changed.',
       pageDeleteSuccess: 'Page deleted successfully',
       validateSuccess: 'Element locator validation passed',
       validateFailed: 'Validation failed',

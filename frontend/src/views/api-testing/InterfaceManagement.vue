@@ -1035,6 +1035,7 @@ import { debounce } from 'lodash-es'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
+import { createManagedWebSocket } from '@/composables/useWebSocket'
 
 defineOptions({
   name: 'ApiTestCaseWorkspace'
@@ -2456,6 +2457,10 @@ const copyGeneratedCode = () => {
   }
 }
 
+const normalizeWorkspaceWebSocketUrl = (url) => {
+  return url.replace(/^http:\/\//i, 'ws://').replace(/^https:\/\//i, 'wss://')
+}
+
 const toggleWebSocketConnection = async () => {
   if (!selectedRequest.value || !selectedRequest.value.url) {
     ElMessage.warning('请填写WebSocket URL')
@@ -2474,52 +2479,54 @@ const toggleWebSocketConnection = async () => {
     // 建立连接
     try {
       websocketConnectionStatus.value = 'connecting'
-      const wsUrl = selectedRequest.value.url.replace('http://', 'ws://').replace('https://', 'wss://')
+      const wsUrl = normalizeWorkspaceWebSocketUrl(selectedRequest.value.url)
 
-      websocketConnection.value = new WebSocket(wsUrl)
+      const client = createManagedWebSocket({
+        url: wsUrl,
+        parseMessage: null,
+        maxReconnectAttempts: 0,
+        onOpen: () => {
+          websocketConnectionStatus.value = 'connected'
+          ElMessage.success('WebSocket连接成功')
+          websocketMessages.value.push({
+            type: 'connected',
+            content: 'WebSocket连接成功',
+            timestamp: new Date().toLocaleString()
+          })
+        },
+        onMessage: (message) => {
+          websocketMessages.value.push({
+            type: 'received',
+            content: message,
+            timestamp: new Date().toLocaleString()
+          })
+        },
+        onClose: () => {
+          websocketConnectionStatus.value = 'disconnected'
+          websocketConnection.value = null
+          websocketMessages.value.push({
+            type: 'info',
+            content: 'WebSocket连接已关闭',
+            timestamp: new Date().toLocaleString()
+          })
+        },
+        onError: () => {
+          websocketConnectionStatus.value = 'disconnected'
+          ElMessage.error('WebSocket连接失败')
+          websocketMessages.value.push({
+            type: 'error',
+            content: 'WebSocket连接失败',
+            timestamp: new Date().toLocaleString()
+          })
+        }
+      })
 
-      websocketConnection.value.onopen = () => {
-        websocketConnectionStatus.value = 'connected'
-        ElMessage.success('WebSocket连接成功')
-        websocketMessages.value.push({
-          type: 'connected',
-          content: 'WebSocket连接成功',
-          timestamp: new Date().toLocaleString()
-        })
-      }
-
-      websocketConnection.value.onmessage = (event) => {
-        websocketMessages.value.push({
-          type: 'received',
-          content: event.data,
-          timestamp: new Date().toLocaleString()
-        })
-      }
-
-      websocketConnection.value.onclose = () => {
-        websocketConnectionStatus.value = 'disconnected'
-        websocketConnection.value = null
-        websocketMessages.value.push({
-          type: 'info',
-          content: 'WebSocket连接已关闭',
-          timestamp: new Date().toLocaleString()
-        })
-      }
-
-      websocketConnection.value.onerror = (error) => {
-        websocketConnectionStatus.value = 'disconnected'
-        websocketConnection.value = null
-        ElMessage.error('WebSocket连接失败')
-        websocketMessages.value.push({
-          type: 'error',
-          content: `WebSocket连接失败: ${error.message}`,
-          timestamp: new Date().toLocaleString()
-        })
-      }
-    } catch (error) {
+      websocketConnection.value = client
+      client.connect()
+    } catch {
       websocketConnectionStatus.value = 'disconnected'
+      websocketConnection.value = null
       ElMessage.error('WebSocket连接失败')
-      console.error('WebSocket连接失败:', error)
     }
   }
 }
@@ -2542,7 +2549,13 @@ const sendWebSocketMessage = () => {
       message = JSON.parse(message)
     }
 
-    websocketConnection.value.send(message)
+    const sent = websocketConnection.value.send(message)
+    if (!sent) {
+      websocketConnectionStatus.value = 'disconnected'
+      ElMessage.warning('请先建立WebSocket连接')
+      return
+    }
+
     websocketMessages.value.push({
       type: 'sent',
       content: websocketMessageContent.value,
@@ -2552,9 +2565,8 @@ const sendWebSocketMessage = () => {
     if (websocketMessageType.value !== 'binary') {
       websocketMessageContent.value = ''
     }
-  } catch (error) {
+  } catch {
     ElMessage.error('发送消息失败')
-    console.error('发送消息失败:', error)
   }
 }
 
@@ -2899,6 +2911,11 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  if (websocketConnection.value) {
+    websocketConnection.value.close()
+    websocketConnection.value = null
+  }
+
   // 移除全局点击事件监听器
   document.removeEventListener('click', handleGlobalClick)
   document.removeEventListener('contextmenu', handleGlobalClick)

@@ -7,6 +7,7 @@ import httpx
 import asyncio
 from typing import Dict, Any, List, AsyncIterator
 import logging
+from apps.core.security import redact_json_for_log, redact_text
 
 logger = logging.getLogger(__name__)
 
@@ -473,6 +474,63 @@ class AIModelService:
     """AI模型服务类"""
 
     @staticmethod
+    def _coerce_content_to_text(content) -> str:
+        """将不同供应商返回的 content 结构统一转换为文本。"""
+        if content is None:
+            return ''
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return ''.join(AIModelService._coerce_content_to_text(item) for item in content)
+        if isinstance(content, dict):
+            for key in ('text', 'content', 'value'):
+                text = AIModelService._coerce_content_to_text(content.get(key))
+                if text:
+                    return text
+        return ''
+
+    @staticmethod
+    def _extract_openai_compatible_content(payload: Dict[str, Any]) -> str:
+        """兼容提取 OpenAI-like 响应中的正文内容。"""
+        if not isinstance(payload, dict):
+            return ''
+
+        choices = payload.get('choices')
+        if isinstance(choices, list) and choices:
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                for container_name in ('delta', 'message'):
+                    container = choice.get(container_name)
+                    if isinstance(container, dict):
+                        text = AIModelService._coerce_content_to_text(container.get('content'))
+                        if text:
+                            return text
+                text = AIModelService._coerce_content_to_text(choice.get('content'))
+                if text:
+                    return text
+
+        return AIModelService._coerce_content_to_text(payload.get('content'))
+
+    @staticmethod
+    def _require_non_empty_content(content: str, error_message: str) -> str:
+        if content and content.strip():
+            return content
+        raise ValueError(error_message)
+
+    @staticmethod
+    def _summarize_api_response(payload: Dict[str, Any]) -> str:
+        if not isinstance(payload, dict):
+            return type(payload).__name__
+
+        choices = payload.get('choices')
+        choices_count = len(choices) if isinstance(choices, list) else 0
+        return redact_json_for_log({
+            'keys': list(payload.keys()),
+            'choices_count': choices_count,
+        })
+
+    @staticmethod
     async def call_openai_compatible_api(
             config: AIModelConfig,
             messages: List[Dict[str, str]],
@@ -523,9 +581,9 @@ class AIModelService:
         else:
             url = base_url
 
-        logger.info(f"=== API调用详情 ===")
-        logger.info(f"原始base_url: {config.base_url}")
-        logger.info(f"最终请求URL: {url}")
+        logger.info("=== API调用详情 ===")
+        logger.info(f"原始base_url: {redact_text(config.base_url)}")
+        logger.info(f"最终请求URL: {redact_text(url)}")
         logger.info(f"模型名称: {config.model_name}")
         logger.info(f"请求参数: max_tokens={actual_max_tokens}, temperature={config.temperature}, top_p={config.top_p}")
 
@@ -540,7 +598,7 @@ class AIModelService:
                 pool=60.0  # 连接池超时：60秒
             )
             async with httpx.AsyncClient(timeout=timeout_config, http2=False) as client:
-                logger.info(f"发送POST请求到: {url}")
+                logger.info(f"发送POST请求到: {redact_text(url)}")
                 response = await client.post(
                     url,
                     headers=headers,
@@ -550,27 +608,28 @@ class AIModelService:
                 logger.info(f"收到响应: status_code={response.status_code}")
 
                 if response.status_code != 200:
-                    error_detail = response.text
+                    error_detail = redact_text(response.text)
                     logger.error(f"API调用返回错误: Status={response.status_code}, Body={error_detail}")
 
                 response.raise_for_status()
                 result = response.json()
-                logger.info(f"API调用成功，响应内容: {str(result)[:200]}...")
+                logger.info(f"API调用成功: {AIModelService._summarize_api_response(result)}")
                 return result
         except httpx.HTTPStatusError as e:
             provider_name = config.get_model_type_display()
-            error_msg = f"{provider_name} API返回错误 {e.response.status_code}: {e.response.text}"
+            error_body = redact_text(e.response.text)
+            error_msg = f"{provider_name} API返回错误 {e.response.status_code}: {error_body}"
             logger.error(error_msg)
             raise Exception(error_msg)
         except httpx.TimeoutException as e:
             provider_name = config.get_model_type_display()
-            logger.error(f"{provider_name} API请求超时: {repr(e)}")
+            logger.error(f"{provider_name} API请求超时: {redact_text(repr(e))}")
             raise Exception(f"{provider_name} API请求超时，请稍后再试或检查网络连接")
         except Exception as e:
             provider_name = config.get_model_type_display()
-            # Use repr(e) to capture the full exception type and message, especially if str(e) is empty
-            logger.error(f"{provider_name} API调用失败: {repr(e)}")
-            raise Exception(f"{provider_name} API调用失败: {str(e) or repr(e)}")
+            safe_error = redact_text(str(e) or repr(e))
+            logger.error(f"{provider_name} API调用失败: {safe_error}")
+            raise Exception(f"{provider_name} API调用失败: {safe_error}")
 
     @staticmethod
     async def call_deepseek_api(config: AIModelConfig, messages: List[Dict[str, str]]) -> Dict[str, Any]:
@@ -647,36 +706,40 @@ class AIModelService:
                     async with client.stream('POST', url, headers=headers, json=data) as response:
                         if response.status_code != 200:
                             error_detail = await response.aread()
-                            error_msg = error_detail.decode('utf-8')
+                            error_msg = redact_text(error_detail.decode('utf-8', errors='replace'))
                             logger.error(f"流式API调用返回错误: Status={response.status_code}, Body={error_msg}")
                             response.raise_for_status()
 
                         async for line in response.aiter_lines():
-                            if not line.strip():
+                            line = line.strip()
+                            if not line:
                                 continue
 
-                            if line.startswith('data: '):
-                                data_str = line[6:]
+                            if line.startswith('data:'):
+                                data_str = line[5:].strip()
+                            elif line.startswith('{'):
+                                data_str = line
+                            else:
+                                continue
+
+                            if data_str:
                                 if data_str.strip() == '[DONE]':
                                     break
 
                                 try:
                                     chunk_data = json.loads(data_str)
-                                    if 'choices' in chunk_data and len(chunk_data['choices']) > 0:
+                                    choices = chunk_data.get('choices') if isinstance(chunk_data, dict) else None
+                                    if choices and len(choices) > 0:
                                         choice = chunk_data['choices'][0]
-                                        delta = choice.get('delta', {})
                                         finish_reason = choice.get('finish_reason', None)
-                                        content = delta.get('content', '')
 
-                                        if content:
-                                            chunk_content_buffer += content
-                                            if callback:
-                                                await callback(content)
-                                            yield content
+                                    content = AIModelService._extract_openai_compatible_content(chunk_data)
 
-                                        # 如果在中途就收到了finish_reason（有些流式实现会在最后一条数据带上finish_reason）
-                                        if finish_reason:
-                                            pass
+                                    if content:
+                                        chunk_content_buffer += content
+                                        if callback:
+                                            await callback(content)
+                                        yield content
 
                                 except json.JSONDecodeError:
                                     continue
@@ -709,7 +772,7 @@ class AIModelService:
                     break
 
             except Exception as e:
-                logger.error(f"流式请求异常: {e}")
+                logger.error(f"流式请求异常: {redact_text(str(e) or repr(e))}")
                 # 如果是超时或其他网络错误，可能需要重试机制，这里暂时直接抛出
                 raise e
 
@@ -757,11 +820,19 @@ class AIModelService:
             # 不再硬编码max_tokens，使用配置文件中的值（如32000）
         )
 
-        return response['choices'][0]['message']['content']
+        content = AIModelService._extract_openai_compatible_content(response)
+        return AIModelService._require_non_empty_content(
+            content,
+            'AI生成测试用例未返回任何内容，请检查模型配置、模型服务额度或响应格式。'
+        )
 
     @staticmethod
     async def review_test_cases(task: TestCaseGenerationTask, test_cases: str) -> str:
         """评审测试用例"""
+        AIModelService._require_non_empty_content(
+            test_cases,
+            'AI评审未执行：待评审测试用例为空。'
+        )
         try:
             reviewer_prompt = task.reviewer_prompt_config.content
 
@@ -786,11 +857,16 @@ class AIModelService:
             # 所有支持的模型都使用兼容OpenAI的接口
             response = await AIModelService.call_openai_compatible_api(task.reviewer_model_config, messages)
 
-            return response['choices'][0]['message']['content']
+            content = AIModelService._extract_openai_compatible_content(response)
+            return AIModelService._require_non_empty_content(
+                content,
+                'AI评审未返回任何内容，请检查评审模型配置或响应格式。'
+            )
         except Exception as e:
-            logger.error(f"评审测试用例时出错: {e}")
+            safe_error = redact_text(str(e) or repr(e))
+            logger.error(f"评审测试用例时出错: {safe_error}")
             # 返回一个默认的评审结果
-            return f"评审过程中出现错误: {str(e)}\n\n建议：测试用例结构完整，可以使用。"
+            return f"评审过程中出现错误: {safe_error}\n\n建议：测试用例结构完整，可以使用。"
 
     @staticmethod
     async def generate_test_cases_stream(
@@ -871,7 +947,10 @@ class AIModelService:
         case_count = full_content.count('TC-') + full_content.count('TEST-') + full_content.count('测试用例')
         logger.info(f"生成用例统计: 约检测到{case_count}个用例编号标记")
 
-        return full_content
+        return AIModelService._require_non_empty_content(
+            full_content,
+            'AI生成测试用例未返回任何内容，请检查模型配置、模型服务额度或流式响应格式。'
+        )
 
     @staticmethod
     async def review_test_cases_stream(
@@ -890,6 +969,10 @@ class AIModelService:
         Returns:
             str: 完整的评审反馈
         """
+        AIModelService._require_non_empty_content(
+            test_cases,
+            'AI评审未执行：待评审测试用例为空。'
+        )
         reviewer_prompt = task.reviewer_prompt_config.content
 
         # 增强的评审指令
@@ -934,7 +1017,10 @@ class AIModelService:
                 logger.warning(f"关闭generator时出错: {close_error}")
 
         logger.info(f"流式评审完成: 总chunk数={chunk_count}, 总字符数={len(full_content)}")
-        return full_content
+        return AIModelService._require_non_empty_content(
+            full_content,
+            'AI评审未返回任何内容，请检查评审模型配置或流式响应格式。'
+        )
 
     @staticmethod
     async def revise_test_cases_based_on_review(
@@ -955,6 +1041,10 @@ class AIModelService:
         Returns:
             str: 改进后的测试用例
         """
+        AIModelService._require_non_empty_content(
+            original_test_cases,
+            'AI改进未执行：原始测试用例为空。'
+        )
         writer_prompt = task.writer_prompt_config.content
 
         # 构建改进指令
@@ -1029,6 +1119,10 @@ class AIModelService:
                 logger.warning(f"关闭generator时出错: {close_error}")
 
         logger.info(f"流式改进完成: 总chunk数={chunk_count}, 总字符数={len(full_content)}")
+
+        if not full_content.strip():
+            logger.warning("AI改进未返回任何内容，保留原始生成用例")
+            return original_test_cases
 
         # 统计改进后的用例数量
         case_count = full_content.count('TC-') + full_content.count('**TC-') + full_content.count('测试用例')

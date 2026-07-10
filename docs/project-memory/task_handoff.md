@@ -1,6 +1,6 @@
 # TestHub 任务交接
 
-更新时间：2026-07-04
+更新时间：2026-07-10
 
 ## 1. 文件职责
 
@@ -15,6 +15,11 @@
 
 ## 2. 最近完成项
 
+- 2026-07-10 已完成 P0.2 剩余实时连接和接口错误结构试点收尾：App 自动化测试用例执行进度从页面内 `new WebSocket` 迁到 `frontend/src/composables/useWebSocket.js`，保留有限重连失败后降级轮询；接口测试工作区 WebSocket 调试连接也迁到统一工具，保留手动连接 / 断开、消息历史和发送能力；接口测试 `move-collection` 的未选择集合、跨项目移动、无权限移动 3 个错误分支接入 `apps/core/responses.py`，返回 `code/message/error/details/request_id`，成功响应不变。验证结果：后端 `py_compile`、`manage.py check`、APIClient 400 错误结构请求级验证、临时数据清理检查、前端 `npm run build`、源码直连扫描、构建产物目标敏感日志扫描、`rule_check.ps1`、`git diff --check` 通过。结论：除用户明确跳过的真实浏览器回归外，P0.2 可以按代码收尾进入下一阶段；不能宣称 V4 回归通过。
+- 2026-07-10 已按用户要求合并完成 P0.2 第二批和第三批的保守试点：新增 `useEventSource` 和 `useWebSocket`，需求分析生成进度 SSE 已从页面内直连 `EventSource` 收口为 `useGenerationTaskTracking -> useEventSource`，`RequirementAnalysisView.vue` 删除旧 `startStreamingProgress`、旧 `startPolling` 和相关调试日志；新增 `frontend/src/utils/errorMessage.js` 统一解析错误信息，`api.js`、登录页和需求分析页已接入；新增 `apps/core/responses.py` 错误响应 helper，需求分析生成任务 `generate` 400、`progress` 403/404/500、`stream_progress` 403/404 JSON 错误完成试点，成功响应不变。验证结果：后端 `py_compile`、`manage.py check`、前端 `npm run build`、APIClient 400/404 错误结构抽样、需求分析页旧 SSE / console 扫描、构建产物 console 扫描、`rule_check.ps1`、`git diff --check` 通过。未验证：真实浏览器 Network 中 SSE 创建 / 关闭；App 自动化和接口测试工作区实时连接已在后续 P0.2 收尾项迁移。
+- 2026-07-10 已完成 P0.2 跨模块硬化第一批：生产配置复核补强 `SECRET_KEY` 弱密钥阻断，`.env.example` 补充生产必填配置和敏感信息说明；新增 `apps/core/security.py` 脱敏工具，AI OpenAI-compatible 调用日志不再打印完整响应正文、API Key、token、Authorization、Cookie、password；清理登录、token 刷新、路由守卫、AI 模型配置、Prompt 配置、生成配置和 AI 智能模式配置页的敏感 `console` 输出。验证结果：后端 `py_compile`、开发 / 合法生产 / 非法生产配置 `manage.py check` 抽样、脱敏函数抽样、前端 `npm run build`、目标敏感日志扫描、构建产物扫描、`rule_check.ps1`、`git diff --check` 均通过；最高整体验证等级 V2，局部配置和脱敏行为达到 V3。用户已明确跳过剩余浏览器回归，所以真实浏览器控制台、页面点击和 P0.1 / 阶段 A 遗留浏览器回归不能写成通过。任务文档见 `docs/tasks/2026-07-10-p0-2-cross-module-hardening/vdd.md`。
+- 2026-07-09 已完成 AI 需求分析生成用例结果处理与保存按钮闭环修复的前端实现和 VDD：对比原生代码后确认，原生 `TaskDetail.vue` 承担勾选、采纳、弃用、编辑保存，但当前项目已经把 `TaskDetail` 收口为任务对象页，结果批次页没有补齐等价处理能力，导致详情表格页看得到任务但不能稳定确认 / 采纳 / 多选弃用生成结果。现在 `GeneratedTestCaseList.vue` 新增“处理结果”抽屉，支持查看生成结果、只选择 `pending` 行、单条 / 多选 / 全部采纳、单条 / 多选 / 全部不通过 / 弃用、编辑生成结果并保存回 `final_test_cases`，已采纳行可跳正式资产；`RequirementAnalysisView.vue` 生成完成页主按钮从旧“保存到用例记录”改为“采纳全部待处理结果”，补 loading、防重复、空数据和项目归属检查；`TaskDetail.vue` 文案统一为“处理生成结果”。新增 `frontend/src/api/requirement-analysis.js` 结果处理接口封装，页面新增动作不再散写这些端点。验证结果：`rule_check.ps1` 通过，`cd frontend && cmd /c npm run build` 通过，`git diff --check` 通过，整页跳转和新增端点散写扫描通过；最高验证等级 V2。未验证：真实浏览器点击、真实后端任务的采纳 / 弃用 / 编辑保存接口行为、AI 自动评审空用例主链。
+- 2026-07-08 已完成 P0.1 剩余闭环：注册接口和测试注册接口不再返回 `temp_token_*`，统一返回 JWT `access/refresh`；`logout/profile` 明确需要登录态；UI 自动化元素定位器验证不再返回模拟成功，真实浏览器验证未接入时返回 501；删除 UI 自动化历史未调用的模拟步骤日志和模拟失败截图 helper；接口自动化 Allure 结果时间改为基于执行记录和请求耗时推导；页面树“页面名称编辑”未接入保存接口时明确提示不会修改名称。任务文档见 `docs/tasks/2026-07-04-p0-1-remaining-closure/`，最高验证等级 V3（有限请求级验证）。已验证：后端 `py_compile`、前端 `npm run build`、`rule_check.ps1`、`git diff --check`、注册 / profile / logout / App 报告 media / App 报告 API / UI 元素验证匿名访问的 DRF 请求级验证。未验证：真实浏览器主流程、真实 App 报告文件 200、真实无权限对象 403、浏览器 EventSource 凭据行为。
 - 2026-07-04 已定位并修复本地开发环境页面切换卡顿 / 像刷新问题：根因不是 `router-view key`、表单默认提交或认证跳转，而是 `frontend/vite.config.js` 长期开启 `optimizeDeps.force: true`，配合大量懒加载页面和 Element Plus 按需样式，首次点击页面时触发 Vite 依赖重优化，出现 `504 Outdated Optimize Dep` 和动态 import 失败，随后浏览器 reload。已去掉 `force: true`，新增 `optimizeDeps.entries` 覆盖 `index.html` 与 `src/**/*.{js,vue}`，并预优化 Element Plus 深层样式依赖。验证结果：Vite 重启日志不再出现强制重优化；Playwright 复现接口自动化、Web 自动化、App 自动化共 11 次导航，`beforeunload/pagehide/hidden` 均为 0，网络无 `504 Outdated Optimize Dep`；`cd frontend && cmd /c npm run build` 通过，仍只有既有 `web-tree-sitter` 警告。浏览器验证中的后端接口 500 来自未启动 Django 后端，不属于本轮导航刷新问题。
 - 2026-07-04 已修复双击 `start.bat` 后前端先 ready、后端未 ready 导致的 `ECONNREFUSED 127.0.0.1:8000`：旧脚本后台启动 Django 后立即启动 Vite，截图中的前端请求早于 `backend.log` 中 Django ready 时间约 15 秒。现在脚本会先切到脚本所在目录，启动后端后最多等待 60 秒确认 `127.0.0.1:8000` 可连接，再启动前端；后端未 ready 时提示查看 `backend.log` 并停止。
 - 2026-07-03 已完成 P0.1 前后端与样式上线阻断项第一批：新增样式 token 并接入共享样式基座；P0.1 点名的数据工厂、数据工厂选择器和执行详情页裸 `axios` 已收口到 `frontend/src/api/* -> frontend/src/utils/api.js`；需求分析配置 / 生成 / 进度 / SSE 和 App 自动化报告入口已收紧到认证和对象权限；`backend/urls.py` 不再暴露无对象权限的 App 报告静态目录。验证结果：`npm run build`、后端 `py_compile`、`rule_check.ps1`、`git diff --check`、裸 axios 扫描、权限静态扫描均通过；DRF 测试客户端验证未登录敏感入口 401、直接 App 报告 media 403、登录态配置检查 200、本人任务进度和 SSE 200。本轮 VDD 为 `docs/tasks/2026-07-03-p0-1-full-stack-baseline/vdd.md`，最高验证等级 V3（有限请求级验证）。未验证项：浏览器页面主流程、App 报告真实文件 200、真实无权限对象 403、浏览器 EventSource 凭据行为。
@@ -82,8 +87,17 @@
 - 后续新增或修改任意 Vue 表单、弹窗表单、筛选区或原生按钮时，必须检查 `<form>` / `<el-form>` 是否保留 `@submit.prevent`，原生 `<button>` 是否保留显式 `type`。
 - 后续修改 `frontend/vite.config.js` 的 `optimizeDeps` 时，禁止长期恢复 `force: true`；如因依赖缓存排障临时使用强制重优化，结束后必须还原，并补跑首次跨模块 / 侧边栏懒加载页面验证，确认无 `504 Outdated Optimize Dep` 和整页 reload。
 - 后续维护 `start.bat` 或一键启动脚本时，必须保留“等待后端 ready 后再启动前端”的顺序，避免前端代理在后端未监听时误报登录接口连接失败。
+- 后续如外部脚本依赖注册接口旧 `token` 字段，需要改为使用 JWT `access/refresh`；不得恢复 `temp_token_*` 这类假 token。
+- UI 自动化元素定位器验证当前真实浏览器验证尚未接入，接口会返回 501；后续要实现时必须接入真实浏览器执行环境，不能恢复模拟通过。
+- UI 自动化页面树“页面名称编辑”当前只提示未接入保存接口，不会落库；后续如要支持页面改名，需要补真实 API 和请求级验证。
 - 后续直接使用 `ElMessage`、`ElMessageBox`、`ElNotification`、`ElLoading` 等 Element Plus 服务式 API 时，必须确认 `frontend/src/main.js` 或对应全局入口已经引入服务组件样式；否则可能出现弹窗裸样式、位置不居中或遮罩缺失。
 - 接口测试用例“加入套件”属于闭环动作，不允许点击后无反应；成功、失败和阻断原因必须有明确反馈。阻断型、结果确认型反馈优先使用弹窗，不能只依赖底部 `ElMessage` 弱提示。
+- AI 需求分析生成用例结果处理主入口现在在 `GeneratedTestCaseList.vue` 的“处理结果”抽屉；`TaskDetail.vue` 仍只做任务对象摘要和入口。后续不要把采纳、弃用、编辑保存主动作重新塞回任务详情页。
+- AI 生成完成页的主动作应按当前状态机叫“采纳全部待处理结果”，不要再把旧 `/save_to_records/` 作为可见主入口；缺项目归属时必须前端阻断，不要静默落到后端默认项目。
+- 当前 AI 自动评审报“待评审测试用例为空”的直接触发点在 `AIModelService.review_test_cases[_stream]` 的空内容保护；如果要继续修自动评审主链，需要单独验证生成阶段是否写入了非空 `generated_test_cases/final_test_cases`，不要和结果处理页交互问题混在一轮改。
+- P0.2 第一批已完成；第二批和第三批已完成需求分析生成进度 SSE 迁移和错误结构试点；剩余收尾已完成 App 自动化实时进度 / 日志连接和接口测试工作区 WebSocket 迁移。下一步不再重复迁移实时连接，除非用户要求补真实浏览器回归。
+- 新页面错误提示优先使用 `frontend/src/utils/errorMessage.js`；新后端错误响应试点优先使用 `apps/core/responses.py`，保持成功响应不变。
+- 后续新增或恢复调试日志时，不能输出 token、用户对象、API Key、完整请求头、完整响应体或 axios error 对象；后端日志优先使用 `apps/core/security.py` 的脱敏工具。
 - 若后续继续改 `frontend/src/layout/index.vue`、`PlatformSidebar.vue` 或 `router.afterEach`，必须优先复跑跨顶部模块与侧栏快速切换验证，不能只看单模块内侧栏切换。
 - 若后续要继续清理前端构建警告，下一步应单独评估 `curlconverter` 是否继续放在浏览器侧，或是否改为更轻的前端实现 / 后端处理方案
 - 接口自动化 P0-2 Spec/TDD 已补充但尚未确认：`docs/api-automation/api-automation-p0-2-ai-target-type-spec.md`、`docs/api-automation/api-automation-p0-2-ai-target-type-tdd.md`。当前必须先等用户确认 Spec，再修订 / 确认 TDD，最后才能进入 Execution；本阶段只做目标类型下拉、Prompt 按类型选择、任务固化目标类型、结果展示目标类型和非功能采纳保护，接口测试用例采纳入库拆到 P0-3。
@@ -110,7 +124,9 @@
 2. 若后续要进一步增强 AI 接手能力，可在下一轮补一个“记忆回写模板”或“任务收尾模板”
 3. 若新项目也要复用这套方式，保留全局 `GEMINI.md` 模板，只替换项目级 `.cursor` 和 `docs/project-memory/*`
 4. 后续同类错误第二次出现时，必须优先判断是否要写入 `error_prevention_log.md`
-5. 下一步应先补阶段 A 浏览器人工回归；通过后再回到 P0-2 / P0-3 AI 生成和采纳主线
+5. 下一步进入 P0.2 实时连接剩余迁移：先迁 App 自动化实时进度 / 日志连接，验证连接创建、终态停止、页面离开关闭和有限重连
+6. App 自动化稳定后，再迁接口测试工作区 WebSocket / SSE；错误结构继续按模块试点，不一次性全仓替换
+7. 用户已要求跳过剩余回归，本轮未完成的真实浏览器主流程、真实 App 报告文件 200、真实无权限对象 403、浏览器 EventSource 凭据行为只能作为残余风险，后续需要补时再单独执行
 
 ## 6. 接手前优先查看
 

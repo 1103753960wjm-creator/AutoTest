@@ -277,6 +277,7 @@ import {
   getWsStatus,
   getDeviceList
 } from '@/api/app-automation'
+import { createManagedWebSocket } from '@/composables/useWebSocket'
 import { getDisplayStatus, formatDateTime } from '@/utils/app-automation-helpers'
 
 const router = useRouter()
@@ -620,7 +621,6 @@ const updateExecutionData = (updates) => {
 
 const wsDisabled = ref(false)
 const pollingTimers = ref({})
-const wsRetryCount = ref({})
 const WS_MAX_RETRY = 3
 
 const startPolling = (executionId) => {
@@ -644,8 +644,8 @@ const startPolling = (executionId) => {
           else if (res.data.status === 'error') ElMessage.error('执行异常')
         }
       }
-    } catch (error) {
-      console.error('轮询执行状态失败:', error)
+    } catch {
+      // 单次轮询失败不打断执行跟踪，下一轮继续尝试，避免网络抖动误判为执行失败。
     }
   }, 3000)
 }
@@ -664,19 +664,11 @@ const stopAllPolling = () => {
 const connectWebSocket = (executionId) => {
   if (websockets.value[executionId]) return
 
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  const wsUrl = `${protocol}://${window.location.host}/ws/app-automation/executions/${executionId}/`
-
-  const ws = new WebSocket(wsUrl)
-  websockets.value[executionId] = ws
-
-  ws.onopen = () => {
-    wsRetryCount.value[executionId] = 0
-  }
-
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data)
+  const client = createManagedWebSocket({
+    url: `/ws/app-automation/executions/${executionId}/`,
+    reconnectDelayMs: 1000,
+    maxReconnectAttempts: WS_MAX_RETRY,
+    onMessage: (data) => {
       updateExecutionData(data)
       if (data.status && lastStatusMessages.value[executionId] !== data.status) {
         lastStatusMessages.value[executionId] = data.status
@@ -687,30 +679,25 @@ const connectWebSocket = (executionId) => {
       if (['completed', 'error', 'stopped'].includes(data.status)) {
         closeWebSocket(executionId)
       }
-    } catch (error) {
-      console.error('处理 WebSocket 消息失败:', error)
+    },
+    onError: () => {
+      // WebSocket 错误由统一连接器走重连或降级轮询，这里不输出可能包含连接细节的调试对象。
+    },
+    onReconnectFailed: () => {
+      delete websockets.value[executionId]
+      const target = executionData.value.results.find((item) => item.id === executionId)
+      if (target && ['pending', 'running'].includes(target.status)) {
+        startPolling(executionId)
+      }
     }
-  }
+  })
+  websockets.value[executionId] = client
 
-  ws.onclose = () => {
+  try {
+    client.connect()
+  } catch {
     delete websockets.value[executionId]
-  }
-
-  ws.onerror = () => {
-    closeWebSocket(executionId)
-    const retries = (wsRetryCount.value[executionId] || 0) + 1
-    wsRetryCount.value[executionId] = retries
-    if (retries <= WS_MAX_RETRY) {
-      setTimeout(() => {
-        const target = executionData.value.results.find((item) => item.id === executionId)
-        if (target && ['pending', 'running'].includes(target.status)) {
-          connectWebSocket(executionId)
-        }
-      }, retries * 1000)
-    } else {
-      delete wsRetryCount.value[executionId]
-      startPolling(executionId)
-    }
+    startPolling(executionId)
   }
 }
 

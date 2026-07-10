@@ -170,6 +170,7 @@ import { ElMessage } from 'element-plus'
 import { User, Lock, Document, MagicStick, Connection, TrendCharts, ArrowDown } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { useAppStore } from '@/stores/app'
+import { getErrorMessage } from '@/utils/errorMessage'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -236,25 +237,15 @@ const handleLogin = async () => {
     if (valid) {
       loading.value = true
       try {
-        console.log('Starting login...')
-        const result = await userStore.login(form)
-        console.log('Login result:', result)
-        console.log('User store state:', {
-          token: userStore.token,
-          user: userStore.user,
-          isAuthenticated: userStore.isAuthenticated
-        })
+        await userStore.login(form)
 
         ElMessage.success(t('auth.loginSuccess'))
-        console.log('Preparing to redirect to /home')
 
         // Use replace instead of push to prevent returning to login page
         await router.replace('/home')
-        console.log('Redirect completed')
 
       } catch (error) {
-        console.error('Login failed:', error)
-        ElMessage.error(error.response?.data?.error || t('auth.loginFailed'))
+        ElMessage.error(getErrorMessage(error, t('auth.loginFailed')))
       } finally {
         loading.value = false
       }

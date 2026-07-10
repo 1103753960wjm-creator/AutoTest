@@ -96,6 +96,7 @@ class ApiRequestSerializer(serializers.ModelSerializer):
     project_id = serializers.SerializerMethodField()
     project_name = serializers.SerializerMethodField()
     source_label = serializers.SerializerMethodField()
+    assertions_count = serializers.SerializerMethodField()
     latest_execution_status = serializers.SerializerMethodField()
     latest_execution_status_code = serializers.SerializerMethodField()
     latest_executed_at = serializers.SerializerMethodField()
@@ -112,7 +113,7 @@ class ApiRequestSerializer(serializers.ModelSerializer):
             'headers', 'params', 'body', 'auth', 'pre_request_script',
             'post_request_script', 'assertions', 'collection', 'order', 'created_by',
             'collection_name', 'project_id', 'project_name', 'source_label',
-            'latest_execution_status', 'latest_execution_status_code',
+            'assertions_count', 'latest_execution_status', 'latest_execution_status_code',
             'latest_executed_at', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
@@ -137,6 +138,10 @@ class ApiRequestSerializer(serializers.ModelSerializer):
             if source_type == 'manual':
                 return '手工创建'
         return '来源未记录'
+
+    def get_assertions_count(self, obj):
+        assertions = obj.assertions if isinstance(obj.assertions, list) else []
+        return len(assertions)
 
     def get_latest_execution_status_code(self, obj):
         return getattr(obj, 'latest_status_code', None)

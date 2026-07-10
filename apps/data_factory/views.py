@@ -13,7 +13,6 @@ from django.db.models import Q, Count
 from django.utils import timezone
 from django.http import HttpResponse
 from django.core.cache import cache
-from django.views.decorators.csrf import csrf_exempt
 from asgiref.sync import sync_to_async
 import asyncio
 

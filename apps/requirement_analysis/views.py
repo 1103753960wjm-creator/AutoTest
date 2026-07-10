@@ -58,6 +58,7 @@ from .services import RequirementAnalysisService, DocumentProcessor
 from apps.projects.models import Project
 from apps.testcases.models import TestCase
 from apps.testcases.ai_source_dedup import build_ai_testcase_lookup, get_or_create_ai_testcase
+from apps.core.responses import build_error_payload, error_response
 from apps.versions.models import Version
 
 
@@ -1467,7 +1468,13 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
         try:
             serializer = TestCaseGenerationRequestSerializer(data=request.data)
             if not serializer.is_valid():
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return error_response(
+                    'validation_error',
+                    '参数校验失败',
+                    status.HTTP_400_BAD_REQUEST,
+                    details=serializer.errors,
+                    request=request,
+                )
 
             validated_data = serializer.validated_data
 
@@ -1623,6 +1630,8 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                         generated_cases = loop.run_until_complete(
                                             AIModelService.generate_test_cases_stream(task, callback=stream_callback)
                                         )
+                                        if not generated_cases or not generated_cases.strip():
+                                            raise ValueError('AI生成测试用例未返回任何内容，已停止自动评审。')
 
                                         # 生成完成后，确保最终的流式内容被保存
                                         if task.stream_buffer:
@@ -1681,10 +1690,9 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                         )
                                                     )
                                                     # 保存最终评审内容
-                                                    if review_buffer:
-                                                        cancel_check('review_feedback_write', force=True)
-                                                        task.review_feedback = ''.join(review_buffer)
-                                                        task.save(update_fields=['review_feedback'])
+                                                    cancel_check('review_feedback_write', force=True)
+                                                    task.review_feedback = ''.join(review_buffer) if review_buffer else review_feedback
+                                                    task.save(update_fields=['review_feedback'])
                                                     self._mark_auto_review_record_completed(
                                                         auto_review_record,
                                                         task.review_feedback,
@@ -1757,6 +1765,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                                 sorted_cases)
                                                             cancel_check('final_cases_write', force=True)
                                                             task.final_test_cases = renumbered_cases
+                                                            task.save(update_fields=['final_test_cases'])
                                                             logger.info(
                                                                 f"任务 {task.task_id} 测试用例改进完成 (revised_cases长度: {len(revised_cases)}, 最终保存长度: {len(task.final_test_cases)})")
                                                         else:
@@ -1820,6 +1829,8 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                         generated_cases = loop.run_until_complete(
                                             AIModelService.generate_test_cases(task)
                                         )
+                                        if not generated_cases or not generated_cases.strip():
+                                            raise ValueError('AI生成测试用例未返回任何内容，已停止自动评审。')
 
                                         cancel_check('generated_cases_write', force=True)
                                         task.generated_test_cases = generated_cases
@@ -1848,6 +1859,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                     )
                                                     cancel_check('review_feedback_write', force=True)
                                                     task.review_feedback = review_feedback
+                                                    task.save(update_fields=['review_feedback'])
                                                     self._mark_auto_review_record_completed(
                                                         auto_review_record,
                                                         review_feedback,
@@ -1920,6 +1932,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                                                 sorted_cases)
                                                             cancel_check('final_cases_write', force=True)
                                                             task.final_test_cases = renumbered_cases
+                                                            task.save(update_fields=['final_test_cases'])
                                                             logger.info(
                                                                 f"任务 {task.task_id} 测试用例改进完成 (revised_cases长度: {len(revised_cases)}, 最终保存长度: {len(task.final_test_cases)})")
                                                         else:
@@ -1980,7 +1993,7 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                                     task.status = 'completed'
                                     task.progress = 100
                                     task.completed_at = timezone.now()
-                                    task.save(update_fields=['status', 'progress', 'completed_at', 'final_test_cases'])
+                                    task.save(update_fields=['status', 'progress', 'completed_at'])
                                     logger.info(f"任务 {task.task_id} 已完成")
 
                                 finally:
@@ -2043,13 +2056,21 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                     'task': task_serializer.data
                 }, status=status.HTTP_201_CREATED)
             else:
-                return Response(task_serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                return error_response(
+                    'validation_error',
+                    '参数校验失败',
+                    status.HTTP_400_BAD_REQUEST,
+                    details=task_serializer.errors,
+                    request=request,
+                )
 
         except Exception as e:
             logger.error(f"创建生成任务时出错: {e}")
-            return Response(
-                {'error': f'创建任务失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            return error_response(
+                'task_create_failed',
+                '创建任务失败',
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                request=request,
             )
 
     @action(detail=True, methods=['get'])
@@ -2072,13 +2093,25 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
 
         except Http404:
             if TestCaseGenerationTask.objects.filter(task_id=task_id).exists():
-                return Response({'error': '无权访问该任务'}, status=status.HTTP_403_FORBIDDEN)
-            return Response({'error': '任务未找到'}, status=status.HTTP_404_NOT_FOUND)
+                return error_response(
+                    'permission_denied',
+                    '无权访问该任务',
+                    status.HTTP_403_FORBIDDEN,
+                    request=request,
+                )
+            return error_response(
+                'task_not_found',
+                '任务未找到',
+                status.HTTP_404_NOT_FOUND,
+                request=request,
+            )
         except Exception as e:
             logger.error(f"获取任务进度时出错: {e}")
-            return Response(
-                {'error': f'获取进度失败: {str(e)}'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            return error_response(
+                'progress_fetch_failed',
+                '获取进度失败',
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                request=request,
             )
 
     @action(
@@ -2146,7 +2179,14 @@ class TestCaseGenerationTaskViewSet(viewsets.ModelViewSet):
                 # 返回JSON错误而不是SSE
                 from django.http import HttpResponse
                 response = HttpResponse(
-                    json.dumps({'error': error_message}),
+                    json.dumps(
+                        build_error_payload(
+                            'permission_denied' if task_exists else 'task_not_found',
+                            error_message,
+                            request=request,
+                        ),
+                        ensure_ascii=False,
+                    ),
                     status=status_code,
                     content_type='application/json'
                 )

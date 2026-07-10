@@ -132,10 +132,10 @@
           row-key="task_id"
           selection-mode="multi"
           :actions="{ view: false, edit: false, delete: false }"
-          :action-column-width="200"
+          :action-column-width="240"
           @selection-change="handleSelectionChange"
           @page-change="loadTasks"
-          @row-dblclick="openEditTask"
+          @row-dblclick="openResultProcessing"
         >
           <el-table-column
             prop="task_id"
@@ -245,12 +245,12 @@
                 正式资产
               </el-button>
               <el-button
-                v-if="canMutateTaskResults(row)"
+                v-if="canOpenResultProcessing(row)"
                 size="small"
                 type="primary"
                 link
-                @click.stop="openEditTask(row)">
-                {{ $t('generatedTestCases.edit') }}
+                @click.stop="openResultProcessing(row)">
+                处理结果
               </el-button>
               <el-button
                 size="small"
@@ -264,6 +264,277 @@
           </template>
         </UnifiedListTable>
       </div>
+
+      <el-drawer
+        v-model="resultDrawerVisible"
+        class="result-processing-drawer"
+        size="82%"
+        destroy-on-close
+        @closed="resetResultDrawerState">
+        <template #header>
+          <div class="result-drawer-header">
+            <div>
+              <h3>{{ resultDrawerTask?.title || '生成结果处理' }}</h3>
+              <p>任务 ID：{{ resultDrawerTask?.task_id || '-' }}</p>
+            </div>
+            <el-tag
+              v-if="resultDrawerTask"
+              :type="getProcessingTagType(resultDrawerSummary)"
+              effect="plain">
+              {{ resultDrawerSummary.label }}
+            </el-tag>
+          </div>
+        </template>
+
+        <div class="result-processing-body">
+          <StateLoading
+            v-if="resultDrawerLoading"
+            compact
+            description="正在加载生成结果" />
+          <StateEmpty
+            v-else-if="!resultDrawerResults.length"
+            compact
+            description="当前任务没有可处理的生成结果" />
+          <template v-else>
+            <div class="result-processing-summary">
+              <div class="summary-block">
+                <span class="summary-label">待处理</span>
+                <strong>{{ resultDrawerSummary.pending_count || 0 }}</strong>
+              </div>
+              <div class="summary-block">
+                <span class="summary-label">已采纳</span>
+                <strong>{{ resultDrawerSummary.adopted_count || 0 }}</strong>
+              </div>
+              <div class="summary-block">
+                <span class="summary-label">已弃用</span>
+                <strong>{{ resultDrawerSummary.discarded_count || 0 }}</strong>
+              </div>
+              <div class="summary-block summary-block--wide">
+                <span class="summary-label">项目归属</span>
+                <strong>{{ resultDrawerProjectLabel }}</strong>
+              </div>
+            </div>
+
+            <div v-if="!resultDrawerProjectId" class="result-processing-warning">
+              当前任务没有明确项目归属。采纳生成结果前，请先回到需求分析页选择或绑定项目。
+            </div>
+
+            <div class="result-processing-toolbar">
+              <span class="selected-count">已选 {{ selectedPendingResultRows.length }} 条待处理结果</span>
+              <div class="toolbar-actions">
+                <el-button
+                  type="primary"
+                  :disabled="!selectedPendingResultRows.length || isResultActionBusy"
+                  :loading="resultActionLoading === 'adopt-selected'"
+                  @click="adoptSelectedResults">
+                  采纳选中
+                </el-button>
+                <el-button
+                  type="success"
+                  :disabled="!resultDrawerSummary.pending_count || isResultActionBusy"
+                  :loading="resultActionLoading === 'adopt-all'"
+                  @click="adoptAllPendingResults">
+                  采纳全部待处理
+                </el-button>
+                <el-button
+                  type="warning"
+                  plain
+                  :disabled="!selectedPendingResultRows.length || isResultActionBusy"
+                  :loading="resultActionLoading === 'discard-selected'"
+                  @click="discardSelectedResults">
+                  弃用选中
+                </el-button>
+                <el-button
+                  type="danger"
+                  plain
+                  :disabled="!resultDrawerSummary.pending_count || isResultActionBusy"
+                  :loading="resultActionLoading === 'discard-all'"
+                  @click="discardAllPendingResults">
+                  弃用全部待处理
+                </el-button>
+              </div>
+            </div>
+
+            <el-table
+              ref="resultTableRef"
+              :data="resultDrawerResults"
+              border
+              row-key="result_uid"
+              class="result-processing-table"
+              :row-class-name="getResultRowClass"
+              @selection-change="handleResultSelectionChange">
+              <el-table-column
+                type="selection"
+                width="48"
+                :selectable="canSelectGeneratedResult" />
+              <el-table-column
+                prop="index"
+                label="序号"
+                width="70"
+                align="center" />
+              <el-table-column
+                label="处理状态"
+                width="110"
+                align="center">
+                <template #default="{ row }">
+                  <el-tag
+                    size="small"
+                    :type="getResultStatusTagType(row.result_status)"
+                    effect="light">
+                    {{ row.result_status_label || getResultStatusText(row.result_status) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="测试场景"
+                min-width="220"
+                show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ row.scenario || '未命名测试场景' }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="前置条件"
+                min-width="180"
+                show-overflow-tooltip>
+                <template #default="{ row }">
+                  {{ row.precondition || '无' }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="操作步骤"
+                min-width="260">
+                <template #default="{ row }">
+                  <div class="multiline-cell">{{ row.steps || '无' }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="预期结果"
+                min-width="220">
+                <template #default="{ row }">
+                  <div class="multiline-cell">{{ row.expected || '无' }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column
+                prop="priority"
+                label="优先级"
+                width="90"
+                align="center" />
+              <el-table-column
+                label="操作"
+                width="250"
+                fixed="right">
+                <template #default="{ row }">
+                  <div class="result-row-actions">
+                    <el-button size="small" link type="primary" @click="openResultViewer(row)">
+                      查看
+                    </el-button>
+                    <el-button
+                      size="small"
+                      link
+                      type="primary"
+                      :disabled="row.result_status !== 'pending' || isResultActionBusy"
+                      @click="openResultEditor(row)">
+                      编辑
+                    </el-button>
+                    <el-button
+                      v-if="row.result_status === 'adopted' && row.adopted_testcase_id"
+                      size="small"
+                      link
+                      type="success"
+                      @click="goToAdoptedAsset(row)">
+                      正式资产
+                    </el-button>
+                    <el-button
+                      size="small"
+                      link
+                      type="success"
+                      :disabled="row.result_status !== 'pending' || isResultActionBusy"
+                      :loading="resultActionLoading === `adopt:${row.result_uid}`"
+                      @click="adoptSingleResult(row)">
+                      采纳
+                    </el-button>
+                    <el-button
+                      size="small"
+                      link
+                      type="danger"
+                      :disabled="row.result_status !== 'pending' || isResultActionBusy"
+                      :loading="resultActionLoading === `discard:${row.result_uid}`"
+                      @click="discardSingleResult(row)">
+                      不通过
+                    </el-button>
+                  </div>
+                </template>
+              </el-table-column>
+            </el-table>
+          </template>
+        </div>
+      </el-drawer>
+
+      <el-dialog
+        v-model="resultEditorVisible"
+        :title="resultEditorMode === 'edit' ? '编辑生成结果' : '查看生成结果'"
+        width="680px"
+        class="result-editor-dialog">
+        <el-form
+          label-position="top"
+          class="result-editor-form"
+          @submit.prevent>
+          <el-form-item label="测试场景">
+            <el-input
+              v-model="resultEditForm.scenario"
+              :disabled="resultEditorMode !== 'edit'"
+              maxlength="500"
+              show-word-limit />
+          </el-form-item>
+          <el-form-item label="前置条件">
+            <el-input
+              v-model="resultEditForm.precondition"
+              :disabled="resultEditorMode !== 'edit'"
+              type="textarea"
+              :rows="3" />
+          </el-form-item>
+          <el-form-item label="操作步骤">
+            <el-input
+              v-model="resultEditForm.steps"
+              :disabled="resultEditorMode !== 'edit'"
+              type="textarea"
+              :rows="6" />
+          </el-form-item>
+          <el-form-item label="预期结果">
+            <el-input
+              v-model="resultEditForm.expected"
+              :disabled="resultEditorMode !== 'edit'"
+              type="textarea"
+              :rows="4" />
+          </el-form-item>
+          <el-form-item label="优先级">
+            <el-select
+              v-model="resultEditForm.priority"
+              :disabled="resultEditorMode !== 'edit'"
+              style="width: 100%">
+              <el-option label="P0" value="P0" />
+              <el-option label="P1" value="P1" />
+              <el-option label="P2" value="P2" />
+              <el-option label="P3" value="P3" />
+              <el-option label="高" value="高" />
+              <el-option label="中" value="中" />
+              <el-option label="低" value="低" />
+            </el-select>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="closeResultEditor">关闭</el-button>
+          <el-button
+            v-if="resultEditorMode === 'edit'"
+            type="primary"
+            :loading="resultEditSaving"
+            :disabled="resultEditSaving"
+            @click="saveResultEdit">
+            保存
+          </el-button>
+        </template>
+      </el-dialog>
 
       <div v-if="false" class="testcases-table">
         <div class="table-header">
@@ -613,7 +884,16 @@
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import api from '@/utils/api'
-import { ElMessage } from 'element-plus'
+import {
+  adoptAllGeneratedTestCases,
+  adoptSelectedGeneratedTestCases,
+  discardAllGeneratedTestCases,
+  discardSelectedGeneratedTestCases,
+  discardSingleGeneratedTestCase,
+  getTestcaseGenerationProgress,
+  updateGeneratedTestCases
+} from '@/api/requirement-analysis'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowDown, ArrowLeft } from '@element-plus/icons-vue'
 import { UnifiedListTable } from '@/components/platform-shared'
 import { StateEmpty, StateError, StateForbidden, StateLoading, StateSearchEmpty, UI_PAGE_STATE } from '@/components/ui-states'
@@ -704,6 +984,23 @@ export default {
         running: 0,
         failed: 0,
         saved: 0
+      },
+      resultDrawerVisible: false,
+      resultDrawerLoading: false,
+      resultDrawerTask: null,
+      resultDrawerResults: [],
+      selectedResultRows: [],
+      resultActionLoading: '',
+      resultEditorVisible: false,
+      resultEditorMode: 'view',
+      resultEditingRow: null,
+      resultEditSaving: false,
+      resultEditForm: {
+        scenario: '',
+        precondition: '',
+        steps: '',
+        expected: '',
+        priority: 'P2'
       }
     }
   },
@@ -766,6 +1063,27 @@ export default {
     // 是否全选
     isAllSelected() {
       return this.tasks.length > 0 && this.selectedTasks.length === this.tasks.length
+    },
+    resultDrawerSummary() {
+      return this.getProcessingSummary(this.resultDrawerTask)
+    },
+    resultDrawerProjectId() {
+      return this.resolveTaskProjectId(this.resultDrawerTask)
+    },
+    resultDrawerProjectLabel() {
+      if (this.resultDrawerTask?.project_name) {
+        return this.resultDrawerTask.project_name
+      }
+      if (this.resultDrawerProjectId) {
+        return this.getProjectName(this.resultDrawerProjectId) || `项目 #${this.resultDrawerProjectId}`
+      }
+      return '未关联项目'
+    },
+    selectedPendingResultRows() {
+      return this.selectedResultRows.filter((row) => this.canSelectGeneratedResult(row))
+    },
+    isResultActionBusy() {
+      return Boolean(this.resultActionLoading) || this.resultDrawerLoading || this.resultEditSaving
     }
   },
 
@@ -830,7 +1148,7 @@ export default {
       let shouldRefetch = false
       try {
         if (this.isTaskScopedView) {
-          const response = await api.get(`/requirement-analysis/testcase-generation/${this.focusedTaskId}/progress/`)
+          const response = await getTestcaseGenerationProgress(this.focusedTaskId)
           const task = response.data || null
           const matchesStatus = !this.selectedStatus || task?.status === this.selectedStatus
           const matchesProject = !this.selectedProject || String(task?.project || '') === String(this.selectedProject)
@@ -932,8 +1250,446 @@ export default {
     },
 
     openEditTask(task) {
-      // 当前列表对象没有明确“编辑任务”入口，先复用详情页作为编辑入口（后续可替换为真正编辑页/弹窗）
-      this.viewTaskDetail(task)
+      this.openResultProcessing(task)
+    },
+
+    canOpenResultProcessing(task) {
+      return task?.status === 'completed' && (task.result_count || this.getTestCaseCount(task)) > 0
+    },
+
+    resetResultDrawerState() {
+      this.selectedResultRows = []
+      this.resultActionLoading = ''
+      this.closeResultEditor()
+    },
+
+    async openResultProcessing(task) {
+      const taskId = task?.task_id
+      if (!taskId) {
+        ElMessage.warning('缺少任务 ID，无法处理生成结果')
+        return
+      }
+      if (task.status !== 'completed') {
+        ElMessage.warning('任务完成后才能处理生成结果')
+        return
+      }
+      this.resultDrawerVisible = true
+      this.resultDrawerTask = task
+      await this.refreshResultDrawerTask(taskId)
+    },
+
+    async refreshResultDrawerTask(taskId = '') {
+      const targetTaskId = taskId || this.resultDrawerTask?.task_id
+      if (!targetTaskId) {
+        return
+      }
+      this.resultDrawerLoading = true
+      try {
+        const response = await getTestcaseGenerationProgress(targetTaskId)
+        this.resultDrawerTask = response.data
+        this.resultDrawerResults = this.normalizeGeneratedResults(response.data?.generated_results || [])
+        this.selectedResultRows = []
+      } catch (error) {
+        console.error('加载生成结果失败:', error)
+        ElMessage.error(`加载生成结果失败: ${this.extractErrorMessage(error)}`)
+      } finally {
+        this.resultDrawerLoading = false
+      }
+    },
+
+    normalizeGeneratedResults(results) {
+      return (Array.isArray(results) ? results : []).map((item, index) => {
+        const resultIndex = Number(item.index || index + 1)
+        const caseId = item.case_id || item.caseId || ''
+        return {
+          ...item,
+          result_uid: `${resultIndex}:${caseId || index}`,
+          index: resultIndex,
+          case_id: caseId,
+          caseId,
+          scenario: this.toPlainResultText(item.scenario || item.title || ''),
+          precondition: this.toPlainResultText(item.precondition || item.preconditions || ''),
+          steps: this.toPlainResultText(item.steps || item.test_steps || ''),
+          expected: this.toPlainResultText(item.expected || item.expected_result || ''),
+          priority: item.priority || 'P2',
+          result_status: item.result_status || 'pending',
+          result_status_label: item.result_status_label || this.getResultStatusText(item.result_status || 'pending'),
+          adopted_testcase_id: item.adopted_testcase_id || null
+        }
+      })
+    },
+
+    toPlainResultText(value) {
+      return String(value || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/&nbsp;/g, ' ')
+        .trim()
+    },
+
+    getResultStatusText(status) {
+      if (status === 'adopted') return '已采纳'
+      if (status === 'discarded') return '已弃用'
+      return '待处理'
+    },
+
+    getResultStatusTagType(status) {
+      if (status === 'adopted') return 'success'
+      if (status === 'discarded') return 'info'
+      return 'warning'
+    },
+
+    getResultRowClass({ row }) {
+      return row?.result_status && row.result_status !== 'pending' ? 'result-row--locked' : ''
+    },
+
+    canSelectGeneratedResult(row) {
+      return row?.result_status === 'pending'
+    },
+
+    handleResultSelectionChange(selection) {
+      this.selectedResultRows = selection.filter((row) => this.canSelectGeneratedResult(row))
+    },
+
+    resolveTaskProjectId(task) {
+      const candidate = task?.project || this.selectedProject || this.$route.query.project || ''
+      return candidate ? String(candidate) : ''
+    },
+
+    ensureResultProjectId(task = this.resultDrawerTask) {
+      const projectId = this.resolveTaskProjectId(task)
+      if (!projectId) {
+        ElMessageBox.alert(
+          '当前任务没有明确项目归属。请先回到需求分析页选择或绑定项目，再采纳生成结果。',
+          '无法采纳生成结果',
+          { confirmButtonText: '知道了', type: 'warning' }
+        )
+        return ''
+      }
+      return projectId
+    },
+
+    mapResultPriority(priority) {
+      const priorityMap = {
+        P0: 'critical',
+        P1: 'high',
+        P2: 'medium',
+        P3: 'low',
+        最高: 'critical',
+        紧急: 'critical',
+        高: 'high',
+        中: 'medium',
+        低: 'low',
+        critical: 'critical',
+        high: 'high',
+        medium: 'medium',
+        low: 'low'
+      }
+      return priorityMap[priority] || 'medium'
+    },
+
+    buildAdoptCasePayload(row) {
+      return {
+        title: row.scenario || '测试用例',
+        description: row.scenario || '',
+        preconditions: row.precondition || '',
+        steps: row.steps || '',
+        expected_result: row.expected || '',
+        priority: this.mapResultPriority(row.priority),
+        test_type: 'functional',
+        status: 'draft',
+        case_id: row.case_id || row.caseId || '',
+        case_index: row.index,
+        tags: [
+          {
+            source: 'ai_generation_task',
+            task_id: this.resultDrawerTask?.task_id || '',
+            project_id: this.resultDrawerProjectId || '',
+            project_name: this.resultDrawerProjectLabel || '',
+            case_id: row.case_id || row.caseId || '',
+            case_index: row.index,
+            source_label: '由 AI 生成结果处理页采纳'
+          }
+        ]
+      }
+    },
+
+    buildActionSuccessMessage(data, fallback) {
+      if (data?.message) {
+        return data.message
+      }
+      const created = data?.created_count ?? data?.adopted_count
+      const deduplicated = data?.deduplicated_count
+      const discarded = data?.discarded_count
+      const pending = data?.pending_count
+      const parts = []
+      if (created !== undefined) parts.push(`新建 ${created}`)
+      if (deduplicated !== undefined) parts.push(`幂等命中 ${deduplicated}`)
+      if (discarded !== undefined) parts.push(`弃用 ${discarded}`)
+      if (pending !== undefined) parts.push(`剩余待处理 ${pending}`)
+      return parts.length ? `${fallback}（${parts.join('，')}）` : fallback
+    },
+
+    extractErrorMessage(error) {
+      return error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.response?.data?.detail ||
+        error?.message ||
+        '未知错误'
+    },
+
+    async runResultAction(actionKey, action, successFallback) {
+      if (this.resultActionLoading) {
+        return
+      }
+      this.resultActionLoading = actionKey
+      try {
+        const response = await action()
+        ElMessage.success(this.buildActionSuccessMessage(response?.data, successFallback))
+        await this.refreshResultDrawerTask()
+        await this.loadTasks()
+      } catch (error) {
+        console.error(`${successFallback}失败:`, error)
+        if (error.response?.status === 400) {
+          await this.refreshResultDrawerTask()
+          await this.loadTasks()
+        }
+        ElMessage.error(`${successFallback}失败: ${this.extractErrorMessage(error)}`)
+      } finally {
+        this.resultActionLoading = ''
+      }
+    },
+
+    async adoptAllPendingResults() {
+      const summary = this.resultDrawerSummary
+      if (!summary.pending_count) {
+        ElMessage.warning('当前结果批次已无可采纳的待处理结果')
+        return
+      }
+      const projectId = this.ensureResultProjectId()
+      if (!projectId) return
+      try {
+        await ElMessageBox.confirm(
+          `确认采纳当前任务的 ${summary.pending_count} 条待处理结果为正式测试用例？`,
+          '采纳全部待处理结果',
+          { confirmButtonText: '采纳', cancelButtonText: '取消', type: 'warning' }
+        )
+      } catch (error) {
+        return
+      }
+      await this.runResultAction(
+        'adopt-all',
+        () => adoptAllGeneratedTestCases(this.resultDrawerTask.task_id, {
+          project_id: projectId
+        }),
+        '采纳全部待处理结果'
+      )
+    },
+
+    async adoptSelectedResults() {
+      const rows = this.selectedPendingResultRows
+      if (!rows.length) {
+        ElMessage.warning('请先选择待处理结果')
+        return
+      }
+      const projectId = this.ensureResultProjectId()
+      if (!projectId) return
+      await this.runResultAction(
+        'adopt-selected',
+        () => adoptSelectedGeneratedTestCases(this.resultDrawerTask.task_id, {
+          project_id: projectId,
+          test_cases: rows.map((row) => this.buildAdoptCasePayload(row))
+        }),
+        '采纳选中结果'
+      )
+    },
+
+    async adoptSingleResult(row) {
+      if (!this.canSelectGeneratedResult(row)) {
+        ElMessage.warning('只有待处理结果可以采纳')
+        return
+      }
+      const projectId = this.ensureResultProjectId()
+      if (!projectId) return
+      await this.runResultAction(
+        `adopt:${row.result_uid}`,
+        () => adoptSelectedGeneratedTestCases(this.resultDrawerTask.task_id, {
+          project_id: projectId,
+          test_cases: [this.buildAdoptCasePayload(row)]
+        }),
+        '采纳结果'
+      )
+    },
+
+    async discardAllPendingResults() {
+      const summary = this.resultDrawerSummary
+      if (!summary.pending_count) {
+        ElMessage.warning('当前结果批次已无可弃用的待处理结果')
+        return
+      }
+      try {
+        await ElMessageBox.confirm(
+          `确认将当前任务的 ${summary.pending_count} 条待处理结果标记为不通过 / 弃用？原始 AI 结果会保留。`,
+          '弃用全部待处理结果',
+          { confirmButtonText: '弃用', cancelButtonText: '取消', type: 'warning' }
+        )
+      } catch (error) {
+        return
+      }
+      await this.runResultAction(
+        'discard-all',
+        () => discardAllGeneratedTestCases(this.resultDrawerTask.task_id),
+        '弃用全部待处理结果'
+      )
+    },
+
+    async discardSelectedResults() {
+      const rows = this.selectedPendingResultRows
+      if (!rows.length) {
+        ElMessage.warning('请先选择待处理结果')
+        return
+      }
+      try {
+        await ElMessageBox.confirm(
+          `确认将选中的 ${rows.length} 条结果标记为不通过 / 弃用？原始 AI 结果会保留。`,
+          '弃用选中结果',
+          { confirmButtonText: '弃用', cancelButtonText: '取消', type: 'warning' }
+        )
+      } catch (error) {
+        return
+      }
+      await this.runResultAction(
+        'discard-selected',
+        () => discardSelectedGeneratedTestCases(this.resultDrawerTask.task_id, {
+          case_indices: rows.map((row) => row.index)
+        }),
+        '弃用选中结果'
+      )
+    },
+
+    async discardSingleResult(row) {
+      if (!this.canSelectGeneratedResult(row)) {
+        ElMessage.warning('只有待处理结果可以弃用')
+        return
+      }
+      try {
+        await ElMessageBox.confirm(
+          '确认将这条结果标记为不通过 / 弃用？原始 AI 结果会保留。',
+          '弃用生成结果',
+          { confirmButtonText: '弃用', cancelButtonText: '取消', type: 'warning' }
+        )
+      } catch (error) {
+        return
+      }
+      await this.runResultAction(
+        `discard:${row.result_uid}`,
+        () => discardSingleGeneratedTestCase(this.resultDrawerTask.task_id, {
+          case_index: row.index
+        }),
+        '弃用结果'
+      )
+    },
+
+    openResultViewer(row) {
+      this.resultEditorMode = 'view'
+      this.resultEditingRow = row
+      this.resultEditForm = {
+        scenario: row.scenario || '',
+        precondition: row.precondition || '',
+        steps: row.steps || '',
+        expected: row.expected || '',
+        priority: row.priority || 'P2'
+      }
+      this.resultEditorVisible = true
+    },
+
+    openResultEditor(row) {
+      if (row.result_status !== 'pending') {
+        ElMessage.warning('已处理结果不能继续编辑源结果，请进入正式资产页修改')
+        return
+      }
+      this.resultEditorMode = 'edit'
+      this.resultEditingRow = row
+      this.resultEditForm = {
+        scenario: row.scenario || '',
+        precondition: row.precondition || '',
+        steps: row.steps || '',
+        expected: row.expected || '',
+        priority: row.priority || 'P2'
+      }
+      this.resultEditorVisible = true
+    },
+
+    closeResultEditor() {
+      this.resultEditorVisible = false
+      this.resultEditingRow = null
+      this.resultEditSaving = false
+    },
+
+    async saveResultEdit() {
+      if (!this.resultEditingRow || this.resultEditSaving) {
+        return
+      }
+      if (!this.resultEditForm.scenario.trim()) {
+        ElMessage.warning('测试场景不能为空')
+        return
+      }
+      const targetIndex = this.resultDrawerResults.findIndex((row) => row.result_uid === this.resultEditingRow.result_uid)
+      if (targetIndex === -1) {
+        ElMessage.error('当前编辑结果已失效，请刷新后重试')
+        return
+      }
+      const updatedResults = this.resultDrawerResults.map((row, index) => {
+        if (index !== targetIndex) return row
+        return {
+          ...row,
+          scenario: this.resultEditForm.scenario.trim(),
+          precondition: this.resultEditForm.precondition,
+          steps: this.resultEditForm.steps,
+          expected: this.resultEditForm.expected,
+          priority: this.resultEditForm.priority || 'P2'
+        }
+      })
+      const finalTestCases = this.buildFinalTestCasesContent(updatedResults)
+      this.resultEditSaving = true
+      try {
+        await updateGeneratedTestCases(this.resultDrawerTask.task_id, {
+          final_test_cases: finalTestCases
+        })
+        ElMessage.success('生成结果已保存')
+        this.closeResultEditor()
+        await this.refreshResultDrawerTask()
+        await this.loadTasks()
+      } catch (error) {
+        console.error('保存生成结果失败:', error)
+        ElMessage.error(`保存失败: ${this.extractErrorMessage(error)}`)
+      } finally {
+        this.resultEditSaving = false
+      }
+    },
+
+    buildFinalTestCasesContent(results) {
+      const header = '| 用例ID | 测试场景 | 前置条件 | 操作步骤 | 预期结果 | 优先级 |'
+      const divider = '| --- | --- | --- | --- | --- | --- |'
+      const rows = results.map((row, index) => {
+        const caseId = row.case_id || row.caseId || `TC${String(index + 1).padStart(3, '0')}`
+        return [
+          caseId,
+          row.scenario || '测试用例',
+          row.precondition || '',
+          row.steps || '',
+          row.expected || '',
+          row.priority || 'P2'
+        ].map((value) => this.escapeResultTableCell(value)).join(' | ')
+      })
+      return [header, divider, ...rows.map((row) => `| ${row} |`)].join('\n')
+    },
+
+    escapeResultTableCell(value) {
+      return String(value || '')
+        .replace(/\r\n/g, '\n')
+        .replace(/\r/g, '\n')
+        .replace(/\|/g, '/')
+        .replace(/\n/g, '<br>')
     },
 
     async deleteSingleTask(task) {
@@ -1236,6 +1992,22 @@ export default {
       })
     },
 
+    goToAdoptedAsset(row) {
+      if (!row?.adopted_testcase_id) {
+        ElMessage.warning('当前结果还没有关联正式测试用例')
+        return
+      }
+      this.$router.push({
+        path: `/ai-generation/testcases/${row.adopted_testcase_id}`,
+        query: {
+          from: 'generated-results',
+          fromPath: this.$route.fullPath,
+          fromTitle: this.$route.meta?.title || 'AI 生成用例',
+          fromModule: this.$route.meta?.module || 'test-design'
+        }
+      })
+    },
+
     async batchAdoptTask(task) {
       const summary = this.getProcessingSummary(task)
       if (summary.pending_count === 0) {
@@ -1245,11 +2017,13 @@ export default {
       if (!confirm(this.$t('generatedTestCases.adoptConfirm', { title: task.title }))) {
         return
       }
+      const projectId = this.ensureResultProjectId(task)
+      if (!projectId) return
 
       try {
-        // 调用后端API批量采纳该任务的所有测试用例
-        // await api.post(`/requirement-analysis/testcase-generation/${task.task_id}/batch-adopt/`)
-        await api.post(`/requirement-analysis/testcase-generation/${task.task_id}/batch_adopt/`)
+        await adoptAllGeneratedTestCases(task.task_id, {
+          project_id: projectId
+        })
         ElMessage.success(this.$t('generatedTestCases.adoptSuccess'))
         this.loadTasks()
       } catch (error) {
@@ -1272,9 +2046,7 @@ export default {
       }
 
       try {
-        // 调用后端API批量删除该任务的所有测试用例
-        // await api.post(`/requirement-analysis/testcase-generation/${task.task_id}/batch-discard/`)
-        await api.post(`/requirement-analysis/testcase-generation/${task.task_id}/batch_discard/`)
+        await discardAllGeneratedTestCases(task.task_id)
         ElMessage.success(this.$t('generatedTestCases.discardSuccess'))
         this.loadTasks()
       } catch (error) {
@@ -1833,6 +2605,118 @@ export default {
   max-width: 100%;
 }
 
+.result-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+}
+
+.result-drawer-header h3 {
+  margin: 0 0 6px;
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.result-drawer-header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.result-processing-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 320px;
+}
+
+.result-processing-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.summary-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.summary-block--wide {
+  min-width: 180px;
+}
+
+.summary-label {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.summary-block strong {
+  color: #0f172a;
+  font-size: 18px;
+}
+
+.result-processing-warning {
+  padding: 12px 14px;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  background: #fffbeb;
+  color: #92400e;
+  line-height: 1.6;
+}
+
+.result-processing-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.selected-count {
+  color: #475569;
+  font-size: 13px;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.result-processing-table {
+  width: 100%;
+}
+
+.result-processing-table :deep(.result-row--locked) {
+  background: #f8fafc;
+}
+
+.multiline-cell {
+  white-space: pre-line;
+  line-height: 1.6;
+  color: #334155;
+}
+
+.result-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.result-editor-form :deep(.el-textarea__inner) {
+  font-family: inherit;
+  line-height: 1.6;
+}
+
 .checkbox-cell {
   justify-content: center;
   width: 50px;
@@ -2283,6 +3167,10 @@ export default {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .result-processing-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .table-header,
   .table-body .table-row {
     min-width: 1510px;
@@ -2297,6 +3185,18 @@ export default {
 @media (max-width: 768px) {
   .result-object-strip {
     grid-template-columns: 1fr;
+  }
+
+  .result-processing-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .result-processing-toolbar {
+    align-items: stretch;
+  }
+
+  .toolbar-actions {
+    width: 100%;
   }
 
   .filter-card {

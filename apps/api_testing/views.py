@@ -11,7 +11,6 @@ from django.utils import timezone
 from django.http import HttpResponse, FileResponse, Http404, HttpResponseNotFound
 from django.views.static import serve
 from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
 import requests
 import time
 import os
@@ -44,6 +43,7 @@ logger = logging.getLogger(__name__)
 from .utils import execute_assertions
 from .operation_logger import log_operation
 from .variable_resolver import VariableResolver
+from apps.core.responses import error_response
 from .serializers import (
     ApiProjectSerializer, ApiCollectionSerializer, ApiRequestSerializer,
     EnvironmentSerializer, RequestHistorySerializer, TestSuiteSerializer,
@@ -372,7 +372,13 @@ class ApiRequestViewSet(viewsets.ModelViewSet):
         collection_id = request.data.get('collection')
 
         if not collection_id:
-            return Response({'error': '请选择目标集合'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                code='API_COLLECTION_REQUIRED',
+                message='请选择目标集合',
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={'field': 'collection'},
+                request=request,
+            )
 
         target_collection = get_object_or_404(ApiCollection, id=collection_id)
 
@@ -380,7 +386,16 @@ class ApiRequestViewSet(viewsets.ModelViewSet):
         target_project = target_collection.project
 
         if source_project and source_project.id != target_project.id:
-            return Response({'error': '接口测试用例只能移动到同项目集合'}, status=status.HTTP_400_BAD_REQUEST)
+            return error_response(
+                code='API_COLLECTION_PROJECT_MISMATCH',
+                message='接口测试用例只能移动到同项目集合',
+                status_code=status.HTTP_400_BAD_REQUEST,
+                details={
+                    'source_project_id': source_project.id,
+                    'target_project_id': target_project.id,
+                },
+                request=request,
+            )
 
         user = request.user
         has_permission = ApiProject.objects.filter(
@@ -390,7 +405,13 @@ class ApiRequestViewSet(viewsets.ModelViewSet):
         ).exists()
 
         if not has_permission:
-            return Response({'error': '无权限移动到该集合'}, status=status.HTTP_403_FORBIDDEN)
+            return error_response(
+                code='API_COLLECTION_FORBIDDEN',
+                message='无权限移动到该集合',
+                status_code=status.HTTP_403_FORBIDDEN,
+                details={'collection_id': target_collection.id},
+                request=request,
+            )
 
         api_request.collection = target_collection
         api_request.save(update_fields=['collection', 'updated_at'])
@@ -1605,15 +1626,39 @@ class TestExecutionViewSet(viewsets.ReadOnlyModelViewSet):
             with open(container_file_path, 'w', encoding='utf-8') as f:
                 json.dump(container_data, f, ensure_ascii=False, indent=2)
 
+            def to_epoch_ms(value):
+                if not value:
+                    return None
+                if timezone.is_naive(value):
+                    value = timezone.make_aware(value, timezone.get_current_timezone())
+                return int(value.timestamp() * 1000)
+
+            execution_start_ms = to_epoch_ms(execution.start_time) or to_epoch_ms(execution.created_at) or int(time.time() * 1000)
+            execution_end_ms = to_epoch_ms(execution.end_time) or execution_start_ms
+            result_count = max(len(execution.results), 1)
+            fallback_duration_ms = max((execution_end_ms - execution_start_ms) // result_count, 1)
+            cursor_ms = execution_start_ms
+
             # 只生成每个测试请求的结果文件，不生成测试套件的结果文件
             for i, result in enumerate(execution.results):
+                try:
+                    duration_ms = int(float(result.get('response_time', fallback_duration_ms)))
+                except (TypeError, ValueError):
+                    duration_ms = fallback_duration_ms
+
+                duration_ms = max(duration_ms, 1)
+                request_start_ms = cursor_ms
+                request_stop_ms = request_start_ms + duration_ms
+                send_stop_ms = request_start_ms + max(int(duration_ms * 0.8), 1)
+                cursor_ms = request_stop_ms
+
                 request_result = {
                     "uuid": f"{execution.id}-{i}",
                     "name": result.get('name', f'测试请求 {i+1}'),
                     "status": "passed" if result.get('passed', False) else "failed",
                     "stage": "finished",
-                    "start": int(time.time() * 1000) - 1000,  # 模拟开始时间
-                    "stop": int(time.time() * 1000),  # 模拟结束时间
+                    "start": request_start_ms,
+                    "stop": request_stop_ms,
                     "description": f"Method: {result.get('method', 'GET')}\nURL: {result.get('url', '')}",
                     "historyId": f"{execution.test_suite.id}-{i}",
                     "fullName": f"{execution.test_suite.name} / {result.get('name', f'请求 {i+1}')}",
@@ -1633,16 +1678,16 @@ class TestExecutionViewSet(viewsets.ReadOnlyModelViewSet):
                             "name": "发送请求",
                             "status": "passed",
                             "stage": "finished",
-                            "start": int(time.time() * 1000) - 1000,
-                            "stop": int(time.time() * 1000) - 500,
+                            "start": request_start_ms,
+                            "stop": send_stop_ms,
                             "steps": []
                         },
                         {
                             "name": "验证响应",
                             "status": "passed" if result.get('passed', False) else "failed",
                             "stage": "finished",
-                            "start": int(time.time() * 1000) - 500,
-                            "stop": int(time.time() * 1000),
+                            "start": send_stop_ms,
+                            "stop": request_stop_ms,
                             "steps": []
                         }
                     ]

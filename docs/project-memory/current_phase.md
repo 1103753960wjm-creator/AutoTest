@@ -694,6 +694,152 @@
 - `frontend/src/views/api-testing/Dashboard.vue`
 - `frontend/src/views/api-testing/ApiTestCaseList.vue`
 
+### 3.31 2026-07-08 P0.1 剩余闭环收口
+
+2026-07-08 已完成 P0.1 剩余闭环，主要补齐接口权限 / 认证一致性、模拟实现清理和误导性注释 / 假入口清理。
+
+#### 当前冻结结论：
+
+- 注册接口和测试注册接口不再返回 `temp_token_*`，统一返回 JWT `access/refresh`。
+- `logout`、`profile` 等用户信息接口显式要求登录态，匿名访问应返回 401。
+- UI 自动化元素定位器验证没有真实浏览器执行环境时，不得返回模拟成功；当前返回 501 和 `LOCATOR_VALIDATION_NOT_IMPLEMENTED`。
+- UI 自动化历史未调用的模拟步骤日志和模拟失败截图 helper 已删除，后续不能伪造执行日志或失败截图作为执行证据。
+- 接口自动化 Allure 结果时间来源改为执行记录时间和请求 `response_time`，不再使用模拟开始 / 结束时间。
+- 页面树“页面名称编辑”暂未接入保存接口时，前端必须明确提示不会修改名称，不能静默关闭造成假成功。
+- 本轮公开接口白名单写入 `docs/tasks/2026-07-04-p0-1-remaining-closure/public-api-whitelist.md`。
+
+#### 已验证：
+
+- `python -m py_compile apps\api_testing\views.py apps\data_factory\views.py apps\ui_automation\views.py apps\users\views.py apps\users\test_views.py` 通过。
+- `cd frontend && cmd /c npm run build` 通过；仍只有既有 `web-tree-sitter` 警告。
+- `powershell -ExecutionPolicy Bypass -File scripts\rule_check.ps1` 通过。
+- `git diff --check` 通过；仅有 Windows 行尾转换提示。
+- DRF 请求级验证通过：注册返回 JWT 双 token且无 `temp_token_*`；匿名 `profile/logout` 返回 401；携带 JWT 的 `profile` 返回 200；App 报告 media 直连返回 403；匿名报告 API 与匿名元素验证返回 401。
+
+#### 未验证：
+
+- 真实浏览器主流程。
+- 真实 App 报告文件存在时的 200 访问。
+- 真实跨用户 / 跨项目无权限对象 403。
+- 浏览器 EventSource 凭据行为。
+
+#### 相关文件：
+
+- `docs/tasks/2026-07-04-p0-1-remaining-closure/spec-sdd.md`
+- `docs/tasks/2026-07-04-p0-1-remaining-closure/tdd.md`
+- `docs/tasks/2026-07-04-p0-1-remaining-closure/public-api-whitelist.md`
+- `docs/tasks/2026-07-04-p0-1-remaining-closure/vdd.md`
+- `apps/users/views.py`
+- `apps/users/test_views.py`
+- `apps/ui_automation/views.py`
+- `apps/api_testing/views.py`
+- `frontend/src/views/ui-automation/elements/ElementManagerEnhanced.vue`
+
+### 3.32 2026-07-10 P0.2 跨模块硬化第一批
+
+2026-07-10 已按用户确认跳过剩余浏览器回归，直接进入 P0.2 第一批。第一批范围只覆盖生产配置复核、核心配置说明、生产调试日志清理和敏感信息保护最小闭环。
+
+#### 当前冻结结论：
+
+- 生产环境 `SECRET_KEY` 不允许继续使用默认开发值、`.env.example` 示例值、`your-secret-key` 或长度小于 32 的弱密钥。
+- `.env.example` 必须明确告诉使用者：`DEBUG=False`、`ALLOWED_HOSTS`、`CORS_ALLOWED_ORIGINS`、安全 `SECRET_KEY`、数据库地址和 `REDIS_URL` 是生产部署重点配置。
+- 登录、token 刷新、路由守卫、AI 模型配置、Prompt 配置、生成配置、AI 智能模式配置页不得在控制台输出 token、用户对象、API Key、完整表单对象或 axios error 对象。
+- AI 模型调用日志必须走脱敏工具，不打印完整响应正文、API Key、token、Authorization、Cookie、password 等敏感信息。
+- OpenAI-like 响应兼容和空响应保护继续保留，不能为了清理日志而回退为空内容直传。
+
+#### 已验证：
+
+- `.\venv\Scripts\python.exe -m py_compile backend\settings.py apps\core\security.py apps\requirement_analysis\models.py` 通过。
+- `.\venv\Scripts\python.exe manage.py check` 在开发配置下通过。
+- 合法生产配置 `manage.py check` 通过。
+- 弱 `SECRET_KEY`、`ALLOWED_HOSTS=*`、`DISABLE_CSRF_FOR_API=True`、缺 CORS origins 的生产配置阻断抽样通过。
+- `cd frontend && cmd /c npm run build` 通过；仍只有既有 `web-tree-sitter` 警告。
+- `powershell -ExecutionPolicy Bypass -File scripts\rule_check.ps1` 通过。
+- `git diff --check` 通过；仅有 Windows 行尾转换提示。
+- 脱敏函数抽样验证通过，原始 JWT、API Key、Cookie、password 不出现在返回值中。
+- 目标源码和构建产物静态扫描未发现本轮已清理的敏感调试日志。
+
+#### 未验证：
+
+- 用户明确要求跳过剩余浏览器回归，所以本轮没有复测真实浏览器登录、路由跳转、AI 配置页保存和需求分析生成页控制台。
+- P0.1 / 阶段 A 遗留的真实浏览器主流程、真实 App 报告文件 200、真实无权限对象 403、浏览器 EventSource 凭据行为仍未补。
+- 真实生产部署环境没有执行端到端启动和登录验证。
+
+#### 下一步主线：
+
+- 进入 P0.2 第二批：先做需求分析生成进度 SSE 的统一封装和页面级验证。
+- 需求分析 SSE 稳定后，再迁 App 自动化实时进度 / 日志连接。
+- App 自动化迁移稳定后，再迁接口测试工作区 WebSocket / SSE。
+- 接口错误结构统一试点继续放在 P0.2 第三批。
+
+#### 相关文件：
+
+- `docs/tasks/2026-07-10-p0-2-cross-module-hardening/spec-sdd.md`
+- `docs/tasks/2026-07-10-p0-2-cross-module-hardening/tdd.md`
+- `docs/tasks/2026-07-10-p0-2-cross-module-hardening/vdd.md`
+- `backend/settings.py`
+- `.env.example`
+- `apps/core/security.py`
+- `apps/requirement_analysis/models.py`
+- `frontend/src/views/auth/Login.vue`
+- `frontend/src/utils/api.js`
+- `frontend/src/stores/user.js`
+- `frontend/src/router/index.js`
+- `frontend/src/views/requirement-analysis/AIModelConfig.vue`
+- `frontend/src/views/requirement-analysis/PromptConfig.vue`
+- `frontend/src/views/requirement-analysis/GenerationConfigView.vue`
+- `frontend/src/views/configuration/AIIntelligentModeConfig.vue`
+
+### 3.33 2026-07-10 P0.2 第二批和第三批合并推进
+
+2026-07-10 用户要求 P0.2 第二批和第三批一起做。本轮按保守合并方式推进：第二批只迁需求分析生成进度 SSE，第三批只做错误解析工具和需求分析生成任务错误结构试点。
+
+#### 当前冻结结论：
+
+- 需求分析生成进度不再允许页面组件直接 `new EventSource`，统一通过 `useGenerationTaskTracking -> useEventSource` 管理连接。
+- `useEventSource` 负责 URL 构造、关闭、错误、有限重连和降级回调；页面只处理业务 payload。
+- `useWebSocket` 已作为统一入口落地，但 App 自动化和接口测试工作区本轮还没有迁移。
+- 前端错误提示优先通过 `frontend/src/utils/errorMessage.js` 解析，兼容 `message`、`error`、`detail`、`details` 和字段级错误。
+- 后端错误响应试点结构为 `code/message/error/details/request_id`，其中 `error` 是旧页面兼容字段；成功响应结构不变。
+- 本轮试点覆盖需求分析生成任务：`generate` 的 400 校验错误、`progress` 的 403 / 404 / 500、`stream_progress` 的 403 / 404 JSON 错误。
+
+#### 已验证：
+
+- `.\venv\Scripts\python.exe -m py_compile apps\core\responses.py apps\requirement_analysis\views.py` 通过。
+- `.\venv\Scripts\python.exe manage.py check` 通过。
+- `cd frontend && cmd /c npm run build` 通过；仍只有既有 `web-tree-sitter` 警告。
+- APIClient 抽样验证：进度接口 404 和生成接口 400 均返回 `code/message/details/request_id`。
+- 静态扫描确认 `RequirementAnalysisView.vue` 不再有 `console`、`new EventSource`、`startStreamingProgress`、`pollInterval`。
+- `RequirementAnalysisView` 构建产物 `console` 扫描无命中。
+- `powershell -ExecutionPolicy Bypass -File scripts\rule_check.ps1` 通过。
+- `git diff --check` 通过；仅有 Windows 行尾转换提示。
+
+#### 未验证：
+
+- 未做真实浏览器页面操作，所以未证明运行时 Network 里 SSE 连接一定按预期关闭。
+- App 自动化实时进度 / 日志连接已迁到 `useWebSocket`，未做真实浏览器运行时回归。
+- 接口测试工作区 WebSocket 已迁到 `useWebSocket`，未做真实浏览器运行时回归。
+- 未全仓统一错误结构，也未新增全局 DRF exception handler。
+
+#### 下一步主线：
+
+- App 自动化实时进度 / 日志连接已迁到 `useWebSocket`。
+- 接口测试工作区 WebSocket 已迁到 `useWebSocket`。
+- 接口错误结构后续按模块继续试点，不做一次性全仓替换。
+
+#### 相关文件：
+
+- `frontend/src/composables/useEventSource.js`
+- `frontend/src/composables/useWebSocket.js`
+- `frontend/src/composables/useGenerationTaskTracking.js`
+- `frontend/src/utils/errorMessage.js`
+- `frontend/src/utils/api.js`
+- `frontend/src/views/requirement-analysis/RequirementAnalysisView.vue`
+- `frontend/src/views/auth/Login.vue`
+- `apps/core/responses.py`
+- `apps/requirement_analysis/views.py`
+- `docs/tasks/2026-07-10-p0-2-cross-module-hardening/vdd.md`
+
 ## 4. 当前代码层已落地、但仍需继续推进的点
 
 以下内容已经有“基座”或“真源”，但尚未全站完成：
@@ -704,7 +850,8 @@
 - 状态组件已落地，但只在少量样例页面接入
 - 配置中心 / 系统管理边界已文档化，但系统管理前端页面群仍未真正建设
 - AI 生成链路第一阶段和“处理状态”已成立，但结果层、正式资产层和业务链 AI 助手嵌入仍未完整深化
-- 接口自动化 P0-1 已完成自身闭环；阶段 A 对象闭环 P0 补强已完成 Execution/VDD，但真实浏览器人工回归待补；P0-2 Spec 已补充 AI 生成目标类型与接口用例 / 套件拆分边界，等待确认后进入后续实现；接口测试用例采纳、Web/App 自动化采纳仍未实现
+- P0.2 跨模块硬化第一批已完成；第二批和第三批已合并完成需求分析生成进度 SSE 迁移、统一错误解析工具和需求分析生成任务错误结构试点；下一步应迁 App 自动化实时连接，再迁接口测试工作区实时连接
+- 接口自动化 P0-1 已完成自身闭环；P0.1 剩余闭环已完成代码和 VDD，但真实浏览器主流程、真实 App 报告文件 200、真实无权限对象 403、浏览器 EventSource 凭据行为待补；阶段 A 对象闭环 P0 补强已完成 Execution/VDD，但真实浏览器人工回归待补；P0-2 Spec 已补充 AI 生成目标类型与接口用例 / 套件拆分边界，等待确认后进入后续实现；接口测试用例采纳、Web/App 自动化采纳仍未实现
 
 ## 5. 最近一轮稳定 bug 修复结论
 
@@ -750,7 +897,17 @@
 3. 分批把旧页面迁移到统一页面壳
 4. 继续深化 2.2 结果层 / 资产层 / 业务链 AI 助手
 5. 再进入 2.3 自动化草稿中心与更下游链路
-6. 接口自动化需求主线下一步先补阶段 A 真实浏览器回归，再继续 P0-2：AI 需求分析生成目标类型下拉、Prompt 按类型选择、接口用例字段展示；P0-3 再做接口测试用例采纳闭环
+6. P0.2 跨模块硬化除真实浏览器回归外已收尾；App 自动化执行进度和接口测试工作区 WebSocket 已迁到 `useWebSocket`
+7. 接口自动化需求主线继续保留：后续补 P0.1 / 阶段 A 真实浏览器回归，再继续 P0-2：AI 需求分析生成目标类型下拉、Prompt 按类型选择、接口用例字段展示；P0-3 再做接口测试用例采纳闭环
+
+## 9. 2026-07-10 P0.2 除回归外收尾结论
+
+- P0.2 第一批已完成：生产配置复核、`.env.example` 生产配置说明、前端敏感调试日志清理、后端 AI 日志脱敏。
+- P0.2 第二三批已完成：需求分析生成进度 SSE 统一走 `useGenerationTaskTracking -> useEventSource`，前端统一错误解析工具落地，需求分析生成任务错误结构完成试点。
+- P0.2 剩余实时连接已完成：App 自动化执行进度和接口测试工作区 WebSocket 均已迁到 `frontend/src/composables/useWebSocket.js`；App 自动化保留有限重连失败后降级轮询。
+- 接口错误结构继续小步试点：接口测试 `move-collection` 的未选集合、跨项目移动、无权限移动 3 个错误分支已返回 `code/message/error/details/request_id`，成功响应不变。
+- 当前结论：除用户明确跳过的真实浏览器回归外，P0.2 各部分可以按代码收尾处理并进入下一阶段。
+- 残余风险：未做真实浏览器页面操作，不能证明运行时 WebSocket / SSE 的 Network 创建、关闭、终态停止和页面离开清理在浏览器中全部通过；后续要补时必须单独做回归，不能引用本轮为 V4。
 
 
 

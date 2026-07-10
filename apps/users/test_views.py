@@ -3,6 +3,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import json
 from django.contrib.auth import get_user_model
+from rest_framework_simplejwt.tokens import RefreshToken
 
 User = get_user_model()
 
@@ -30,14 +31,7 @@ def test_register(request):
             position=data.get('position', '')
         )
         
-        # 创建token - 延迟导入以避免应用初始化问题
-        try:
-            from rest_framework.authtoken.models import Token
-            token, created = Token.objects.get_or_create(user=user)
-            token_key = token.key
-        except ImportError:
-            # 如果Token模型不可用，返回一个临时token
-            token_key = f"temp_token_{user.id}"
+        refresh = RefreshToken.for_user(user)
         
         return JsonResponse({
             'success': True,
@@ -48,7 +42,8 @@ def test_register(request):
                 'first_name': user.first_name,
                 'last_name': user.last_name
             },
-            'token': token_key
+            'access': str(refresh.access_token),
+            'refresh': str(refresh)
         })
         
     except Exception as e:

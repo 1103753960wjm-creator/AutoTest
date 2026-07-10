@@ -1065,35 +1065,19 @@ setAuthRouter(router)
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore()
 
-  console.log('路由守卫:', {
-    to: to.path,
-    from: from.path,
-    hasToken: !!userStore.accessToken,
-    hasUser: !!userStore.user,
-    isAuthenticated: userStore.isAuthenticated
-  })
-
   if (!userStore.user && userStore.accessToken) {
     try {
-      console.log('初始化认证...')
       await userStore.initAuth()
-      console.log('认证初始化完成:', {
-        hasUser: !!userStore.user,
-        isAuthenticated: userStore.isAuthenticated
-      })
     } catch (error) {
-      console.error('认证初始化失败:', error)
+      // 认证初始化失败时继续走后续鉴权判断，避免泄露 token 或用户信息到控制台。
     }
   }
 
   if (to.meta.requiresAuth && !userStore.isAuthenticated) {
-    console.log('需要认证但未认证，跳转到登录页')
     next('/login')
   } else if (to.meta.requiresGuest && userStore.isAuthenticated) {
-    console.log('访客页面但已认证，跳转到项目页')
     next('/home')
   } else {
-    console.log('路由守卫通过，继续导航')
     next()
   }
 })
@@ -1109,7 +1093,6 @@ router.afterEach((to, from) => {
       document.title = getDocumentTitle(router.currentRoute.value)
     }
   })
-  console.log(`Navigated from ${from.path} to ${to.path}`)
 })
 
 export default router

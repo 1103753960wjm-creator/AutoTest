@@ -690,3 +690,56 @@
 - **关联文件**：
   - `start.bat`
   - `backend.log`
+
+### 032. 调试日志和异常日志输出敏感信息
+
+- **发生时间**：2026-07-10
+- **错误类型**：敏感信息泄露类
+- **触发场景**：登录页、token 刷新、路由守卫、AI 模型配置页或后端 AI 模型调用链为了排障直接输出完整对象，例如登录返回值、用户对象、axios error、API Key 表单、请求 URL、外部服务响应正文。
+- **根因分析**：
+  - 前端调试日志在开发阶段很容易保留下来，生产构建时仍可能把 token、refresh token、用户信息、API Key 或完整错误对象打到控制台。
+  - 后端模型调用失败时如果直接打印响应正文、请求头或异常 `repr`，可能把 API Key、Authorization、Cookie、password 或第三方响应中的敏感字段写进日志。
+  - “只在开发环境看一下”的日志如果没有明确删除或脱敏，后续浏览器回归和线上排障都会放大泄露风险。
+- **防复发规则**：
+  - 前端业务代码禁止输出 token、refresh token、用户对象、API Key、完整请求头、完整响应体或 axios error 对象。
+  - 认证、路由守卫、AI 配置和模型测试连接相关页面如需提示失败，优先展示用户可读的 `message/detail/error`，不要把完整错误对象写入控制台。
+  - 后端日志输出外部服务错误、AI 模型响应、请求头或配置对象前必须脱敏；优先复用 `apps/core/security.py` 的 `redact_text`、`redact_json_for_log`。
+  - AI 模型调用成功日志只允许记录状态码、响应字段 keys、choices 数量、耗时等摘要，不打印完整生成正文或完整响应体。
+  - 清理日志时不能降低真实错误处理能力：页面仍要有失败提示，后端仍要保留可定位问题的脱敏摘要。
+- **最低验证动作**：
+  - 静态扫描本轮涉及页面和工具：`console\.|Login result|User store state|Saving config with data|ConfigForm changed|Token刷新|Navigated from`。
+  - 静态扫描后端 AI 调用链：`响应内容|api_key.*logger|Authorization.*logger|Cookie.*logger|API调用失败: \{repr|流式请求异常: \{e\}`。
+  - 对脱敏 helper 构造 JWT、API Key、Cookie、password、Authorization 样本，确认原始值不出现在输出中。
+  - 执行前端构建和后端编译，确保删除日志没有破坏页面和模型调用链。
+- **关联文件**：
+  - `frontend/src/views/auth/Login.vue`
+  - `frontend/src/utils/api.js`
+  - `frontend/src/stores/user.js`
+  - `frontend/src/router/index.js`
+  - `frontend/src/views/requirement-analysis/AIModelConfig.vue`
+  - `frontend/src/views/requirement-analysis/PromptConfig.vue`
+  - `frontend/src/views/requirement-analysis/GenerationConfigView.vue`
+  - `frontend/src/views/configuration/AIIntelligentModeConfig.vue`
+  - `apps/core/security.py`
+  - `apps/requirement_analysis/models.py`
+
+### 033. Django 请求级验证不要用交互 shell 管道执行多行脚本
+
+- **发生时间**：2026-07-10
+- **错误类型**：验证命令方式类
+- **触发场景**：使用 PowerShell here-string 管道进入 `python manage.py shell` 执行多行 APIClient 验证脚本，命令退出码为 0，但没有打印 `status/json`，无法证明真实请求已经执行。
+- **根因分析**：
+  - `manage.py shell` 默认进入交互控制台，多行 `try/finally` 这类代码块在管道输入中容易因为交互控制台收尾规则没有真正执行到预期输出。
+  - 退出码为 0 只说明交互控制台正常退出，不等于请求级断言已经产生证据。
+  - 如果临时数据创建在 `try/finally` 之前，脚本没执行到清理段时还可能残留测试用户、项目、集合或请求。
+- **防复发规则**：
+  - 做 Django / DRF APIClient 请求级验证时，优先使用 `python manage.py shell -c $code` 非交互执行。
+  - 验证命令必须打印关键证据，例如 `status=` 和 `json=`；没有输出时不能记为通过。
+  - 临时数据必须带唯一前缀，并在验证后查询前缀残留数量。
+  - 验证失败后先记录 `error_event_log.md`，再清理临时数据，不能继续叠加新数据。
+- **最低验证动作**：
+  - 命令输出里必须看到 HTTP 状态码和响应 JSON。
+  - 临时数据清理后必须输出 `leftover=0` 或等价结果。
+  - 若响应是预期 400 / 403 / 404，允许 Django 打印 Bad Request / Forbidden / Not Found 日志，但必须以响应 JSON 作为验证证据。
+- **关联命令**：
+  - `.\venv\Scripts\python.exe manage.py shell -c $code`

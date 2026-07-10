@@ -38,12 +38,9 @@ export const useUserStore = defineStore('user', () => {
     // 每2分钟检查一次token是否需要刷新
     refreshTimer = setInterval(async () => {
       if (refreshToken.value && isTokenExpiringSoon.value && accessToken.value) {
-        console.log('自动刷新token...')
         try {
           await refreshAccessToken()
-          console.log('自动刷新token成功')
         } catch (error) {
-          console.error('自动刷新token失败:', error)
           // 刷新失败会自动logout，不需要额外处理
         }
       }
@@ -88,7 +85,7 @@ export const useUserStore = defineStore('user', () => {
 
   const register = async (userData) => {
     try {
-      // 临时使用测试接口
+      // 当前注册页使用公开注册接口；注册后仍要求用户手动登录。
       const response = await api.post('/auth/test-register/', userData)
 
       // 注册成功后不自动登录，不保存token和用户信息
@@ -120,7 +117,6 @@ export const useUserStore = defineStore('user', () => {
           await api.post('/auth/logout/', { refresh: refreshToken.value })
         } catch (apiError) {
           // logout API调用失败不影响本地清除操作
-          console.error('Logout API调用失败:', apiError)
         }
       }
     } finally {
@@ -167,7 +163,6 @@ export const useUserStore = defineStore('user', () => {
       return response.data.access
     } catch (error) {
       // 刷新失败，清除所有认证信息
-      console.error('Token refresh failed:', error)
       await logout()
       throw error
     }
@@ -199,13 +194,6 @@ export const useUserStore = defineStore('user', () => {
   }
 
   const initAuth = async () => {
-    console.log('initAuth 开始:', {
-      hasAccessToken: !!accessToken.value,
-      hasRefreshToken: !!refreshToken.value,
-      hasUser: !!user.value,
-      isExpired: isTokenExpired.value
-    })
-
     // 从localStorage恢复用户信息
     if (!user.value) {
       const savedUser = localStorage.getItem('user')
@@ -213,7 +201,7 @@ export const useUserStore = defineStore('user', () => {
         try {
           user.value = JSON.parse(savedUser)
         } catch (e) {
-          console.error('解析用户信息失败:', e)
+          localStorage.removeItem('user')
         }
       }
     }
@@ -221,12 +209,9 @@ export const useUserStore = defineStore('user', () => {
     if (accessToken.value) {
       // 检查token是否过期
       if (isTokenExpired.value && refreshToken.value) {
-        console.log('Token已过期，尝试刷新...')
         try {
           await refreshAccessToken()
-          console.log('Token刷新成功')
         } catch (error) {
-          console.error('Token刷新失败:', error)
           return
         }
       }
@@ -234,21 +219,14 @@ export const useUserStore = defineStore('user', () => {
       // 获取用户信息
       if (!user.value) {
         try {
-          console.log('获取用户信息...')
           await fetchProfile()
-          console.log('用户信息获取成功:', user.value?.username)
         } catch (error) {
-          console.error('获取用户信息失败:', error)
           await logout()
         }
-      } else {
-        console.log('用户信息已存在，跳过获取')
       }
 
       // 启动自动刷新定时器
       startAutoRefresh()
-    } else {
-      console.log('没有access token，跳过认证初始化')
     }
   }
 

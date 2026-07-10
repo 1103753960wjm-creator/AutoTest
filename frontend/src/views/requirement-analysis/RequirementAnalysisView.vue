@@ -334,13 +334,21 @@
           <!-- 任务完成后的操作按钮 -->
           <div v-if="showResults" class="completion-actions">
             <button type="button" class="download-btn" @click="downloadTestCases">
-              <span>📥 {{ $t('requirementAnalysis.downloadExcel') }}</span>
+              <span>{{ $t('requirementAnalysis.downloadExcel') }}</span>
             </button>
-            <button type="button" class="save-btn" @click="saveToTestCaseRecords">
-              <span>💾 {{ $t('requirementAnalysis.saveToRecords') }}</span>
+            <button
+              type="button"
+              class="adopt-results-btn"
+              :disabled="isSavingRecords"
+              @click="adoptAllGeneratedResults">
+              <span v-if="isSavingRecords">采纳中...</span>
+              <span v-else>采纳全部待处理结果</span>
+            </button>
+            <button type="button" class="process-results-btn" @click="goToGeneratedResults">
+              <span>进入结果处理</span>
             </button>
             <button type="button" class="new-generation-btn" @click="resetGeneration">
-              <span>📝 {{ $t('requirementAnalysis.newGeneration') }}</span>
+              <span>{{ $t('requirementAnalysis.newGeneration') }}</span>
             </button>
           </div>
           <button type="button" v-else-if="canCancelCurrentTask" class="cancel-generation-btn" @click="cancelGeneration">
@@ -372,8 +380,13 @@
 import api from '@/utils/api'
 import { ElMessage } from 'element-plus'
 import { exportRowsToExcel } from '@/utils/excelExport'
+import { getErrorMessage } from '@/utils/errorMessage'
 import { useUserStore } from '@/stores/user'
 import { usePlatformPageHeader } from '@/layout/usePlatformPageHeader'
+import {
+  adoptAllGeneratedTestCases,
+  getTestcaseGenerationProgress
+} from '@/api/requirement-analysis'
 import {
   GENERATION_TERMINAL_STATUSES,
   clearGenerationTaskContext,
@@ -427,6 +440,7 @@ export default {
       // 生成结果
       showResults: false,
       generationResult: null,
+      isSavingRecords: false,
 
       // AI配置状态
       configStatus: {
@@ -565,7 +579,7 @@ export default {
     },
     taskSummaryLabel() {
       if (this.showResults && this.generationResult?.task_id) {
-        return `结果批次 ${this.generationResult.task_id} 已生成，可继续查看和保存。`
+        return `结果批次 ${this.generationResult.task_id} 已生成，可继续采纳或进入结果处理。`
       }
       if (this.isGenerating && this.currentTaskId) {
         return `任务 ${this.currentTaskId} 正在运行。`
@@ -713,6 +727,7 @@ export default {
         onSsePayload: (payload) => this.handleTrackedPayload(payload),
         onPollData: (task) => this.applyTaskRuntimeState(task, { allowSuccessMessage: false }),
         onTerminal: (task) => this.applyTaskRuntimeState(task, { allowSuccessMessage: true }),
+        onFallback: () => ElMessage.warning(this.$t('requirementAnalysis.streamConnectionInterrupted')),
         onError: () => {}
       })
     },
@@ -846,13 +861,33 @@ export default {
       })
     },
 
+    goToGeneratedResults() {
+      if (!this.currentTaskRouteId) {
+        ElMessage.warning('缺少任务 ID，无法进入结果处理')
+        return
+      }
+
+      this.$router.push({
+        path: '/ai-generation/generated-testcases',
+        query: {
+          project: String(this.currentProjectId || this.generationResult?.project || ''),
+          projectName: this.currentProjectLabel,
+          taskId: this.currentTaskRouteId,
+          from: 'detail',
+          fromPath: this.$route.fullPath,
+          fromTitle: this.$route.meta?.title || '需求分析',
+          fromModule: this.$route.meta?.module || 'test-design'
+        }
+      })
+    },
+
     async loadProjects() {
       try {
         const response = await api.get('/projects/')
         this.projects = response.data.results || response.data
         this.syncProjectContextFromRoute()
       } catch (error) {
-        console.error(this.$t('requirementAnalysis.loadProjectsFailed'), error)
+        this.projects = []
       }
     },
 
@@ -902,7 +937,6 @@ export default {
           this.showConfigGuide = true
         }
       } catch (error) {
-        console.error('Failed to check config status:', error)
         // 如果检查失败，默认不显示引导，避免影响正常使用
         this.showConfigGuide = false
         this.checkingConfig = false
@@ -1094,8 +1128,7 @@ export default {
         )
 
       } catch (error) {
-        console.error(this.$t('requirementAnalysis.documentProcessingFailed'), error)
-        ElMessage.error(this.$t('requirementAnalysis.documentProcessingFailed') + ': ' + (error.response?.data?.error || error.message))
+        ElMessage.error(this.$t('requirementAnalysis.documentProcessingFailed') + ': ' + getErrorMessage(error, this.$t('requirementAnalysis.unknownError')))
       }
     },
 
@@ -1104,14 +1137,9 @@ export default {
       try {
         const userStore = useUserStore()
         if (userStore.isTokenExpiringSoon && userStore.refreshToken) {
-          console.log('Refreshing token before generation...')
           await userStore.refreshAccessToken()
-          console.log('Token refreshed successfully, safe to start generation')
-        } else if (userStore.accessToken) {
-          console.log('Token status is good, no refresh needed')
         }
       } catch (error) {
-        console.error('Token refresh failed:', error)
         ElMessage.error(this.$t('requirementAnalysis.tokenRefreshFailed'))
         return
       }
@@ -1160,272 +1188,9 @@ export default {
         this.startTaskTracking(this.currentTaskId, outputMode)
 
       } catch (error) {
-        console.error(this.$t('requirementAnalysis.createTaskFailed'), error)
-        ElMessage.error(this.$t('requirementAnalysis.createTaskFailed') + ': ' + (error.response?.data?.error || error.message))
+        ElMessage.error(this.$t('requirementAnalysis.createTaskFailed') + ': ' + getErrorMessage(error, this.$t('requirementAnalysis.unknownError')))
         this.isGenerating = false
       }
-    },
-
-    startStreamingProgress() {
-      // 使用SSE进行流式进度获取
-      // 注意：EventSource不使用axios代理，需要直接指向后端服务器
-      // 完整的URL路径: /api/requirement-analysis/testcase-generation/{task_id}/stream_progress/
-
-      // 动态获取后端URL：使用当前页面的协议和主机名
-      // 在生产环境中(如Docker部署)，通常通过Nginx反向代理访问，端口应该是80或443(与当前页面一致)
-      // 而不是直接访问后端端口8000
-      const currentOrigin = window.location.origin
-      const apiUrl = `${currentOrigin}/api/requirement-analysis/testcase-generation/${this.currentTaskId}/stream_progress/`
-
-      console.log('SSE连接URL:', apiUrl)
-
-      // 创建EventSource（不支持自定义headers，使用withCredentials发送cookie）
-      this.eventSource = new EventSource(apiUrl, { withCredentials: true })
-
-      // 监听连接打开事件
-      this.eventSource.onopen = (event) => {
-        console.log('✅ SSE连接已打开', event)
-      }
-
-      this.eventSource.onmessage = (event) => {
-        console.log('📨 收到SSE消息:', event.data)
-
-        try {
-          const data = JSON.parse(event.data)
-          console.log('📦 解析后的数据:', data)
-
-          if (data.type === 'progress') {
-            // Update progress status
-            if (data.status === 'generating') {
-              this.currentStep = 2
-              this.progressText = `${this.$t('requirementAnalysis.statusGenerating')} ${data.progress}%`
-            } else if (data.status === 'reviewing') {
-              this.currentStep = 3
-              this.progressText = `${this.$t('requirementAnalysis.statusReviewing')} ${data.progress}%`
-            } else if (data.status === 'revising') {
-              this.currentStep = 3
-              this.progressText = `${this.$t('requirementAnalysis.statusRevising')} ${data.progress}%`
-            }
-          } else if (data.type === 'content') {
-            // Real-time streaming content (case generation)
-            console.log('✍️ Received streaming content:', data.content.length, 'characters')
-            this.streamedContent += data.content
-            this.currentStep = 2
-            this.progressText = this.$t('requirementAnalysis.statusGenerating')
-          } else if (data.type === 'review_content') {
-            // Real-time review content
-            console.log('📝 Received review content:', data.content.length, 'characters', 'Total length:', this.streamedReviewContent.length + data.content.length)
-            this.streamedReviewContent += data.content
-            this.currentStep = 3
-            this.progressText = this.$t('requirementAnalysis.statusReviewing')
-          } else if (data.type === 'final_content') {
-            // Real-time final test cases content
-            console.log('🎯 Received final cases content:', data.content.length, 'characters', 'Total length:', this.finalTestCases.length + data.content.length)
-            this.finalTestCases += data.content
-            this.currentStep = 3
-            this.progressText = '🎯 ' + this.$t('requirementAnalysis.statusRevising')
-          } else if (data.type === 'status') {
-            // Final status
-            console.log('📊 Received status update:', data.status)
-            if (data.status === 'completed') {
-              this.progressText = this.$t('requirementAnalysis.statusCompleted')
-              // Fetch final result
-              this.fetchFinalResult()
-            } else if (data.status === 'failed') {
-              this.progressText = this.$t('requirementAnalysis.statusFailed')
-              this.handleGenerationError()
-            }
-          } else if (data.type === 'done') {
-            // 流式结束，立即关闭EventSource，获取最终结果
-            console.log('✅ 流式传输完成')
-            if (this.eventSource) {
-              console.log('🔒 关闭SSE连接')
-              this.eventSource.close()
-              this.eventSource = null
-            }
-            this.fetchFinalResult()
-          }
-        } catch (e) {
-          console.error('❌ 解析SSE数据失败:', e, '原始数据:', event.data)
-        }
-      }
-
-      this.eventSource.onerror = (error) => {
-        console.log('⚠️ SSE连接事件:', error)
-
-        // 如果EventSource已经被关闭（在onmessage中关闭的），不做任何处理
-        if (!this.eventSource) {
-          console.log('ℹ️ EventSource已关闭，忽略错误事件')
-          return
-        }
-
-        console.log('EventSource状态:', {
-          readyState: this.eventSource.readyState,
-          url: this.eventSource.url
-        })
-
-        // 如果任务已经完成或不在生成中，不要降级
-        if (this.showResults || !this.isGenerating) {
-          console.log('ℹ️ 任务已完成或不在生成中，不降级到轮询')
-          // 清理EventSource
-          if (this.eventSource) {
-            this.eventSource.close()
-            this.eventSource = null
-          }
-          return
-        }
-
-        // readyState=2表示连接已关闭，readyState=0表示连接中断
-        // EventSource会自动重连（readyState=0），除非是致命错误（readyState=2）
-        if (this.eventSource.readyState === 2) {
-          console.error('❌ SSE连接永久关闭，降级到轮询模式')
-          this.eventSource.close()
-          this.eventSource = null
-          ElMessage.warning(this.$t('requirementAnalysis.streamConnectionInterrupted'))
-          this.startPolling()
-        } else if (this.eventSource.readyState === 0) {
-          // EventSource正在重连，等待一段时间后检查
-          console.log('🔄 SSE正在重连...')
-          setTimeout(() => {
-            // 如果5秒后还是断开状态，降级到轮询
-            if (this.eventSource && this.eventSource.readyState === 0) {
-              console.error('❌ SSE重连失败，降级到轮询模式')
-              this.eventSource.close()
-              this.eventSource = null
-              ElMessage.warning(this.$t('requirementAnalysis.streamConnectionInterrupted'))
-              this.startPolling()
-            }
-          }, 5000)
-        }
-      }
-    },
-
-    async fetchFinalResult() {
-      try {
-        // 修复URL：去掉多余的/api/前缀（axios baseURL已经包含/api）
-        const response = await api.get(`/requirement-analysis/testcase-generation/${this.currentTaskId}/progress/`)
-        const task = response.data
-
-        this.generationResult = task
-        this.showResults = true
-        this.isGenerating = false
-
-        // 设置第4步为完成状态
-        this.currentStep = 4
-
-        // 设置最终版用例（如果还没有通过流式接收完整）
-        if (task.final_test_cases) {
-          console.log('📝 Getting final cases from task object')
-          // 无论this.finalTestCases是否已有值，都用最新的final_test_cases覆盖
-          // 这样确保完整输出模式下也能正确显示最终版用例
-          this.finalTestCases = task.final_test_cases
-        }
-
-        // 如果评审内容为空，从task对象中获取
-        if (!this.streamedReviewContent && task.review_feedback) {
-          console.log('📝 Getting review content from task object')
-          this.streamedReviewContent = task.review_feedback
-        }
-
-        // 如果生成内容为空，从task对象中获取
-        if (!this.streamedContent && task.generated_test_cases) {
-          console.log('✍️ Getting generated content from task object')
-          this.streamedContent = task.generated_test_cases
-        }
-
-        if (this.eventSource) {
-          this.eventSource.close()
-          this.eventSource = null
-        }
-
-        // Only show completion message once
-        if (!this.hasShownCompletionMessage) {
-          ElMessage.success(this.$t('requirementAnalysis.generateCompleteSuccess'))
-          this.hasShownCompletionMessage = true
-        }
-      } catch (error) {
-        console.error('Failed to fetch final result:', error)
-        ElMessage.error(this.$t('requirementAnalysis.fetchResultFailed'))
-        this.isGenerating = false
-      }
-    },
-
-    handleGenerationError() {
-      this.isGenerating = false
-      if (this.eventSource) {
-        this.eventSource.close()
-        this.eventSource = null
-      }
-      if (this.pollInterval) {
-        clearInterval(this.pollInterval)
-        this.pollInterval = null
-      }
-    },
-
-    startPolling() {
-      this.pollInterval = setInterval(async () => {
-        try {
-          // 修复URL：去掉多余的/api/前缀（axios baseURL已经包含/api）
-          const response = await api.get(`/requirement-analysis/testcase-generation/${this.currentTaskId}/progress/`)
-          const task = response.data
-
-          console.log(`${this.$t('requirementAnalysis.taskStatus')}: ${task.status}, ${this.$t('requirementAnalysis.progress')}: ${task.progress}%`)
-
-          // 更新进度显示
-          if (task.status === 'generating') {
-            this.currentStep = 2
-            this.progressText = this.$t('requirementAnalysis.statusGenerating')
-          } else if (task.status === 'reviewing') {
-            this.currentStep = 3
-            this.progressText = this.$t('requirementAnalysis.statusReviewing')
-          } else if (task.status === 'completed') {
-            this.currentStep = 4
-            this.progressText = this.$t('requirementAnalysis.statusCompleted')
-
-            // 任务完成，显示结果
-            this.generationResult = task
-            this.showResults = true
-            this.isGenerating = false
-
-            // 设置显示内容（完整输出模式下需要）
-            if (task.generated_test_cases) {
-              console.log('✍️ Polling mode - Setting generated content')
-              this.streamedContent = task.generated_test_cases
-            }
-            if (task.review_feedback) {
-              console.log('📝 Polling mode - Setting review content')
-              this.streamedReviewContent = task.review_feedback
-            }
-            if (task.final_test_cases) {
-              console.log('🎯 Polling mode - Setting final test cases')
-              this.finalTestCases = task.final_test_cases
-            }
-
-            clearInterval(this.pollInterval)
-            this.pollInterval = null
-
-            // 只显示一次完成消息
-            if (!this.hasShownCompletionMessage) {
-              ElMessage.success(this.$t('requirementAnalysis.generateCompleteSuccess'))
-              this.hasShownCompletionMessage = true
-            }
-            return
-          } else if (task.status === 'failed') {
-            this.progressText = this.$t('requirementAnalysis.statusFailed')
-            this.isGenerating = false
-
-            clearInterval(this.pollInterval)
-            this.pollInterval = null
-
-            ElMessage.error(this.$t('requirementAnalysis.generateFailed') + ': ' + (task.error_message || this.$t('requirementAnalysis.unknownError')))
-            return
-          }
-
-        } catch (error) {
-          console.error(this.$t('requirementAnalysis.checkProgressFailed'), error)
-          // 继续轮询，不中断
-        }
-      }, 3000) // 每3秒检查一次
     },
 
     cancelGeneration() {
@@ -1458,7 +1223,7 @@ export default {
           ElMessage.info(this.$t('requirementAnalysis.generationCancelled'))
         })
         .catch((error) => {
-          ElMessage.error(`取消生成失败: ${error.response?.data?.error || error.message}`)
+          ElMessage.error(`取消生成失败: ${getErrorMessage(error, '未知错误')}`)
         })
     },
 
@@ -1533,30 +1298,63 @@ export default {
 
         ElMessage.success(this.$t('requirementAnalysis.downloadSuccess'));
       } catch (error) {
-        console.error(this.$t('requirementAnalysis.downloadFailed'), error);
-        ElMessage.error(this.$t('requirementAnalysis.downloadFailed') + ': ' + (error.message || this.$t('requirementAnalysis.unknownError')));
+        ElMessage.error(this.$t('requirementAnalysis.downloadFailed') + ': ' + getErrorMessage(error, this.$t('requirementAnalysis.unknownError')));
       }
     },
 
-    // 保存到用例记录
-    async saveToTestCaseRecords() {
-      try {
-        // 调用后端API保存到记录
-        const response = await api.post(`/requirement-analysis/testcase-generation/${this.generationResult.task_id}/save_to_records/`)
-
-        if (response.data.already_saved) {
-          ElMessage.info(this.$t('requirementAnalysis.alreadySaved'))
-        } else {
-          const importedCount = response.data.imported_count || 0
-          ElMessage.success(`测试用例已保存！已导入 ${importedCount} 条测试用例到测试用例管理系统`)
-        }
-
-        // 不跳转，留在当前页面
-        // this.$router.push('/generated-testcases')
-      } catch (error) {
-        console.error(this.$t('requirementAnalysis.saveFailed'), error)
-        ElMessage.error(this.$t('requirementAnalysis.saveFailed') + ': ' + (error.response?.data?.error || error.message))
+    async adoptAllGeneratedResults() {
+      if (this.isSavingRecords) {
+        return
       }
+      const task = this.generationResult
+      const taskId = task?.task_id || this.currentTaskId
+      if (!taskId) {
+        ElMessage.error('缺少任务 ID，请刷新页面或进入任务详情后重试')
+        return
+      }
+      if ((task?.status || this.currentTaskStatus) !== 'completed') {
+        ElMessage.warning('任务完成后才能采纳生成结果')
+        return
+      }
+      const finalContent = this.finalTestCases || task?.final_test_cases || ''
+      if (!finalContent.trim()) {
+        ElMessage.error('当前任务没有最终测试用例，无法采纳')
+        return
+      }
+      const pendingCount = task?.processing_status_summary?.pending_count
+      if (pendingCount === 0) {
+        ElMessage.info('当前结果批次已无待处理结果，请进入结果处理查看状态')
+        return
+      }
+      const projectId = task?.project || this.currentProjectId || this.$route.query.project || ''
+      if (!projectId) {
+        ElMessage.warning('请先选择或绑定项目，再采纳生成结果')
+        return
+      }
+
+      this.isSavingRecords = true
+      try {
+        const response = await adoptAllGeneratedTestCases(taskId, {
+          project_id: projectId
+        })
+        const data = response.data || {}
+        const created = data.created_count ?? data.adopted_count ?? 0
+        const deduplicated = data.deduplicated_count ?? 0
+        const pending = data.pending_count ?? 0
+        ElMessage.success(data.message || `已采纳生成结果：新建 ${created} 条，幂等命中 ${deduplicated} 条，剩余待处理 ${pending} 条`)
+
+        const refreshed = await getTestcaseGenerationProgress(taskId)
+        this.applyTaskRuntimeState(refreshed.data, { allowSuccessMessage: false })
+      } catch (error) {
+        ElMessage.error('采纳失败: ' + getErrorMessage(error, '未知错误'))
+      } finally {
+        this.isSavingRecords = false
+      }
+    },
+
+    // 兼容旧调用名，主入口已经改为“采纳全部待处理结果”。
+    saveToTestCaseRecords() {
+      return this.adoptAllGeneratedResults()
     },
 
     resetGeneration() {
@@ -2727,16 +2525,35 @@ export default {
   box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
 }
 
-.completion-actions .save-btn {
+.completion-actions .adopt-results-btn {
   background: #007bff;
   color: white;
   font-size: 1rem;
 }
 
-.completion-actions .save-btn:hover {
+.completion-actions .adopt-results-btn:hover:not(:disabled) {
   background: #0056b3;
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+.completion-actions .adopt-results-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.completion-actions .process-results-btn {
+  background: #0f766e;
+  color: white;
+  font-size: 1rem;
+}
+
+.completion-actions .process-results-btn:hover {
+  background: #115e59;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(15, 118, 110, 0.3);
 }
 
 .completion-actions .new-generation-btn {
